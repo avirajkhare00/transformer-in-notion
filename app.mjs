@@ -930,6 +930,16 @@ function handleSudokuModelMessage(runId, message) {
     sudokuModelState.isRunning = false;
     sudokuModelState.phase = "done";
     sudokuModelState.status = `Guided solve finished after ${sudokuModelState.branchCount} ranked branch decisions at ${formatSudokuTokenRate(sudokuModelState.tokensPerSecond)}.`;
+    if (Array.isArray(data.solution)) {
+      sudokuState.board = cloneSudokuBoard(data.solution);
+      sudokuState.emphasis = null;
+      if (sudokuState.result) {
+        sudokuState.stepIndex = sudokuState.result.trace.length;
+      }
+      pushSudokuLog(
+        `Guided solve committed the final board with ${data.guidedStats?.backtracks ?? "—"} backtracks.`
+      );
+    }
     terminateSudokuModelWorker();
     renderSudoku();
     return;

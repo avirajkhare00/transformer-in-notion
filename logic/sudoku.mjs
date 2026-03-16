@@ -41,7 +41,7 @@ export function formatSudokuCell(row, col) {
   return `r${row + 1}c${col + 1}`;
 }
 
-function getCandidates(board, row, col, stats = null) {
+export function getSudokuCandidates(board, row, col, stats = null) {
   if (stats) {
     stats.candidateQueries += 1;
   }
@@ -97,7 +97,7 @@ function chooseNextCell(board, stats = null) {
         continue;
       }
 
-      const candidates = getCandidates(board, row, col, stats);
+      const candidates = getSudokuCandidates(board, row, col, stats);
       if (!best || candidates.length < best.candidates.length) {
         best = { row, col, candidates };
       }
@@ -129,7 +129,7 @@ function chooseNextCellRowMajor(board, stats = null) {
       return {
         row,
         col,
-        candidates: getCandidates(board, row, col, stats),
+        candidates: getSudokuCandidates(board, row, col, stats),
       };
     }
   }
@@ -142,6 +142,40 @@ function getChooser(strategy) {
     return chooseNextCellRowMajor;
   }
   return chooseNextCell;
+}
+
+function normalizeGuidedCandidateOrder(candidates, rankedCandidates) {
+  if (!Array.isArray(rankedCandidates) || rankedCandidates.length === 0) {
+    return [...candidates];
+  }
+
+  const legal = new Set(candidates);
+  const ordered = [];
+  const seen = new Set();
+
+  rankedCandidates.forEach((value) => {
+    if (!legal.has(value) || seen.has(value)) {
+      return;
+    }
+    seen.add(value);
+    ordered.push(value);
+  });
+
+  candidates.forEach((value) => {
+    if (seen.has(value)) {
+      return;
+    }
+    ordered.push(value);
+  });
+
+  return ordered;
+}
+
+function pushHistoryOp(historyOps, op) {
+  historyOps.push(op);
+  if (historyOps.length > 64) {
+    historyOps.shift();
+  }
 }
 
 export function solveSudokuWithTrace(startBoard, options = {}) {
@@ -222,6 +256,113 @@ export function solveSudokuWithTrace(startBoard, options = {}) {
 
 export function solveSudokuNaively(startBoard) {
   return solveSudokuWithTrace(startBoard, { strategy: "row-major" });
+}
+
+export async function solveSudokuWithGuidance(startBoard, options = {}) {
+  const strategy = options.strategy ?? "mrv";
+  const chooseCell = getChooser(strategy);
+  const board = cloneSudokuBoard(startBoard);
+  const trace = [];
+  const stats = {
+    placements: 0,
+    backtracks: 0,
+    focuses: 0,
+    deadEnds: 0,
+    candidateQueries: 0,
+    chooserCalls: 0,
+    chooserCellScans: 0,
+    maxDepth: 0,
+  };
+  const historyOps = [];
+
+  async function search(depth = 0) {
+    stats.maxDepth = Math.max(stats.maxDepth, depth);
+    const next = chooseCell(board, stats);
+    if (!next) {
+      return true;
+    }
+
+    if (next.candidates.length === 0) {
+      stats.deadEnds += 1;
+      return false;
+    }
+
+    const focus = {
+      row: next.row,
+      col: next.col,
+      candidates: [...next.candidates],
+      depth,
+    };
+
+    stats.focuses += 1;
+    trace.push({
+      type: "focus",
+      row: focus.row,
+      col: focus.col,
+      candidates: [...focus.candidates],
+      depth,
+    });
+    pushHistoryOp(historyOps, "FOCUS_NEXT");
+
+    let candidateOrder = [...next.candidates];
+    if (
+      typeof options.rankCandidates === "function" &&
+      next.candidates.length > 1
+    ) {
+      const rankedResult = await options.rankCandidates({
+        board,
+        focus,
+        historyOps: [...historyOps],
+        strategy,
+      });
+      const rankedCandidates = Array.isArray(rankedResult)
+        ? rankedResult
+        : rankedResult?.orderedCandidates;
+      candidateOrder = normalizeGuidedCandidateOrder(
+        next.candidates,
+        rankedCandidates
+      );
+    }
+
+    for (const value of candidateOrder) {
+      board[next.row][next.col] = value;
+      stats.placements += 1;
+      trace.push({
+        type: "place",
+        row: next.row,
+        col: next.col,
+        value,
+        depth,
+      });
+      pushHistoryOp(historyOps, "PLACE");
+
+      if (await search(depth + 1)) {
+        return true;
+      }
+
+      board[next.row][next.col] = 0;
+      stats.backtracks += 1;
+      trace.push({
+        type: "backtrack",
+        row: next.row,
+        col: next.col,
+        value,
+        depth,
+      });
+      pushHistoryOp(historyOps, "UNDO");
+    }
+
+    return false;
+  }
+
+  const solved = await search();
+  return {
+    solved,
+    solution: board,
+    trace,
+    stats,
+    strategy,
+  };
 }
 
 export function isValidSudokuSolution(board, clueBoard = null) {

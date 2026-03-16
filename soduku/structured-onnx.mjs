@@ -1,4 +1,5 @@
 const ORT_CDN = "https://cdn.jsdelivr.net/npm/onnxruntime-web@1.20.1/+esm";
+const ORT_WASM_BASE = "https://cdn.jsdelivr.net/npm/onnxruntime-web@1.20.1/dist/";
 
 let ortPromise = null;
 
@@ -8,9 +9,26 @@ function toInt32Tensor(ort, values, dims) {
 
 export async function getOrtRuntime() {
   if (!ortPromise) {
-    ortPromise = import(ORT_CDN);
+    ortPromise = import(ORT_CDN).then((ort) => {
+      ort.env.wasm.wasmPaths = ORT_WASM_BASE;
+      return ort;
+    });
   }
   return ortPromise;
+}
+
+export async function fetchStructuredModel(url) {
+  const response = await fetch(url);
+  if (!response.ok) {
+    throw new Error(`Failed to fetch model asset ${url} (${response.status}).`);
+  }
+
+  const contentType = response.headers.get("content-type") ?? "";
+  if (contentType.includes("text/html")) {
+    throw new Error(`Model asset ${url} returned HTML instead of ONNX bytes.`);
+  }
+
+  return response.arrayBuffer();
 }
 
 export function buildStructuredFeeds(ort, states) {

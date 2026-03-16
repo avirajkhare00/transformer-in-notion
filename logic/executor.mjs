@@ -107,30 +107,31 @@ export function buildTicTacToeExecutorArtifacts(board, analysis, locked) {
 export function buildSudokuExecutorArtifacts(initialBoard, result, stepIndex) {
   const prompt = [
     `Solve 9x9 Sudoku with ${countClues(initialBoard)} clues.`,
-    result ? "Runtime: browser-side WebAssembly executor." : "Runtime: loading browser-side WebAssembly executor.",
-    "Strategy: choose the emptiest cell, try candidates, backtrack on contradiction.",
+    result
+      ? "Runtime: local value model + exact browser-side verifier."
+      : "Runtime: loading local value model + exact browser-side verifier.",
+    "Strategy: MRV picks the cell, the model ranks legal values, the exact runtime backtracks on contradiction.",
     `Preview row 1: ${renderSudokuRow(initialBoard[0])}`,
   ].join("\n");
 
   const tool = {
-    name: "solve()",
-    badge: "wasm executor",
-    runtime: "browser-side WebAssembly.instantiate",
-    artifact: "wasm/sudoku_solver.wasm",
-    call: "solve(grid, trace_buffer) -> solution + trace",
+    name: "guided_solve()",
+    badge: "model + verifier",
+    runtime: "structured ONNX policy + exact JS/WASM runtime",
+    artifact: "soduku/models/extreme-value or hard-value-structured",
+    call: "rank_candidates(state) -> exact_place_or_backtrack",
   };
 
   const program = [
     "{",
     "  load_grid",
-    "  wasm_call solve()",
-    "  scan_min_candidate_cell",
+    "  select_mrv_cell",
     "  emit_focus",
-    "  try_candidate",
-    "  check_row",
-    "  check_col",
-    "  check_box",
-    "  commit_or_backtrack",
+    "  encode_structured_state",
+    "  model_rank_legal_values",
+    "  exact_place",
+    "  exact_check_constraints",
+    "  exact_backtrack_if_needed",
     "  halt_when_full",
     "}",
   ].join("\n");
@@ -140,7 +141,7 @@ export function buildSudokuExecutorArtifacts(initialBoard, result, stepIndex) {
       prompt,
       tool,
       program,
-      trace: "waiting for wasm trace...",
+      trace: "waiting for guided runtime trace...",
     };
   }
 

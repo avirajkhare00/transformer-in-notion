@@ -1,7 +1,16 @@
 import { HARD_VALUE_LABELS } from "./hard-op-context.mjs";
-import { buildStructuredFeeds, getOrtRuntime, softmax, topK } from "./structured-onnx.mjs";
+import {
+  buildStructuredFeeds,
+  fetchStructuredModel,
+  getOrtRuntime,
+  softmax,
+  topK,
+} from "./structured-onnx.mjs";
 
-const MODEL_URL = new URL("./models/hard-value-structured/onnx/model_quantized.onnx", import.meta.url);
+const MODEL_URLS = [
+  new URL("./models/extreme-value/onnx/model_quantized.onnx", import.meta.url),
+  new URL("./models/hard-value-structured/onnx/model_quantized.onnx", import.meta.url),
+];
 
 let sessionPromise = null;
 
@@ -10,10 +19,19 @@ async function loadSession() {
     sessionPromise = (async () => {
       const ort = await getOrtRuntime();
       ort.env.wasm.numThreads = 1;
-      return ort.InferenceSession.create(MODEL_URL.href, {
-        executionProviders: ["wasm"],
-        graphOptimizationLevel: "all",
-      });
+      let lastError = null;
+      for (const modelUrl of MODEL_URLS) {
+        try {
+          const modelBytes = await fetchStructuredModel(modelUrl.href);
+          return await ort.InferenceSession.create(modelBytes, {
+            executionProviders: ["wasm"],
+            graphOptimizationLevel: "all",
+          });
+        } catch (error) {
+          lastError = error;
+        }
+      }
+      throw lastError ?? new Error("Unable to load a structured value model.");
     })();
   }
   return sessionPromise;

@@ -98,10 +98,11 @@ const sudokuModelState = {
   worker: null,
   isRunning: false,
   error: "",
-  status: "Model trace is idle.",
+  status: "Guided model is idle.",
   phase: "idle",
   tokenCount: 0,
   predictionCount: 0,
+  branchCount: 0,
   averageConfidence: null,
   accuracy: null,
   valuePredictionCount: 0,
@@ -110,6 +111,9 @@ const sudokuModelState = {
   tokensPerSecond: 0,
   elapsedMs: 0,
   traceLength: 0,
+  referenceTraceLength: 0,
+  guidedStats: null,
+  referenceStats: null,
   runId: 0,
 };
 
@@ -349,6 +353,25 @@ function formatSudokuTokenRate(value) {
   return `${Math.round(value)} tok/s`;
 }
 
+function formatSudokuBacktrackComparison(guidedBacktracks, referenceBacktracks) {
+  if (
+    !Number.isFinite(guidedBacktracks) ||
+    !Number.isFinite(referenceBacktracks)
+  ) {
+    return "—";
+  }
+
+  if (guidedBacktracks === referenceBacktracks) {
+    return "same";
+  }
+
+  const delta = referenceBacktracks - guidedBacktracks;
+  if (delta > 0) {
+    return `${delta} fewer`;
+  }
+  return `${Math.abs(delta)} more`;
+}
+
 function countSudokuClues(board) {
   return board.flat().filter(Boolean).length;
 }
@@ -431,7 +454,7 @@ function terminateSudokuModelWorker() {
   }
 }
 
-function resetSudokuModelState(status = "Model trace is idle.") {
+function resetSudokuModelState(status = "Guided model is idle.") {
   terminateSudokuModelWorker();
   sudokuModelState.isRunning = false;
   sudokuModelState.error = "";
@@ -439,6 +462,7 @@ function resetSudokuModelState(status = "Model trace is idle.") {
   sudokuModelState.phase = "idle";
   sudokuModelState.tokenCount = 0;
   sudokuModelState.predictionCount = 0;
+  sudokuModelState.branchCount = 0;
   sudokuModelState.averageConfidence = null;
   sudokuModelState.accuracy = null;
   sudokuModelState.valuePredictionCount = 0;
@@ -447,6 +471,9 @@ function resetSudokuModelState(status = "Model trace is idle.") {
   sudokuModelState.tokensPerSecond = 0;
   sudokuModelState.elapsedMs = 0;
   sudokuModelState.traceLength = 0;
+  sudokuModelState.referenceTraceLength = 0;
+  sudokuModelState.guidedStats = null;
+  sudokuModelState.referenceStats = null;
 }
 
 function syncSudokuInput(puzzle) {
@@ -729,7 +756,7 @@ async function resetSudoku() {
   const requestId = ++sudokuState.requestId;
   stopSudokuAnimation();
   stopSudokuSolveClock();
-  resetSudokuModelState("Model trace is idle.");
+  resetSudokuModelState("Guided model is idle.");
   sudokuState.givenMask = buildGivenMask(sudokuState.initialBoard);
   sudokuState.board = cloneSudokuBoard(sudokuState.initialBoard);
   sudokuState.result = null;
@@ -828,6 +855,9 @@ function updateSudokuModelMetrics(payload) {
   if (Number.isFinite(payload.predictionCount)) {
     sudokuModelState.predictionCount = payload.predictionCount;
   }
+  if (Number.isFinite(payload.branchCount)) {
+    sudokuModelState.branchCount = payload.branchCount;
+  }
   if (Number.isFinite(payload.averageConfidence)) {
     sudokuModelState.averageConfidence = payload.averageConfidence;
   }
@@ -852,6 +882,15 @@ function updateSudokuModelMetrics(payload) {
   if (Number.isFinite(payload.traceLength)) {
     sudokuModelState.traceLength = payload.traceLength;
   }
+  if (Number.isFinite(payload.referenceTraceLength)) {
+    sudokuModelState.referenceTraceLength = payload.referenceTraceLength;
+  }
+  if (payload.guidedStats) {
+    sudokuModelState.guidedStats = payload.guidedStats;
+  }
+  if (payload.referenceStats) {
+    sudokuModelState.referenceStats = payload.referenceStats;
+  }
 }
 
 function handleSudokuModelMessage(runId, message) {
@@ -861,15 +900,17 @@ function handleSudokuModelMessage(runId, message) {
   }
 
   if (data.type === "start") {
-    sudokuModelState.status = `Reference trace ready. ${data.traceLength} op steps queued.`;
-    sudokuModelState.traceLength = data.traceLength ?? sudokuModelState.traceLength;
+    sudokuModelState.status = `Reference solve ready. Guided branch ranking will compare against ${data.traceLength} exact events.`;
+    sudokuModelState.referenceTraceLength =
+      data.referenceTraceLength ?? sudokuModelState.referenceTraceLength;
+    sudokuModelState.referenceStats = data.referenceStats ?? sudokuModelState.referenceStats;
     renderSudoku();
     return;
   }
 
   if (data.type === "progress") {
     sudokuModelState.phase = data.phase ?? sudokuModelState.phase;
-    sudokuModelState.status = data.message ?? "Running local transformer trace.";
+    sudokuModelState.status = data.message ?? "Running local guided solve.";
     renderSudoku();
     return;
   }
@@ -877,8 +918,8 @@ function handleSudokuModelMessage(runId, message) {
   if (data.type === "event-batch") {
     updateSudokuModelMetrics(data);
     sudokuModelState.status =
-      data.traceLength && data.predictionCount
-        ? `Processed ${data.predictionCount} / ${data.traceLength} op steps.`
+      data.branchCount
+        ? `Ranked ${data.branchCount} guided branch decisions.`
         : sudokuModelState.status;
     renderSudoku();
     return;
@@ -888,7 +929,7 @@ function handleSudokuModelMessage(runId, message) {
     updateSudokuModelMetrics(data);
     sudokuModelState.isRunning = false;
     sudokuModelState.phase = "done";
-    sudokuModelState.status = `Finished ${sudokuModelState.tokenCount} model tokens at ${formatSudokuTokenRate(sudokuModelState.tokensPerSecond)}.`;
+    sudokuModelState.status = `Guided solve finished after ${sudokuModelState.branchCount} ranked branch decisions at ${formatSudokuTokenRate(sudokuModelState.tokensPerSecond)}.`;
     terminateSudokuModelWorker();
     renderSudoku();
     return;
@@ -896,7 +937,7 @@ function handleSudokuModelMessage(runId, message) {
 
   if (data.type === "error") {
     sudokuModelState.isRunning = false;
-    sudokuModelState.error = data.message ?? "Model trace failed.";
+    sudokuModelState.error = data.message ?? "Guided model solve failed.";
     sudokuModelState.status = sudokuModelState.error;
     sudokuModelState.phase = "error";
     terminateSudokuModelWorker();
@@ -909,7 +950,7 @@ function runSudokuModelTrace() {
     return;
   }
 
-  resetSudokuModelState("Warming local transformer models.");
+  resetSudokuModelState("Warming local guided model.");
   sudokuModelState.isRunning = true;
   sudokuModelState.phase = "warm-models";
   sudokuModelState.runId += 1;
@@ -1077,8 +1118,8 @@ function renderSudoku() {
   refs.sudokuModelRun.disabled =
     sudokuState.isLoading || !sudokuState.result || sudokuModelState.isRunning;
   refs.sudokuModelRun.textContent = sudokuModelState.isRunning
-    ? "Running model trace…"
-    : "Run model trace";
+    ? "Running guided solve…"
+    : "Run guided model";
   renderSudokuStats();
   renderSudokuModelStats();
   renderSudokuFlow();
@@ -1192,51 +1233,58 @@ function renderSudokuModelStats() {
   const items = [
     {
       label: "Engine",
-      value: "local transformers",
+      value: "local value transformer + verifier",
     },
     {
       label: "Output",
-      value: "op + PLACE value",
+      value: "ranked PLACE candidates",
     },
     {
       label: "Tokens",
       value: sudokuModelState.tokenCount || "—",
     },
     {
-      label: "Op predictions",
-      value: sudokuModelState.predictionCount || "—",
+      label: "Branch calls",
+      value: sudokuModelState.branchCount || "—",
     },
     {
-      label: "PLACE values",
-      value: sudokuModelState.valuePredictionCount || "—",
+      label: "Avg top-1 conf",
+      value: formatSudokuPercent(sudokuModelState.valueAverageConfidence),
     },
     {
       label: "tok/s",
       value: formatSudokuTokenRate(sudokuModelState.tokensPerSecond),
     },
     {
-      label: "Op top-1",
-      value: formatSudokuPercent(sudokuModelState.accuracy),
+      label: "Guided placements",
+      value: sudokuModelState.guidedStats?.placements ?? "—",
     },
     {
-      label: "Op conf",
-      value: formatSudokuPercent(sudokuModelState.averageConfidence),
+      label: "Guided backtracks",
+      value: sudokuModelState.guidedStats?.backtracks ?? "—",
     },
     {
-      label: "PLACE top-1",
-      value: formatSudokuPercent(sudokuModelState.valueAccuracy),
+      label: "vs ref backtracks",
+      value: formatSudokuBacktrackComparison(
+        sudokuModelState.guidedStats?.backtracks,
+        sudokuModelState.referenceStats?.backtracks
+      ),
     },
     {
-      label: "PLACE conf",
-      value: formatSudokuPercent(sudokuModelState.valueAverageConfidence),
+      label: "Reference BTs",
+      value: sudokuModelState.referenceStats?.backtracks ?? "—",
     },
     {
       label: "Elapsed",
       value: formatSudokuDuration(sudokuModelState.elapsedMs),
     },
     {
-      label: "Reference trace",
+      label: "Guided trace",
       value: sudokuModelState.traceLength || "—",
+    },
+    {
+      label: "Reference trace",
+      value: sudokuModelState.referenceTraceLength || "—",
     },
   ];
 
@@ -1277,32 +1325,32 @@ function renderSudokuFlow() {
       badge: sudokuModelState.isRunning ? "active" : "model",
       detail: sudokuModelState.isRunning
         ? sudokuModelState.status
-        : sudokuModelState.tokenCount
-          ? `${formatSudokuTokenRate(sudokuModelState.tokensPerSecond)} · ${formatSudokuPercent(sudokuModelState.accuracy)} op top-1`
-          : "Optional next-op + PLACE-value probe",
+        : sudokuModelState.branchCount
+          ? `${formatSudokuTokenRate(sudokuModelState.tokensPerSecond)} · ${sudokuModelState.branchCount} ranked branch calls`
+          : "Ranks legal PLACE values at ambiguous branch points",
       active: sudokuModelState.isRunning,
     },
     {
       title: "PSVM ops",
       badge: "ops",
-      detail: "FOCUS_NEXT · READ_CANDS · PLACE · UNDO · FAIL · HALT",
+      detail: "FOCUS_NEXT · PLACE(value order) · UNDO",
       active: sudokuModelState.isRunning,
     },
     {
-      title: "WASM executor",
-      badge: sudokuState.isLoading ? "active" : "exact",
-      detail: sudokuState.isLoading
-        ? `${formatSudokuDuration(getCurrentSudokuSolveMs())} … solving`
-        : sudokuState.result
-          ? `${formatSudokuDuration(sudokuState.solveElapsedMs)} · ${sudokuState.result.trace.length} exact events`
-          : "warming exact runtime",
-      active: sudokuState.isLoading,
+      title: "Exact verifier",
+      badge: sudokuModelState.isRunning ? "active" : "exact",
+      detail: sudokuModelState.guidedStats
+        ? `${sudokuModelState.guidedStats.backtracks} guided backtracks with deterministic legality`
+        : "Keeps legality, placement, and backtracking deterministic",
+      active: sudokuModelState.isRunning,
     },
     {
-      title: "Trace / replay",
+      title: "Compare",
       badge: sudokuState.isAnimating ? "live" : "trace",
-      detail: replayDetail,
-      active: sudokuState.isAnimating,
+      detail: sudokuModelState.traceLength
+        ? `guided ${sudokuModelState.traceLength} · ref ${sudokuModelState.referenceTraceLength || "—"}`
+        : replayDetail,
+      active: sudokuState.isAnimating || sudokuModelState.isRunning,
     },
   ];
 

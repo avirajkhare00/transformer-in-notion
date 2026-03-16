@@ -37,12 +37,6 @@ function windowEvents(events, stepIndex, size = 12) {
   return events.slice(Math.max(0, safeIndex - size), safeIndex);
 }
 
-function formatTicTacToeToken(option, index) {
-  const moveToken = String(option.move).padStart(2, "0");
-  const scoreToken = String(option.score).padStart(2, "0");
-  return `step ${String(index + 1).padStart(2, "0")} eval move=${moveToken} score=${scoreToken} tag=${option.label.replace(/\s+/g, "_")}`;
-}
-
 function formatSudokuToken(event, index) {
   const head = `pc=${String(index + 1).padStart(3, "0")}`;
   const cell = formatSudokuCell(event.row, event.col);
@@ -104,6 +98,7 @@ export function buildTicTacToeExecutorArtifacts(board, analysis, locked) {
 export function buildSudokuExecutorArtifacts(initialBoard, result, stepIndex) {
   const prompt = [
     `Solve 9x9 Sudoku with ${countClues(initialBoard)} clues.`,
+    result ? "Runtime: browser-side WebAssembly executor." : "Runtime: loading browser-side WebAssembly executor.",
     "Strategy: choose the emptiest cell, try candidates, backtrack on contradiction.",
     `Preview row 1: ${renderSudokuRow(initialBoard[0])}`,
   ].join("\n");
@@ -111,6 +106,7 @@ export function buildSudokuExecutorArtifacts(initialBoard, result, stepIndex) {
   const program = [
     "{",
     "  load_grid",
+    "  wasm_call solve()",
     "  scan_min_candidate_cell",
     "  emit_focus",
     "  try_candidate",
@@ -121,6 +117,14 @@ export function buildSudokuExecutorArtifacts(initialBoard, result, stepIndex) {
     "  halt_when_full",
     "}",
   ].join("\n");
+
+  if (!result) {
+    return {
+      prompt,
+      program,
+      trace: "waiting for wasm trace...",
+    };
+  }
 
   const traceWindow = windowEvents(result.trace, stepIndex);
   const trace = traceWindow.length

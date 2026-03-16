@@ -17,12 +17,13 @@
         <h1>Pocket Solver Garden</h1>
         <p class="lede">
           Two small examples that fit naturally inside a Notion embed: a
-          local transformer for Tic-tac-toe and a Sudoku solver with an explicit
-          executor trace.
+          local transformer for Tic-tac-toe and a browser-side Sudoku WASM
+          executor with an explicit trace.
         </p>
         <div class="pill-row">
           <span class="pill">Static site</span>
           <span class="pill">Local model weights</span>
+          <span class="pill">WASM executor</span>
           <span class="pill">Planner -> program -> trace</span>
           <span class="pill">GitHub Pages friendly</span>
           <span class="pill">Easy to drop into Notion</span>
@@ -49,7 +50,7 @@
                   New board
                 </button>
                 <button id="ttt-ai-first" class="button button-secondary" type="button">
-                  Solver starts
+                  Model starts
                 </button>
               </div>
             </div>
@@ -91,8 +92,8 @@
             <p class="kicker">Demo 2</p>
             <h2>Sudoku</h2>
             <p class="panel-copy">
-              Animate a complete solve on a 9x9 puzzle and keep the trace visible
-              while the board fills.
+              Animate a complete 9x9 solve from a browser-side WebAssembly
+              executor and keep the trace visible while the board fills.
             </p>
           </div>
 
@@ -115,7 +116,7 @@
 
             <div class="inspector-column">
               <section class="mini-card">
-                <p class="mini-label">Solver stats</p>
+                <p class="mini-label">Executor stats</p>
                 <div id="sudoku-stats" class="stats-grid"></div>
               </section>
 
@@ -156,7 +157,7 @@
           </p>
           <ul class="rationale-list">
             <li>Tic-tac-toe gives instant interaction and obvious correctness.</li>
-            <li>Sudoku gives a longer, more mechanical execution trace.</li>
+            <li>Sudoku gives a longer, more mechanical WASM execution trace.</li>
             <li>Next demos like 24 Game, sorting, or maze search keep the same shape.</li>
           </ul>
         </article>
@@ -177,9 +178,9 @@
 
       <footer class="footer-note">
         <p>
-          Tic-tac-toe now runs from local model weights in the embed. Sudoku is
-          still deterministic, but both demos share the same prompt, program,
-          trace, and result contract.
+          Tic-tac-toe now runs from local model weights in the embed. Sudoku now
+          runs from a browser-side WASM executor. Both demos share the same
+          prompt, program, trace, and result contract.
         </p>
       </footer>
     </main>

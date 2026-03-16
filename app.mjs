@@ -13,8 +13,8 @@ import {
   cloneSudokuBoard,
   formatSudokuCell,
   parseSudoku,
-  solveSudokuWithTrace,
 } from "./logic/sudoku.mjs";
+import { solveSudokuWithWasm, warmSudokuExecutor } from "./logic/sudoku-wasm.mjs";
 import {
   buildSudokuExecutorArtifacts,
   buildTicTacToeExecutorArtifacts,
@@ -34,6 +34,7 @@ const tttState = {
 };
 
 const sudokuState = {
+  puzzle: DEFAULT_PUZZLE,
   initialBoard: parseSudoku(DEFAULT_PUZZLE),
   givenMask: [],
   board: [],
@@ -43,6 +44,10 @@ const sudokuState = {
   stepIndex: 0,
   timerId: 0,
   isAnimating: false,
+  isLoading: false,
+  executorReady: false,
+  executorError: "",
+  requestId: 0,
 };
 
 const refs = {
@@ -271,7 +276,8 @@ function renderTicTacToeAnalysis() {
   if (!tttState.analysis || !tttState.analysis.options.length) {
     const placeholder = document.createElement("p");
     placeholder.className = "empty-state";
-    placeholder.textContent = "The solver fills this panel after it starts thinking.";
+    placeholder.textContent =
+      "The local transformer fills this panel after it starts thinking.";
     refs.tttAnalysis.append(placeholder);
     return;
   }
@@ -320,26 +326,67 @@ function renderTicTacToeArtifacts() {
   refs.tttTrace.textContent = artifacts.trace;
 }
 
-function resetSudoku() {
+async function resetSudoku() {
+  const requestId = ++sudokuState.requestId;
   stopSudokuAnimation();
   sudokuState.givenMask = buildGivenMask(sudokuState.initialBoard);
   sudokuState.board = cloneSudokuBoard(sudokuState.initialBoard);
-  sudokuState.result = solveSudokuWithTrace(sudokuState.initialBoard);
+  sudokuState.result = null;
   sudokuState.log = [];
   sudokuState.emphasis = null;
   sudokuState.stepIndex = 0;
-  pushSudokuLog("Demo puzzle loaded. Animate the search or jump to the final grid.");
+  sudokuState.isLoading = true;
+  sudokuState.executorError = "";
+  pushSudokuLog(
+    sudokuState.executorReady
+      ? "Puzzle loaded. Running the browser-side WASM executor."
+      : "Puzzle loaded. Loading the browser-side WASM executor."
+  );
   renderSudoku();
+
+  try {
+    if (!sudokuState.executorReady) {
+      await warmSudokuExecutor();
+      if (requestId !== sudokuState.requestId) {
+        return;
+      }
+      sudokuState.executorReady = true;
+    }
+
+    const result = await solveSudokuWithWasm(sudokuState.puzzle);
+    if (requestId !== sudokuState.requestId) {
+      return;
+    }
+
+    sudokuState.result = result;
+    sudokuState.isLoading = false;
+    pushSudokuLog(
+      `WASM executor traced ${result.trace.length} events before reaching the solved grid.`
+    );
+    renderSudoku();
+  } catch (error) {
+    if (requestId !== sudokuState.requestId) {
+      return;
+    }
+    sudokuState.isLoading = false;
+    sudokuState.executorReady = false;
+    sudokuState.executorError = error instanceof Error ? error.message : "WASM executor failed.";
+    pushSudokuLog("Browser-side WASM executor failed to load.");
+    renderSudoku();
+  }
 }
 
 function animateSudoku() {
+  if (!sudokuState.result || sudokuState.isLoading) {
+    return;
+  }
   stopSudokuAnimation();
   sudokuState.board = cloneSudokuBoard(sudokuState.initialBoard);
   sudokuState.log = [];
   sudokuState.emphasis = null;
   sudokuState.stepIndex = 0;
   sudokuState.isAnimating = true;
-  pushSudokuLog("Tracing the solver from the first open cell.");
+  pushSudokuLog("Tracing the WASM executor from the first open cell.");
   renderSudoku();
 
   sudokuState.timerId = window.setInterval(() => {
@@ -364,17 +411,20 @@ function stopSudokuAnimation(markSolved = false) {
   sudokuState.timerId = 0;
   sudokuState.isAnimating = false;
 
-  if (markSolved) {
+  if (markSolved && sudokuState.result) {
     sudokuState.board = cloneSudokuBoard(sudokuState.result.solution);
     sudokuState.emphasis = null;
     pushSudokuLog(
-      `Solved after ${sudokuState.result.stats.placements} placements and ${sudokuState.result.stats.backtracks} backtracks.`
+      `Solved after ${sudokuState.result.stats.placements} placements and ${sudokuState.result.stats.backtracks} backtracks in WASM.`
     );
     renderSudoku();
   }
 }
 
 function solveSudokuInstantly() {
+  if (!sudokuState.result || sudokuState.isLoading) {
+    return;
+  }
   stopSudokuAnimation();
   sudokuState.board = cloneSudokuBoard(sudokuState.result.solution);
   sudokuState.emphasis = null;
@@ -440,26 +490,47 @@ function renderSudoku() {
   });
 
   refs.sudokuStatus.textContent = getSudokuStatus();
-  refs.sudokuAnimate.disabled = sudokuState.isAnimating;
-  refs.sudokuSolve.disabled = sudokuState.isAnimating;
+  refs.sudokuAnimate.disabled =
+    sudokuState.isAnimating || sudokuState.isLoading || !sudokuState.result;
+  refs.sudokuSolve.disabled =
+    sudokuState.isAnimating || sudokuState.isLoading || !sudokuState.result;
   renderSudokuStats();
   renderSudokuArtifacts();
   renderList(refs.sudokuLog, sudokuState.log);
 }
 
 function getSudokuStatus() {
+  if (sudokuState.executorError) {
+    return "Browser-side WASM executor failed to load.";
+  }
+  if (sudokuState.isLoading) {
+    return sudokuState.executorReady
+      ? "Browser-side WASM executor is solving the puzzle."
+      : "Loading browser-side WASM executor.";
+  }
   if (sudokuState.isAnimating) {
-    return `Solver trace ${sudokuState.stepIndex + 1} / ${sudokuState.result.trace.length}`;
+    return `WASM trace ${sudokuState.stepIndex + 1} / ${sudokuState.result.trace.length}`;
   }
 
-  if (sudokuState.stepIndex >= sudokuState.result.trace.length) {
-    return "Puzzle solved. The whole trace stays browser-side.";
+  if (sudokuState.result && sudokuState.stepIndex >= sudokuState.result.trace.length) {
+    return "Puzzle solved. The whole WASM trace stays browser-side.";
   }
 
-  return "Ready to animate a full solve.";
+  return "Ready to animate a full WASM solve.";
 }
 
 function renderSudokuStats() {
+  if (!sudokuState.result) {
+    refs.sudokuStats.innerHTML = "";
+    const placeholder = document.createElement("p");
+    placeholder.className = "empty-state";
+    placeholder.textContent = sudokuState.isLoading
+      ? "The WASM executor is preparing the full search trace."
+      : "Sudoku stats appear after the WASM executor loads.";
+    refs.sudokuStats.append(placeholder);
+    return;
+  }
+
   const items = [
     {
       label: "Placements",

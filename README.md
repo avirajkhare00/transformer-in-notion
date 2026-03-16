@@ -6,14 +6,14 @@ The current version deliberately keeps the stack simple, but it now adopts a
 Percepta-style surface:
 
 - Tic-tac-toe with a visible local transformer policy trace
-- Sudoku with an animated solving trace
+- Sudoku with an animated browser-side WASM trace
 - Prompt -> pseudo-program -> execution trace panels for both demos
 - Static files only, so GitHub Pages can host it directly
 
 The embed story now has both halves:
 
 - Tic-tac-toe uses a tiny model bundle loaded locally in the browser
-- Sudoku remains a deterministic browser-side solver
+- Sudoku uses a browser-side WebAssembly executor
 
 That keeps the deployment contract simple:
 
@@ -69,10 +69,13 @@ Then open `http://localhost:8000`.
 - `app.mjs` - UI wiring and animations
 - `logic/tictactoe.mjs` - minimax engine
 - `logic/tictactoe-model.mjs` - local Transformers.js runtime wrapper
-- `logic/sudoku.mjs` - traced backtracking solver
+- `logic/sudoku.mjs` - Sudoku board parsing and formatting helpers
+- `logic/sudoku-wasm.mjs` - WebAssembly loader and JS wrapper for Sudoku execution
 - `logic/executor.mjs` - prompt/program/trace artifact builder
 - `scripts/export_tictactoe_dataset.mjs` - dataset export from the oracle solver
 - `scripts/train_tictactoe_transformer.py` - train + ONNX export for the browser model
+- `scripts/build_sudoku_wasm.sh` - build and copy the browser Sudoku executor
+- `wasm/sudoku-executor/` - Rust crate compiled to WebAssembly
 
 ## GitHub Pages
 
@@ -91,8 +94,19 @@ node scripts/export_tictactoe_dataset.mjs
 That writes an ONNX-ready Hugging Face model bundle to `models/tictactoe-bert/`,
 which the browser loads via Transformers.js.
 
+## Building the Sudoku WASM executor
+
+Build the browser-side solver with:
+
+```bash
+sh scripts/build_sudoku_wasm.sh
+```
+
+That writes the runtime artifact to `wasm/sudoku_solver.wasm`, which the page
+loads directly with `WebAssembly.instantiate`.
+
 ## Next steps
 
-- Replace Sudoku with a WASM runtime or a true model + executor pair
 - Add puzzle presets and difficulty levels
+- Add a true model + executor pair for a larger puzzle
 - Add a tighter mobile/embed height mode for narrower Notion columns

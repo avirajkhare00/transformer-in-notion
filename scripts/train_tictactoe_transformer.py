@@ -83,17 +83,19 @@ def encode_dataset(tokenizer: PreTrainedTokenizerFast, samples: SampleSet) -> di
 def build_model() -> BertForSequenceClassification:
     config = BertConfig(
         vocab_size=len(VOCAB),
-        hidden_size=64,
-        num_hidden_layers=2,
-        num_attention_heads=4,
-        intermediate_size=128,
+        hidden_size=128,
+        num_hidden_layers=4,
+        num_attention_heads=8,
+        intermediate_size=256,
         max_position_embeddings=32,
-        type_vocab_size=1,
+        type_vocab_size=2,
         num_labels=9,
         pad_token_id=VOCAB["[PAD]"],
         label2id={label: index for index, label in MOVE_LABELS.items()},
         id2label=MOVE_LABELS,
-        classifier_dropout=0.1,
+        classifier_dropout=0.0,
+        hidden_dropout_prob=0.0,
+        attention_probs_dropout_prob=0.0,
     )
     return BertForSequenceClassification(config)
 
@@ -125,7 +127,7 @@ def train_model(
     learning_rate: float,
     target_accuracy: float,
 ) -> tuple[BertForSequenceClassification, dict[str, float]]:
-    optimizer = torch.optim.AdamW(model.parameters(), lr=learning_rate, weight_decay=0.01)
+    optimizer = torch.optim.AdamW(model.parameters(), lr=learning_rate, weight_decay=0.0)
     best_accuracy = 0.0
     best_state = None
     last_train_loss = 0.0
@@ -225,9 +227,9 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--dataset", type=Path, default=Path("training/tictactoe-dataset.json"))
     parser.add_argument("--raw-dir", type=Path, default=Path("training/tictactoe-bert"))
     parser.add_argument("--export-dir", type=Path, default=Path("models/tictactoe-bert"))
-    parser.add_argument("--epochs", type=int, default=45)
-    parser.add_argument("--batch-size", type=int, default=128)
-    parser.add_argument("--lr", type=float, default=3e-3)
+    parser.add_argument("--epochs", type=int, default=180)
+    parser.add_argument("--batch-size", type=int, default=64)
+    parser.add_argument("--lr", type=float, default=1e-3)
     parser.add_argument("--target-accuracy", type=float, default=0.995)
     parser.add_argument("--seed", type=int, default=7)
     return parser.parse_args()
@@ -256,7 +258,12 @@ def main() -> None:
     dataloader = DataLoader(dataset, batch_size=args.batch_size, shuffle=True)
     eval_loader = DataLoader(dataset, batch_size=args.batch_size, shuffle=False)
 
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    if torch.cuda.is_available():
+        device = torch.device("cuda")
+    elif torch.backends.mps.is_available():
+        device = torch.device("mps")
+    else:
+        device = torch.device("cpu")
     print(f"training on {device} with {len(samples.texts)} samples")
 
     model = build_model()

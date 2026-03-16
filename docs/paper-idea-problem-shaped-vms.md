@@ -223,6 +223,113 @@ canonical trace from a Web Worker into a browser UI.
 It is not yet transformer-backed. It is the deterministic PSVM substrate and
 trace generator that a local model would later learn to imitate or drive.
 
+## Minimum VM stack
+
+For this project, the **minimum VM stack** means the smallest end-to-end system
+that makes a task-shaped executor claim honest.
+
+It has six layers:
+
+1. **Minimal model-facing op set**  
+   The task is expressed in the smallest executable vocabulary that still
+   preserves future-state changes.
+
+2. **Deterministic teacher runtime**  
+   An exact interpreter or runtime executes those ops without model
+   approximation.
+
+3. **Canonical trace generator**  
+   The runtime emits a stable trace under fixed ordering and tie-breaking rules.
+
+4. **Browser execution path**  
+   The trace can be streamed in a Web Worker and visualized in a static web app.
+
+5. **Student supervision path**  
+   The teacher can generate a supervised dataset for at least one learned target.
+
+6. **Student runtime path**  
+   A local model can be loaded and wired into the browser execution loop, even if
+   the exact runtime still remains the verifier or fallback.
+
+Anything beyond this, such as full argument-level trace generation, fully
+student-driven execution, or large puzzle scaling, is beyond the minimum stack.
+
+## Repository verification checklist
+
+The checklist below separates what is already verified in this repository from
+what remains open.
+
+### Invoice PSVM
+
+- [x] Minimal model-facing op set defined
+  - `READ_ITEM`, `LINE_TOTAL`, `ADD_SUBTOTAL`, `APPLY_TAX`, `EMIT_TOTAL`, `HALT`
+- [x] Deterministic teacher runtime implemented
+  - `invoice/psvm.mjs`
+- [x] Canonical trace generation implemented
+- [x] Browser Web Worker execution implemented
+  - `invoice/worker.mjs`
+- [x] Browser UI streams the trace
+  - `invoice/index.html`, `invoice/app.mjs`
+- [x] Reduced-op sample trace verified
+  - sample run uses only the intended six ops
+  - sample run completes in 12 trace events
+- [x] Student dataset generation implemented
+  - `invoice/export_dataset.mjs`
+- [x] Student training path implemented
+  - `invoice/train_transformer.py`
+- [x] Student training smoke test verified
+  - reduced-op smoke run on CPU reached `0.9862` eval accuracy
+  - dataset size in the smoke run: `128` invoices -> `1455` next-op samples
+- [x] Browser student runtime wiring implemented
+  - `invoice/model.mjs` and hybrid logic in `invoice/worker.mjs`
+- [ ] Browser student model bundle shipped in repo
+- [ ] End-to-end browser student inference verified with shipped weights
+- [ ] Student predicts full argument-level trace, not just next op
+- [ ] Student executes the task without teacher fallback or verifier support
+
+### Sudoku PSVM
+
+- [x] Minimal model-facing op set defined
+  - `FOCUS_NEXT`, `READ_CANDS`, `PLACE`, `UNDO`, `FAIL`, `HALT`
+- [x] Deterministic teacher runtime implemented
+  - `soduku/psvm4x4.mjs`
+- [x] Canonical trace generation implemented
+- [x] Browser Web Worker execution implemented
+  - `soduku/worker.mjs`
+- [x] Browser UI streams the trace
+  - `soduku/index.html`, `soduku/app.mjs`
+- [x] Reduced-op sample trace verified
+  - default 4x4 sample solves successfully
+  - sample trace length is 28 events
+  - the default puzzle exercised `FOCUS_NEXT`, `READ_CANDS`, `PLACE`, and `HALT`
+- [x] Runtime supports `UNDO` and `FAIL` when search branches require them
+- [ ] Student dataset generation implemented
+- [ ] Student training path implemented
+- [ ] Student training smoke test verified
+- [ ] Browser student runtime wiring implemented
+- [ ] Browser student model bundle shipped in repo
+- [ ] End-to-end browser student inference verified with shipped weights
+
+### Cross-cutting interpretation
+
+What is already proven:
+
+- the task-shaped VM idea can be implemented with a genuinely smaller
+  model-facing vocabulary
+- the reduced vocabulary still preserves exact task semantics under a
+  deterministic teacher runtime
+- the full browser-side teacher path works for both a puzzle domain and a small
+  business-calculation domain
+- at least one domain, invoice, already has a real student path for next-op
+  learning
+
+What is not yet proven:
+
+- that the student can replace the teacher in-browser end to end
+- that the student can emit full traces with arguments, not just op labels
+- that the same training path scales from invoice to Sudoku cleanly
+- that the minimum stack remains sufficient for harder 9x9 Sudoku instances
+
 ## Research question
 
 At a fixed local model budget, is a transformer more reliable when trained to

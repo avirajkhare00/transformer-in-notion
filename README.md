@@ -282,3 +282,10 @@ If you want the paper-shaped framing for the more specific direction of
 - `soduku/README.md`
 - `soduku/`
 - `invoice/`
+
+The paper note now also includes a concrete **minimum VM stack** checklist that
+separates:
+
+- what is already verified in this repo
+- what is only partially wired
+- what remains unimplemented

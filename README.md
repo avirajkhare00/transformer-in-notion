@@ -109,6 +109,7 @@ Then open `http://localhost:8000`.
 - `invoice/psvm.mjs` - invoice-calculator PSVM and canonical trace generator
 - `invoice/export_dataset.mjs` - synthetic dataset generator for invoice next-op supervision
 - `invoice/train_transformer.py` - tiny invoice next-op transformer trainer/exporter
+- `invoice/models/invoice-op-bert/` - shipped ONNX bundle for the invoice next-op student
 - `invoice/README.md` - invoice-calculator PSVM note and op-set summary
 - `docs/executor-v1-spec.md` - v1 transformer-executor spec and training target
 - `docs/paper-idea-problem-shaped-vms.md` - paper note for custom task-shaped VMs in browser-local transformers
@@ -184,6 +185,7 @@ The invoice directory now also contains the first student-model path:
 
 - `invoice/export_dataset.mjs` generates synthetic `(context -> next op)` samples
 - `invoice/train_transformer.py` trains a tiny next-op classifier on that dataset
+- `invoice/models/invoice-op-bert/` contains the exported local model bundle
 
 ## Verified
 

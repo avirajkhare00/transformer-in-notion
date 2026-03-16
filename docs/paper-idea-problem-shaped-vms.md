@@ -282,7 +282,9 @@ what remains open.
   - dataset size in the smoke run: `128` invoices -> `1455` next-op samples
 - [x] Browser student runtime wiring implemented
   - `invoice/model.mjs` and hybrid logic in `invoice/worker.mjs`
-- [ ] Browser student model bundle shipped in repo
+- [x] Browser student model bundle shipped in repo
+  - `invoice/models/invoice-op-bert/`
+  - exported metadata: `5985` samples, `5387` train, `598` eval, `1.0000` eval accuracy
 - [ ] End-to-end browser student inference verified with shipped weights
 - [ ] Student predicts full argument-level trace, not just next op
 - [ ] Student executes the task without teacher fallback or verifier support
@@ -321,7 +323,7 @@ What is already proven:
 - the full browser-side teacher path works for both a puzzle domain and a small
   business-calculation domain
 - at least one domain, invoice, already has a real student path for next-op
-  learning
+  learning and a shipped local model bundle
 
 What is not yet proven:
 

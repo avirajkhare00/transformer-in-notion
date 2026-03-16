@@ -14,6 +14,7 @@ The implementation lives in:
 - `psvm.mjs` - invoice-calculator PSVM and canonical trace generator
 - `export_dataset.mjs` - synthetic dataset generator for next-op supervision
 - `train_transformer.py` - tiny invoice next-op transformer trainer/exporter
+- `models/invoice-op-bert/` - shipped local ONNX bundle for invoice next-op prediction
 
 ## Why this example matters
 
@@ -58,6 +59,15 @@ The browser worker is wired for a hybrid mode:
 - if a local invoice model bundle exists, the worker shows student next-op
   predictions alongside the exact teacher trace
 - if no local bundle exists, it falls back to the exact teacher only
+
+## Current verification
+
+- shipped local model bundle: `invoice/models/invoice-op-bert/`
+- exported training metadata:
+  - samples: `5985`
+  - train split: `5387`
+  - eval split: `598`
+  - eval accuracy: `1.0000`
 
 ## Local training flow
 

@@ -127,6 +127,74 @@ This formulation has four practical benefits:
 Full VMs are attractive because they are universal. They are poor first targets
 for local execution because they introduce irrelevant complexity.
 
+## What is inspiring, and what should be narrowed
+
+Two ideas are especially inspiring in the broader executor direction:
+
+1. **compiling program logic into model weights**
+2. **making long execution traces feasible with logarithmic-style attention
+   retrieval rather than linear scans**
+
+Those are real architectural unlocks.
+
+But they do not imply that the best first deployment target for a local browser
+system is:
+
+`arbitrary C -> full compiler pipeline -> general machine semantics -> weights`
+
+For small exact web tasks, that path is usually too broad.
+
+### Why `C -> weights` is inefficient for this setting
+
+Compiling arbitrary C or a full general bytecode surface into weights is
+powerful, but it is an inefficient first target when the task family is narrow.
+
+It forces the system to carry:
+
+- irrelevant machine semantics
+- larger vocabularies
+- longer traces
+- more decoding ambiguity
+- more supervision burden
+
+If the real target is Sudoku, invoice checking, rule validation, or small board
+games, most of that surface is wasted.
+
+The local model should spend its capacity on:
+
+- branch selection
+- candidate ordering
+- task-specific state transitions
+- exact reversible actions
+
+not on generic machine behavior the application never uses.
+
+### Why custom ops and custom VMs are more efficient
+
+The efficient compiler target for this repository is not a full machine.
+It is a **problem-shaped virtual machine** with a custom op surface.
+
+That gives a much tighter path:
+
+`task -> custom ops -> PSVM -> canonical trace -> local transformer`
+
+instead of:
+
+`task -> general program -> full VM semantics -> larger trace -> local transformer`
+
+This is the main thesis:
+
+- general compiler-to-weights is inspiring
+- logarithmic executor-style attention is inspiring
+- but the practical browser path is to **shrink the machine to the problem**
+
+That is why this repo keeps returning to:
+
+- smallest sound ISA
+- exact deterministic runtime
+- custom ops derived from the task
+- model capacity spent on ambiguity, not on general machine simulation
+
 ### Full WASM is too broad for the first model
 
 - large instruction surface

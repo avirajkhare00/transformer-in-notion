@@ -2,6 +2,30 @@
 
 This repo is a small embeddable demo site for Notion pages.
 
+## Design principle
+
+The important design choice in this repo is:
+
+`task -> custom ops -> problem-shaped VM -> exact trace -> local model`
+
+not:
+
+`task -> arbitrary C/WASM -> full machine semantics -> model`
+
+The broader compiler-to-weights direction is inspiring, and fast executor-style
+attention over long traces is inspiring. But for browser-local exact tasks, a
+full general machine is usually too broad and inefficient.
+
+For small rule-heavy tasks, the practical path is:
+
+- trim the instruction set to the task
+- keep the runtime exact and deterministic
+- let the model spend capacity on ambiguity and branch choice
+- keep traces short enough for local inference budgets
+
+That is the reason this repo focuses on **problem-shaped VMs** instead of
+general-purpose bytecode execution first.
+
 The current version deliberately keeps the stack simple, but it now uses an
 explicit prompt -> program -> trace surface:
 

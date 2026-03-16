@@ -1,6 +1,7 @@
 @import url("https://fonts.googleapis.com/css2?family=Fraunces:wght@600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap");
 
 :root {
+  color-scheme: light;
   --bg-top: #fff4df;
   --bg-bottom: #f5fbff;
   --paper: rgba(255, 252, 247, 0.86);
@@ -62,6 +63,15 @@ body::after {
   width: 220px;
   height: 220px;
   background: rgba(255, 140, 105, 0.2);
+}
+
+body.notion-embed-page {
+  background: transparent;
+}
+
+body.notion-embed-page::before,
+body.notion-embed-page::after {
+  display: none;
 }
 
 .page-shell {
@@ -631,6 +641,45 @@ body::after {
 
 .single-demo-shell .board-column {
   order: 2;
+}
+
+body.notion-embed-page .page-shell {
+  width: min(1100px, calc(100vw - 8px));
+  padding: 8px 0 10px;
+}
+
+body.notion-embed-page .single-demo-grid {
+  margin-top: 0;
+}
+
+body.notion-embed-page .panel {
+  background: transparent;
+  border: 0;
+  box-shadow: none;
+  backdrop-filter: none;
+  padding: 0;
+  overflow: visible;
+}
+
+body.notion-embed-page .panel::before,
+body.notion-embed-page .hero,
+body.notion-embed-page .panel-head {
+  display: none;
+}
+
+body.notion-embed-page .playground {
+  margin-top: 0;
+  gap: 14px;
+}
+
+body.notion-embed-page .single-demo-shell .playground {
+  grid-template-columns: minmax(320px, 0.95fr) minmax(0, 1.05fr);
+}
+
+body.notion-embed-page .status-card,
+body.notion-embed-page .mini-card {
+  background: rgba(255, 255, 255, 0.9);
+  box-shadow: none;
 }
 
 .hero-compact {

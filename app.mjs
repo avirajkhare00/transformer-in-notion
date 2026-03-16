@@ -297,6 +297,48 @@ function formatSudokuDuration(ms) {
   return `${(ms / 1000).toFixed(2)} s`;
 }
 
+function formatSudokuSpeedComparison(wasmMs, baselineMs) {
+  if (
+    !Number.isFinite(wasmMs) ||
+    wasmMs <= 0 ||
+    !Number.isFinite(baselineMs) ||
+    baselineMs <= 0
+  ) {
+    return "pending";
+  }
+
+  const ratio = baselineMs / wasmMs;
+  if (ratio >= 1) {
+    return `${ratio.toFixed(ratio >= 10 ? 0 : 1)}x faster`;
+  }
+
+  const slower = wasmMs / baselineMs;
+  return `${slower.toFixed(slower >= 10 ? 0 : 1)}x slower`;
+}
+
+function formatSudokuReplayValue() {
+  if (!sudokuState.result) {
+    return "—";
+  }
+
+  const total = sudokuState.result.trace.length;
+  const current = Math.min(sudokuState.stepIndex, total);
+
+  if (sudokuState.isAnimating) {
+    return `${current} / ${total}`;
+  }
+
+  if (current === 0) {
+    return `ready · 0 / ${total}`;
+  }
+
+  if (current >= total) {
+    return `complete · ${total} / ${total}`;
+  }
+
+  return `${current} / ${total}`;
+}
+
 function getCurrentSudokuSolveMs() {
   if (sudokuState.isLoading && sudokuState.solveStartedAt) {
     return performance.now() - sudokuState.solveStartedAt;
@@ -829,7 +871,7 @@ function getSudokuStatus() {
       : `${preset}. Loading browser-side WASM executor.`;
   }
   if (sudokuState.isAnimating) {
-    return `WASM trace ${sudokuState.stepIndex + 1} / ${sudokuState.result.trace.length}`;
+    return `Replaying WASM trace ${Math.min(sudokuState.stepIndex, sudokuState.result.trace.length)} / ${sudokuState.result.trace.length}.`;
   }
 
   if (sudokuState.result && sudokuState.stepIndex >= sudokuState.result.trace.length) {
@@ -855,7 +897,7 @@ function renderSudokuStats() {
         : formatSudokuDuration(sudokuState.solveElapsedMs),
     },
     {
-      label: "MRV JS",
+      label: "Best deterministic",
       value: sudokuState.baselinePending
         ? "measuring…"
         : sudokuState.baselineTiming
@@ -863,6 +905,15 @@ function renderSudokuStats() {
           : sudokuState.baselineError
             ? "failed"
             : "pending",
+    },
+    {
+      label: "vs MRV JS",
+      value: sudokuState.baselinePending
+        ? "measuring…"
+        : formatSudokuSpeedComparison(
+            sudokuState.solveElapsedMs,
+            sudokuState.baselineTiming?.elapsedMs ?? NaN
+          ),
     },
   ];
 
@@ -890,8 +941,8 @@ function renderSudokuStats() {
         value: sudokuState.result.trace.length,
       },
       {
-        label: "Progress",
-        value: `${Math.min(sudokuState.stepIndex, sudokuState.result.trace.length)} / ${sudokuState.result.trace.length}`,
+        label: "Replay",
+        value: formatSudokuReplayValue(),
       }
     );
   }

@@ -1,0 +1,575 @@
+% Options for packages loaded elsewhere
+\PassOptionsToPackage{unicode}{hyperref}
+\PassOptionsToPackage{hyphens}{url}
+\documentclass[
+  11pt,
+]{article}
+\usepackage{xcolor}
+\usepackage[margin=1in]{geometry}
+\usepackage{amsmath,amssymb}
+\setcounter{secnumdepth}{5}
+\usepackage{iftex}
+\ifPDFTeX
+  \usepackage[T1]{fontenc}
+  \usepackage[utf8]{inputenc}
+  \usepackage{textcomp} % provide euro and other symbols
+\else % if luatex or xetex
+  \usepackage{unicode-math} % this also loads fontspec
+  \defaultfontfeatures{Scale=MatchLowercase}
+  \defaultfontfeatures[\rmfamily]{Ligatures=TeX,Scale=1}
+\fi
+\usepackage{lmodern}
+\ifPDFTeX\else
+  % xetex/luatex font selection
+\fi
+% Use upquote if available, for straight quotes in verbatim environments
+\IfFileExists{upquote.sty}{\usepackage{upquote}}{}
+\IfFileExists{microtype.sty}{% use microtype if available
+  \usepackage[]{microtype}
+  \UseMicrotypeSet[protrusion]{basicmath} % disable protrusion for tt fonts
+}{}
+\makeatletter
+\@ifundefined{KOMAClassName}{% if non-KOMA class
+  \IfFileExists{parskip.sty}{%
+    \usepackage{parskip}
+  }{% else
+    \setlength{\parindent}{0pt}
+    \setlength{\parskip}{6pt plus 2pt minus 1pt}}
+}{% if KOMA class
+  \KOMAoptions{parskip=half}}
+\makeatother
+\setlength{\emergencystretch}{3em} % prevent overfull lines
+\providecommand{\tightlist}{%
+  \setlength{\itemsep}{0pt}\setlength{\parskip}{0pt}}
+\usepackage{bookmark}
+\IfFileExists{xurl.sty}{\usepackage{xurl}}{} % add URL line breaks if available
+\urlstyle{same}
+\hypersetup{
+  pdftitle={Problem-Shaped Virtual Machines for Exact Local Transformer Execution},
+  hidelinks,
+  pdfcreator={LaTeX via pandoc}}
+
+\title{Problem-Shaped Virtual Machines for Exact Local Transformer
+Execution}
+\author{}
+\date{}
+
+\begin{document}
+\maketitle
+
+\section{Problem-Shaped Virtual Machines for Exact Local Transformer
+Execution}\label{problem-shaped-virtual-machines-for-exact-local-transformer-execution}
+
+\subsection{Abstract}\label{abstract}
+
+Small local transformers are poorly matched to exact tasks when the only
+choices are one-shot answer prediction or full general-purpose machine
+emulation. One-shot prediction hides the intermediate state transitions
+that exact computation depends on. Full-machine execution preserves far
+more semantics than most narrow tasks actually need: memory plumbing,
+broad instruction surfaces, and control flow that is irrelevant to the
+application. This note argues for an intermediate target:
+\textbf{problem-shaped virtual machines (PSVMs)}. A PSVM is the smallest
+executable substrate whose legal actions match the real state
+transitions of a task family. The exact runtime remains the source of
+truth: it defines legality, emits canonical traces, verifies proposed
+actions, and owns rollback or failure handling. The model learns only
+the ambiguous frontier of execution. This repository already contains
+several pieces of that stack, including exact browser-local Sudoku
+runtimes, worker-driven trace streaming, structured model training
+paths, and a small invoice-calculation PSVM. The strongest current claim
+is not that the model can replace the runtime, but that the smallest
+sound VM for a task is a better local training target than either direct
+answer prediction or full machine emulation.
+
+\subsection{One-Sentence Thesis}\label{one-sentence-thesis}
+
+For narrow exact tasks, the right target for a local transformer is
+usually not the final answer and not a full machine trace, but the
+smallest executable VM whose legal actions already match the
+task\textquotesingle s true state transitions.
+
+\subsection{1. Motivation}\label{1-motivation}
+
+Exact tasks are common in browser software: puzzle solving, rule
+checking, pricing, validation, scheduling, and other deterministic
+workflows. These tasks have two properties that matter here.
+
+First, they have a real notion of correctness. A step is legal or
+illegal. A branch is valid or contradictory. The final output either
+satisfies the rules or it does not.
+
+Second, they often have a much smaller semantic surface than a
+general-purpose machine. A Sudoku solver does not need arbitrary pointer
+arithmetic. A small invoice calculator does not need an instruction set
+designed for broad compiled programs.
+
+The usual formulations miss that structure.
+
+\subsubsection{One-shot prediction is too
+coarse}\label{one-shot-prediction-is-too-coarse}
+
+If the model is asked to map directly from task instance to final
+answer, all of the exact intermediate transitions are hidden. That makes
+supervision weak and error analysis vague. It also makes rollback,
+legality checks, and browser trace visualization much harder.
+
+\subsubsection{Full-machine execution is too
+broad}\label{full-machine-execution-is-too-broad}
+
+If the model is asked to emulate a full VM, compiler IR, or broad
+bytecode surface, it must learn large amounts of machine behavior that
+the domain never needs explicitly. Traces become longer, token entropy
+rises, and more of the model budget goes into machine scaffolding
+instead of task semantics.
+
+The practical question is therefore not:
+
+\texttt{can\ a\ transformer\ execute\ a\ machine?}
+
+The practical question is:
+
+\texttt{what\ is\ the\ smallest\ executable\ machine\ that\ still\ preserves\ this\ task\textquotesingle{}s\ truth\ conditions?}
+
+That machine is what this note calls a \textbf{problem-shaped virtual
+machine}.
+
+\subsection{2. What a Problem-Shaped VM
+Is}\label{2-what-a-problem-shaped-vm-is}
+
+A PSVM is a virtual machine whose instruction set is derived from a task
+family instead of from general-purpose computing. The VM is not chosen
+for universality first. It is chosen for semantic fit.
+
+For this repository, the useful design rule is:
+
+\texttt{trim\ the\ machine\ to\ the\ problem}
+
+That means:
+
+\begin{itemize}
+\tightlist
+\item
+  keep only the operations that carry domain meaning
+\item
+  leave exact legality in deterministic code
+\item
+  make failure and rollback explicit when search is real
+\item
+  generate canonical traces under fixed ordering and tie-breaking
+\item
+  train the model on those traces rather than only on final answers
+\end{itemize}
+
+The model-facing surface should be as small as possible, but not smaller
+than the task\textquotesingle s true state transitions.
+
+\subsection{3. Why This Fits Transformer
+Execution}\label{3-why-this-fits-transformer-execution}
+
+This note is motivated by a systems intuition rather than a formal
+theorem: autoregressive models look more like append-only execution
+machines than mutable RAM machines.
+
+A conventional interpreter evolves state roughly as:
+
+\texttt{state\ +\ instruction\ -\textgreater{}\ new\ state}
+
+A transformer executor behaves more like:
+
+\texttt{trace\_t\ -\textgreater{}\ trace\_t+1}
+
+It does not mutate old records. It appends the next one. Earlier tokens
+remain fixed, and the next token must recover the relevant current state
+by reading the right parts of the prior trace.
+
+That gives a useful mental model:
+
+\begin{itemize}
+\tightlist
+\item
+  tokens are state-bearing records
+\item
+  attention is state retrieval
+\item
+  the trace is serialized execution history
+\end{itemize}
+
+This is only a productive framing, not a proof. But it has a concrete
+design consequence: the instruction set matters enormously. If the trace
+is the state surface the model reads from, then irrelevant machine
+detail is not harmless boilerplate. It is extra entropy, extra context
+length, and extra decoding risk.
+
+That is why a PSVM can be a better fit than either one-shot prediction
+or full machine traces.
+
+\subsection{4. System Pattern}\label{4-system-pattern}
+
+The intended execution loop is:
+
+\texttt{task\ instance\ -\textgreater{}\ PSVM\ state/program\ -\textgreater{}\ canonical\ trace\ -\textgreater{}\ model\ predicts\ next\ token\ -\textgreater{}\ exact\ runtime\ applies/verifies\ -\textgreater{}\ new\ state}
+
+The exact runtime remains authoritative throughout. The model proposes;
+the runtime decides.
+
+In the strongest form of the idea:
+
+\begin{enumerate}
+\def\labelenumi{\arabic{enumi}.}
+\tightlist
+\item
+  an exact teacher runtime defines legal steps
+\item
+  the teacher emits canonical traces
+\item
+  a local model learns to predict the next trace token
+\item
+  the runtime verifies or rejects student proposals
+\item
+  the UI streams the trace and state changes in real time
+\end{enumerate}
+
+This is not "weights instead of code." It is a hybrid design in which
+the runtime owns truth and the model handles ambiguity, ranking, or
+next-step prediction within a narrow legal action surface.
+
+\subsection{5. PSVM Design Rules}\label{5-psvm-design-rules}
+
+The repository suggests six concrete rules for shaping a PSVM.
+
+\subsubsection{5.1 Keep the instruction set semantically
+small}\label{51-keep-the-instruction-set-semantically-small}
+
+The op surface should expose only domain-meaningful transitions. If two
+dozen machine instructions always collapse into one task-level
+operation, the task level operation is probably the right teaching
+surface.
+
+\subsubsection{5.2 Keep legality in exact
+code}\label{52-keep-legality-in-exact-code}
+
+A PSVM works best when the runtime still decides whether an action is
+legal. The model should not also be burdened with reproducing the full
+verifier.
+
+\subsubsection{5.3 Canonicalize everything that can
+drift}\label{53-canonicalize-everything-that-can-drift}
+
+If multiple traces are equivalent, supervision gets noisy fast.
+Tie-breaking, branch ordering, candidate ordering, and emission format
+should be fixed by the teacher.
+
+\subsubsection{5.4 Separate rules from
+ambiguity}\label{54-separate-rules-from-ambiguity}
+
+The model should spend its capacity on real uncertainty: branch
+selection, ordering, prioritization, or token prediction. Hard
+constraints should remain in code.
+
+\subsubsection{5.5 Make search explicit when search is
+real}\label{55-make-search-explicit-when-search-is-real}
+
+If the task genuinely backtracks, the VM should make that visible with
+explicit undo, fail, or rollback operations. Hiding search behind one
+opaque "solve" action gives up the point of the formulation.
+
+\subsubsection{5.6 Design for browser
+visibility}\label{56-design-for-browser-visibility}
+
+If the target environment is a browser, the trace should stay
+interpretable enough to render live. That forces discipline around
+vocabulary size, trace length, and the semantics of each action.
+
+\subsection{6. What This Repository Already
+Demonstrates}\label{6-what-this-repository-already-demonstrates}
+
+This repository is strongest as a systems note because it already
+contains multiple concrete pieces of the PSVM stack.
+
+\subsubsection{6.1 Sudoku}\label{61-sudoku}
+
+The current Sudoku path is broader than the original 4x4 PSVM demo. It
+includes an exact runtime in \texttt{logic/sudoku.mjs}, a browser-facing
+WASM execution path in \texttt{logic/sudoku-wasm.mjs}, and a Rust solver
+in \texttt{wasm/sudoku-executor/src/lib.rs}. The public browser
+experience is wired through \texttt{sudoku.html} and \texttt{app.mjs}.
+
+On the model side, the repository also contains structured training and
+export code under \texttt{soduku/}, especially:
+
+\begin{itemize}
+\tightlist
+\item
+  \texttt{soduku/structured\_transformer\_common.py}
+\item
+  \texttt{soduku/train\_transformer.py}
+\item
+  \texttt{soduku/train\_value\_transformer.py}
+\item
+  \texttt{soduku/model-worker.mjs}
+\item
+  \texttt{soduku/model.mjs}
+\item
+  \texttt{soduku/value-model.mjs}
+\end{itemize}
+
+The key point is that the model-guided Sudoku path is not framed as a
+pure model-only solver. It is framed as \textbf{model-guided exact
+search}: the runtime still owns candidate generation, legality,
+contradictions, and backtracking, while the model ranks or scores
+ambiguous decisions.
+
+That is exactly the pattern this note argues for.
+
+\subsubsection{6.2 Invoice calculation}\label{62-invoice-calculation}
+
+The \texttt{invoice/} directory is the clearest state-transition PSVM in
+the repo:
+
+\begin{itemize}
+\tightlist
+\item
+  \texttt{invoice/psvm.mjs}
+\item
+  \texttt{invoice/worker.mjs}
+\item
+  \texttt{invoice/model.mjs}
+\item
+  \texttt{invoice/export\_dataset.mjs}
+\item
+  \texttt{invoice/train\_transformer.py}
+\end{itemize}
+
+This matters because it shows the idea is not puzzle-specific. The
+instruction surface is shaped around a tiny business-calculation
+workflow rather than around search over a board. That strengthens the
+paper\textquotesingle s claim that PSVMs are about matching machine
+shape to domain semantics, not about Sudoku specifically.
+
+\subsubsection{6.3 Exact browser-local
+demos}\label{63-exact-browser-local-demos}
+
+The broader repo also includes exact browser-local task demos such as
+the Weiqi prototype in \texttt{weiqi/}. Even when those demos do not yet
+have a full student training path, they support the same systems
+intuition: narrow exact tasks are best expressed as narrow exact
+runtimes first.
+
+\subsection{7. What Is Supported Today, and What Is
+Not}\label{7-what-is-supported-today-and-what-is-not}
+
+This distinction matters if the note is going to be shared outside the
+repo.
+
+\subsubsection{Supported now}\label{supported-now}
+
+The codebase already supports these claims:
+
+\begin{itemize}
+\tightlist
+\item
+  browser-local exact runtimes for narrow tasks are practical
+\item
+  canonical task-shaped traces can be emitted and streamed in the UI
+\item
+  local model workers can be integrated into that execution loop
+\item
+  a narrow task-specific instruction surface is implementable across
+  more than one domain
+\item
+  hybrid execution, where the model helps but the runtime remains
+  authoritative, is a real engineering pattern rather than only an idea
+\end{itemize}
+
+\subsubsection{Not supported yet}\label{not-supported-yet}
+
+The codebase does \textbf{not} yet justify the stronger claims below:
+
+\begin{itemize}
+\tightlist
+\item
+  that PSVMs already outperform strong baselines quantitatively
+\item
+  that a student model can replace the teacher runtime end to end
+\item
+  that the approach scales cleanly from narrow demos to broad arbitrary
+  program execution
+\item
+  that "compile arbitrary C into weights" is the immediate right target
+  for this stack
+\end{itemize}
+
+This is important because the project becomes much more credible when it
+says precisely what is and is not already proven.
+
+\subsection{8. The Paper\textquotesingle s Sharpest
+Claim}\label{8-the-papers-sharpest-claim}
+
+The most defensible version of the idea is not:
+
+\begin{itemize}
+\tightlist
+\item
+  "transformers can already execute arbitrary code exactly"
+\item
+  "local models can replace exact runtimes"
+\item
+  "full VM traces are the right universal target"
+\end{itemize}
+
+The sharp claim is:
+
+\textbf{For narrow exact tasks, there is a better intermediate
+representation than both direct answer prediction and full-machine
+emulation: a problem-shaped VM whose instruction surface already matches
+the task\textquotesingle s true legal transitions.}
+
+That claim is strong enough to be interesting and narrow enough to
+defend.
+
+\subsection{9. Experiments That Would Turn This Note into a
+Paper}\label{9-experiments-that-would-turn-this-note-into-a-paper}
+
+To move from a strong systems note to a publishable empirical paper, the
+repo needs controlled comparisons.
+
+\subsubsection{9.1 Formulations to
+compare}\label{91-formulations-to-compare}
+
+For a domain such as Sudoku, compare:
+
+\begin{enumerate}
+\def\labelenumi{\arabic{enumi}.}
+\tightlist
+\item
+  \texttt{state\ -\textgreater{}\ final\ answer}
+\item
+  \texttt{state\ -\textgreater{}\ next\ domain\ action}
+\item
+  \texttt{state\ -\textgreater{}\ next\ PSVM\ trace\ token}
+\item
+  \texttt{state\ -\textgreater{}\ next\ token\ of\ a\ broader\ generic\ VM}
+\end{enumerate}
+
+The same structure can be repeated for invoice-style deterministic
+tasks.
+
+\subsubsection{9.2 Metrics}\label{92-metrics}
+
+The evaluation should emphasize exactness, not only loss:
+
+\begin{itemize}
+\tightlist
+\item
+  exact final solve rate
+\item
+  exact step accuracy
+\item
+  illegal action rate
+\item
+  contradiction or verifier-failure rate
+\item
+  average trace length
+\item
+  browser latency
+\item
+  model size versus exactness tradeoff
+\end{itemize}
+
+\subsubsection{9.3 Ablations}\label{93-ablations}
+
+The most informative ablations are likely:
+
+\begin{itemize}
+\tightlist
+\item
+  instruction-set size
+\item
+  trace canonicalization rules
+\item
+  with versus without exact runtime verification
+\item
+  op-only versus op-plus-argument prediction
+\item
+  browser-local inference cost at fixed quality
+\end{itemize}
+
+If those comparisons are strong, the paper moves from an interesting
+thesis to a measured result.
+
+\subsection{10. Why This Could Matter}\label{10-why-this-could-matter}
+
+There is a real gap between two current habits:
+
+\begin{itemize}
+\tightlist
+\item
+  asking models for final answers and hoping they are right
+\item
+  routing all exact work to external tools or full symbolic engines
+\end{itemize}
+
+PSVMs propose a middle layer. They keep symbolic truth in code while
+giving the model a narrow, learnable execution surface. That is
+especially relevant when the deployment target is the browser, where
+latency, memory, and inspectability matter more than broad generality.
+
+The argument is not that every exact task should become a PSVM. The
+argument is that many narrow exact tasks already have a small semantic
+core, and the model should be trained on that core rather than on
+irrelevant machine detail.
+
+\subsection{11. Honest Positioning If Shared
+Now}\label{11-honest-positioning-if-shared-now}
+
+This note is worth sharing \textbf{now} if it is framed correctly.
+
+The right frame is:
+
+\begin{itemize}
+\tightlist
+\item
+  a research note
+\item
+  a systems essay
+\item
+  a workshop or position-paper candidate
+\item
+  a repository-backed design argument with concrete prototypes
+\end{itemize}
+
+The wrong frame is:
+
+\begin{itemize}
+\tightlist
+\item
+  a finished empirical paper
+\item
+  a claim that arbitrary-code execution has been solved
+\item
+  a claim that the model already replaces the exact runtime
+\end{itemize}
+
+In other words, the idea is shareable today because the conceptual
+stance is clear and the repository already contains meaningful evidence.
+But the strongest publication target right now is something like a
+workshop note, demo paper, or position paper. A full paper needs the
+baseline study and quantitative evaluation described above.
+
+\subsection{Conclusion}\label{conclusion}
+
+The repo\textquotesingle s most interesting idea is not "put a
+transformer in the browser." It is this:
+
+\texttt{trim\ the\ machine\ to\ the\ problem}
+
+If the task is exact and narrow, the model should not be asked either to
+guess the final answer in one shot or to emulate a full machine whose
+semantics dwarf the problem. It should be asked to operate inside the
+smallest executable substrate that still preserves the
+task\textquotesingle s truth conditions.
+
+That is the case for problem-shaped virtual machines.
+
+\end{document}

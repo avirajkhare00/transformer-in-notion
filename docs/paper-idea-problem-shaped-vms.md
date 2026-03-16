@@ -1,748 +1,372 @@
-# Paper Idea: Problem-Shaped Virtual Machines for Local Transformer Executors
-
-## Working title
-
-**Problem-Shaped Virtual Machines: Exact Local Transformer Execution for Sudoku and Small Web Apps**
-
-## One-line claim
-
-Instead of asking a transformer to jump directly from input to answer, and
-instead of asking it to emulate a full general-purpose machine, train it to
-execute the trace of a **problem-shaped virtual machine (PSVM)** whose
-instruction set is trimmed to exactly the operations one task family needs.
-
-The hypothesis is that this narrower execution surface makes exact local
-computation feasible in the browser for problems like Sudoku and other small
-rule-based applications.
-
-## Why problem-shaped VMs are needed
-
-Problem-shaped VMs are needed because the two default formulations for exact
-tasks both land at the wrong abstraction layer.
-
-One-shot prediction asks the model to jump from input to answer while hiding the
-intermediate state transitions that exact computation depends on.
-
-Full-machine execution asks the model to reproduce a great deal of machine
-behavior that is irrelevant to the task family at hand: generic memory
-mechanics, broad instruction surfaces, operand encoding overhead, and control
-flow that the domain never needs explicitly.
-
-For small browser-local systems, both choices are wasteful.
-
-What is needed instead is a substrate that is:
-
-- expressive enough to represent the task's real transitions
-- narrow enough to keep traces short and supervision clean
-- exact enough to admit deterministic verification
-- small enough to run inside browser latency and memory budgets
-
-That substrate is a **problem-shaped VM**.
-
-## Code as source of truth
-
-The project treats code and runtime behavior as authoritative.
-
-The runtime defines:
-
-- what a legal step is
-- when a branch has failed
-- when rollback is required
-- what the correct output means
-
-The model is trained against the trace emitted by that runtime. So the learned
-layer lives on top of exact code instead of replacing it.
-
-The operative pattern is:
-
-`state -> model -> next VM token -> exact runtime -> new state`
-
-not:
-
-`state -> model -> unverifiable answer`
-
-In short:
-
-`not one-shot answer`
-
-`not full machine simulation`
-
-`but task-shaped execution`
+# Problem-Shaped Virtual Machines for Exact Local Transformer Execution
 
 ## Abstract
 
-Language models are often evaluated on exact tasks by asking for one-shot
-answers or by delegating computation to an external tool. Both formulations are
-poor fits for small local models. One-shot prediction hides the intermediate
-state transitions needed for exact computation, while tool use moves the
-computation outside the model. We propose an intermediate path: compile a task
-into a **problem-shaped virtual machine (PSVM)** with a small, task-specific
-instruction set, generate canonical execution traces with a deterministic
-interpreter, and train a local transformer to autoregressively emit the next
-trace token. We instantiate this idea for Sudoku and other small rule-based
-applications such as invoice calculators and rule checkers. The full stack is
-browser-local: the model runs in a Web Worker, the interpreter and verifier are
-compiled to WebAssembly or implemented as exact local runtimes, and the UI
-streams the execution trace in real time. We hypothesize that PSVMs offer a
-better tradeoff than both one-shot prediction and full-VM execution, reducing
-token entropy, shortening traces, and improving exact solve rates at fixed model
-size.
+Small local transformers are poorly matched to exact tasks when the only choices
+are one-shot answer prediction or full general-purpose machine emulation.
+One-shot prediction hides the intermediate state transitions that exact
+computation depends on. Full-machine execution preserves far more semantics than
+most narrow tasks actually need: memory plumbing, broad instruction surfaces,
+and control flow that is irrelevant to the application. This note argues for an
+intermediate target: **problem-shaped virtual machines (PSVMs)**. A PSVM is the
+smallest executable substrate whose legal actions match the real state
+transitions of a task family. The exact runtime remains the source of truth: it
+defines legality, emits canonical traces, verifies proposed actions, and owns
+rollback or failure handling. The model learns only the ambiguous frontier of
+execution. This repository already contains several pieces of that stack,
+including exact browser-local Sudoku runtimes, worker-driven trace streaming,
+structured model training paths, and a small invoice-calculation PSVM. The
+strongest current claim is not that the model can replace the runtime, but that
+the smallest sound VM for a task is a better local training target than either
+direct answer prediction or full machine emulation.
 
-## Systems intuition
+## One-Sentence Thesis
 
-The motivating systems picture is simple:
+For narrow exact tasks, the right target for a local transformer is usually not
+the final answer and not a full machine trace, but the smallest executable VM
+whose legal actions already match the task's true state transitions.
 
-**transformers are better viewed as append-only execution machines than as
-mutable RAM machines.**
+## 1. Motivation
 
-A conventional computer works like:
+Exact tasks are common in browser software: puzzle solving, rule checking,
+pricing, validation, scheduling, and other deterministic workflows. These tasks
+have two properties that matter here.
 
-`state + instruction -> mutated state`
+First, they have a real notion of correctness. A step is legal or illegal. A
+branch is valid or contradictory. The final output either satisfies the rules or
+it does not.
 
-An autoregressive transformer works more like:
+Second, they often have a much smaller semantic surface than a general-purpose
+machine. A Sudoku solver does not need arbitrary pointer arithmetic. A small
+invoice calculator does not need an instruction set designed for broad compiled
+programs.
 
-`trace_t -> trace_t+1`
+The usual formulations miss that structure.
 
-It does not mutate old state records. It appends new ones. Earlier tokens remain
-fixed, and the next token reconstructs the current state by reading the right
-pieces of prior history.
+### One-shot prediction is too coarse
 
-That makes the useful mental model much closer to:
+If the model is asked to map directly from task instance to final answer, all
+of the exact intermediate transitions are hidden. That makes supervision weak
+and error analysis vague. It also makes rollback, legality checks, and browser
+trace visualization much harder.
 
-- append-only state evolution
-- functional-style state extension
-- dataflow-like dependency resolution over prior values
+### Full-machine execution is too broad
 
-than to direct in-place memory mutation.
+If the model is asked to emulate a full VM, compiler IR, or broad bytecode
+surface, it must learn large amounts of machine behavior that the domain never
+needs explicitly. Traces become longer, token entropy rises, and more of the
+model budget goes into machine scaffolding instead of task semantics.
 
-### Attention as state retrieval
+The practical question is therefore not:
 
-In this framing, attention plays the role of structured state lookup.
+`can a transformer execute a machine?`
 
-The next token does not read from a mutable register file. It retrieves the
-prior tokens that encode the relevant machine state. In ordinary language
-generation this retrieval is soft and approximate. In an executor setting, the
-goal is to make it behave like exact or near-exact address resolution over a
-canonical trace.
+The practical question is:
 
-That suggests a useful equivalence:
+`what is the smallest executable machine that still preserves this task's truth conditions?`
 
-- tokens are state-bearing records
-- attention is state retrieval
-- the generated trace is serialized execution history
+That machine is what this note calls a **problem-shaped virtual machine**.
 
-### Why this matters for VM design
+## 2. What a Problem-Shaped VM Is
 
-If the model reconstructs state from prior trace records, then the instruction
-set matters enormously. A full general-purpose VM forces the model to spend
-capacity on machine behavior that many tasks do not need. A problem-shaped VM
-keeps the trace vocabulary small and forces the model to learn only the
-task-relevant composition logic.
+A PSVM is a virtual machine whose instruction set is derived from a task family
+instead of from general-purpose computing. The VM is not chosen for universality
+first. It is chosen for semantic fit.
 
-## Core idea
+For this repository, the useful design rule is:
 
-The paper is built around one structural claim:
-
-**The right abstraction layer for local transformer execution is not "the full
-problem" and not "a full machine." It is a task-specific execution substrate.**
+`trim the machine to the problem`
 
 That means:
 
-- not `Sudoku board -> solved board`
-- not `natural language -> final answer`
-- not `full WebAssembly -> transformer`
+- keep only the operations that carry domain meaning
+- leave exact legality in deterministic code
+- make failure and rollback explicit when search is real
+- generate canonical traces under fixed ordering and tie-breaking
+- train the model on those traces rather than only on final answers
 
-Instead:
+The model-facing surface should be as small as possible, but not smaller than
+the task's true state transitions.
 
-- `task instance -> PSVM program`
-- `PSVM program -> canonical execution trace`
-- `transformer -> next trace token`
+## 3. Why This Fits Transformer Execution
 
-## Why this matters
+This note is motivated by a systems intuition rather than a formal theorem:
+autoregressive models look more like append-only execution machines than mutable
+RAM machines.
 
-This formulation has four practical benefits:
+A conventional interpreter evolves state roughly as:
 
-1. **Lower entropy**  
-   The model only needs to choose among a few legal task-specific operations.
+`state + instruction -> new state`
 
-2. **Shorter traces**  
-   A trimmed instruction set means fewer irrelevant machine steps.
+A transformer executor behaves more like:
 
-3. **Better local deployment**  
-   Smaller vocabularies and shorter traces are much better suited to browser
-   inference budgets.
+`trace_t -> trace_t+1`
 
-4. **Cleaner supervision**  
-   Canonical traces make it easier to train the model on exact state transitions
-   rather than weak final-answer targets.
+It does not mutate old records. It appends the next one. Earlier tokens remain
+fixed, and the next token must recover the relevant current state by reading the
+right parts of the prior trace.
 
-## Why not a full VM
+That gives a useful mental model:
 
-Full VMs are attractive because they are universal. They are poor first targets
-for local execution because they introduce irrelevant complexity.
+- tokens are state-bearing records
+- attention is state retrieval
+- the trace is serialized execution history
 
-## What is inspiring, and what should be narrowed
+This is only a productive framing, not a proof. But it has a concrete design
+consequence: the instruction set matters enormously. If the trace is the state
+surface the model reads from, then irrelevant machine detail is not harmless
+boilerplate. It is extra entropy, extra context length, and extra decoding risk.
 
-Two ideas are especially inspiring in the broader executor direction:
+That is why a PSVM can be a better fit than either one-shot prediction or full
+machine traces.
 
-1. **compiling program logic into model weights**
-2. **making long execution traces feasible with logarithmic-style attention
-   retrieval rather than linear scans**
+## 4. System Pattern
 
-Those are real architectural unlocks.
+The intended execution loop is:
 
-But they do not imply that the best first deployment target for a local browser
-system is:
+`task instance -> PSVM state/program -> canonical trace -> model predicts next token -> exact runtime applies/verifies -> new state`
 
-`arbitrary C -> full compiler pipeline -> general machine semantics -> weights`
+The exact runtime remains authoritative throughout. The model proposes; the
+runtime decides.
 
-For small exact web tasks, that path is usually too broad.
+In the strongest form of the idea:
 
-### Why `C -> weights` is inefficient for this setting
+1. an exact teacher runtime defines legal steps
+2. the teacher emits canonical traces
+3. a local model learns to predict the next trace token
+4. the runtime verifies or rejects student proposals
+5. the UI streams the trace and state changes in real time
 
-Compiling arbitrary C or a full general bytecode surface into weights is
-powerful, but it is an inefficient first target when the task family is narrow.
+This is not "weights instead of code." It is a hybrid design in which the
+runtime owns truth and the model handles ambiguity, ranking, or next-step
+prediction within a narrow legal action surface.
 
-It forces the system to carry:
+## 5. PSVM Design Rules
 
-- irrelevant machine semantics
-- larger vocabularies
-- longer traces
-- more decoding ambiguity
-- more supervision burden
+The repository suggests six concrete rules for shaping a PSVM.
 
-If the real target is Sudoku, invoice checking, rule validation, or small board
-games, most of that surface is wasted.
+### 5.1 Keep the instruction set semantically small
 
-The local model should spend its capacity on:
+The op surface should expose only domain-meaningful transitions. If two dozen
+machine instructions always collapse into one task-level operation, the task
+level operation is probably the right teaching surface.
 
-- branch selection
-- candidate ordering
-- task-specific state transitions
-- exact reversible actions
+### 5.2 Keep legality in exact code
 
-not on generic machine behavior the application never uses.
+A PSVM works best when the runtime still decides whether an action is legal. The
+model should not also be burdened with reproducing the full verifier.
 
-### Why custom ops and custom VMs are more efficient
+### 5.3 Canonicalize everything that can drift
 
-The efficient compiler target for this repository is not a full machine.
-It is a **problem-shaped virtual machine** with a custom op surface.
+If multiple traces are equivalent, supervision gets noisy fast. Tie-breaking,
+branch ordering, candidate ordering, and emission format should be fixed by the
+teacher.
 
-That gives a much tighter path:
+### 5.4 Separate rules from ambiguity
 
-`task -> custom ops -> PSVM -> canonical trace -> local transformer`
+The model should spend its capacity on real uncertainty: branch selection,
+ordering, prioritization, or token prediction. Hard constraints should remain in
+code.
 
-instead of:
+### 5.5 Make search explicit when search is real
 
-`task -> general program -> full VM semantics -> larger trace -> local transformer`
+If the task genuinely backtracks, the VM should make that visible with explicit
+undo, fail, or rollback operations. Hiding search behind one opaque "solve"
+action gives up the point of the formulation.
 
-This is the main thesis:
+### 5.6 Design for browser visibility
 
-- general compiler-to-weights is inspiring
-- logarithmic executor-style attention is inspiring
-- but the practical browser path is to **shrink the machine to the problem**
+If the target environment is a browser, the trace should stay interpretable
+enough to render live. That forces discipline around vocabulary size, trace
+length, and the semantics of each action.
 
-That is why this repo keeps returning to:
+## 6. What This Repository Already Demonstrates
 
-- smallest sound ISA
-- exact deterministic runtime
-- custom ops derived from the task
-- model capacity spent on ambiguity, not on general machine simulation
+This repository is strongest as a systems note because it already contains
+multiple concrete pieces of the PSVM stack.
 
-### Full WASM is too broad for the first model
+### 6.1 Sudoku
 
-- large instruction surface
-- stack and memory semantics that many tasks never need
-- much longer traces
-- harder constrained decoding
+The current Sudoku path is broader than the original 4x4 PSVM demo. It includes
+an exact runtime in `logic/sudoku.mjs`, a browser-facing WASM execution path in
+`logic/sudoku-wasm.mjs`, and a Rust solver in `wasm/sudoku-executor/src/lib.rs`.
+The public browser experience is wired through `sudoku.html` and `app.mjs`.
 
-### A generic tiny VM is better, but still not ideal
+On the model side, the repository also contains structured training and export
+code under `soduku/`, especially:
 
-A generic stack VM is a solid stepping stone, but it still teaches the model
-operations that some domains do not need.
+- `soduku/structured_transformer_common.py`
+- `soduku/train_transformer.py`
+- `soduku/train_value_transformer.py`
+- `soduku/model-worker.mjs`
+- `soduku/model.mjs`
+- `soduku/value-model.mjs`
 
-If the target domain is Sudoku, most of the model budget should go to:
+The key point is that the model-guided Sudoku path is not framed as a pure
+model-only solver. It is framed as **model-guided exact search**: the runtime
+still owns candidate generation, legality, contradictions, and backtracking,
+while the model ranks or scores ambiguous decisions.
 
-- candidate-set reasoning
-- cell selection
-- branching
-- undo
-- solved and fail conditions
+That is exactly the pattern this note argues for.
 
-not to unrelated arithmetic or memory patterns.
+### 6.2 Invoice calculation
 
-## Why not compile C directly into weights first
-
-Compiling arbitrary programs or even arbitrary `C -> VM -> weights` is an
-inspiring long-term direction. It is also the wrong first efficiency target for
-small browser-local systems.
-
-The problem is not expressiveness. A general compiler-to-weights path is
-maximally expressive. The problem is that it preserves too much machine detail
-that a single task family does not need.
-
-For browser-local executors, a general compiled path usually carries:
-
-- a broad instruction surface
-- operand and addressing overhead
-- stack or memory mechanics unrelated to the task
-- calling-convention and control-flow detail that expands traces
-- more verifier and runtime machinery than the task actually needs
-
-That makes the learned surface inefficient. The model spends capacity on
-emulating the scaffolding of a general machine instead of the decisions that
-actually matter for the domain.
-
-The more efficient first path is:
-
-`rules + ambiguity -> custom VM + custom ops + exact local runtime`
-
-In this formulation:
-
-- **rules** stay in a deterministic interpreter or WASM kernel
-- **ambiguity** lives at the op-selection boundary
-- **custom ops** collapse many irrelevant low-level steps into a single
-  domain-meaningful transition
-- **the transformer** only needs to emit the next useful op, not reproduce a
-  whole generic machine trace
-
-So the claim is not that compiler-to-weights is uninteresting. It is that for
-task-shaped browser systems, **custom ops on a custom VM are the efficient
-intermediate layer**.
-
-That is the main systems bet of this repository.
-
-## Problem-Shaped VMs
-
-A PSVM is a virtual machine whose instruction set is derived from the task
-family instead of from general-purpose computing.
-
-### VM family choices
-
-Not every VM family is equally useful for local transformer execution.
-
-- **stack VMs** are the best first generic executor target because the opcode
-  surface stays small and operand movement is implicit
-- **register VMs** are better when explicit named data flow matters, but they
-  expand the token/action space
-- **object or state-transition VMs** fit web apps and ledger-like tasks well
-  because legal steps are phase-based and easy to verify
-- **graph or dataflow VMs** fit routing, matching, and dependency problems
-  where state is naturally node-edge based
-- **constraint or rule VMs** fit Sudoku, SAT, and CSP-style tasks where
-  candidate propagation and undo are first-class semantics
-- **full bytecode VMs** are attractive long-term, but they are usually the
-  wrong first target because they force the model to learn too much irrelevant
-  machine behavior
-
-The practical takeaway is:
-
-`pick the smallest VM family that matches the task's real state transitions`
-
-This repository now spans three of these families already:
-
-- generic stack VM in `docs/executor-v1-spec.md`
-- object/state-transition PSVM in `invoice/`
-- constraint/search PSVM in `soduku/`
-
-### Sudoku PSVM
-
-Possible instruction set:
-
-- `FOCUS_NEXT`
-- `READ_CANDS`
-- `PLACE`
-- `UNDO`
-- `FAIL`
-- `HALT`
-
-This is not a full computer. It is a compact execution substrate for depth-first
-constraint search.
-
-### Invoice-calculator PSVM
-
-For a small browser-side invoice calculator, the instruction set can instead be:
-
-- `READ_ITEM`
-- `LINE_TOTAL`
-- `ADD_SUBTOTAL`
-- `APPLY_TAX`
-- `EMIT_TOTAL`
-- `HALT`
-
-This lets the model execute a business-calculation trace, not merely classify
-the final answer.
-
-For a broader taxonomy of VM families and where each one fits, see:
-
-- `docs/vm-design-space.md`
-
-## Current repository prototypes
-
-This repository now contains two concrete deterministic prototypes of the idea.
-
-### Prototype A: Invoice-calculator PSVM
-
-Implemented under `invoice/`:
+The `invoice/` directory is the clearest state-transition PSVM in the repo:
 
 - `invoice/psvm.mjs`
 - `invoice/worker.mjs`
-- `invoice/index.html`
+- `invoice/model.mjs`
+- `invoice/export_dataset.mjs`
+- `invoice/train_transformer.py`
 
-This prototype shows that the idea is not puzzle-specific. Its instruction set
-is shaped around a small business-calculation workflow and also streams a
-canonical trace from a Web Worker into a browser UI.
+This matters because it shows the idea is not puzzle-specific. The instruction
+surface is shaped around a tiny business-calculation workflow rather than around
+search over a board. That strengthens the paper's claim that PSVMs are about
+matching machine shape to domain semantics, not about Sudoku specifically.
 
-The point is the same in both cases: expose only the exact operations the task
-needs, then generate and inspect a canonical execution trace in the browser.
+### 6.3 Exact browser-local demos
 
-The repository also now includes the first student-model path for this domain:
+The broader repo also includes exact browser-local task demos such as the Weiqi
+prototype in `weiqi/`. Even when those demos do not yet have a full student
+training path, they support the same systems intuition: narrow exact tasks are
+best expressed as narrow exact runtimes first.
 
-- `invoice/export_dataset.mjs` for synthetic next-op supervision
-- `invoice/train_transformer.py` for a tiny next-op classifier
+## 7. What Is Supported Today, and What Is Not
 
-That is still narrower than full trace generation, but it is the first concrete
-learned executor step on top of the deterministic PSVM.
+This distinction matters if the note is going to be shared outside the repo.
 
-### Prototype B: Sudoku PSVM
+### Supported now
 
-Implemented under `soduku/`:
+The codebase already supports these claims:
 
-- `soduku/psvm4x4.mjs`
-- `soduku/worker.mjs`
-- `soduku/index.html`
+- browser-local exact runtimes for narrow tasks are practical
+- canonical task-shaped traces can be emitted and streamed in the UI
+- local model workers can be integrated into that execution loop
+- a narrow task-specific instruction surface is implementable across more than
+  one domain
+- hybrid execution, where the model helps but the runtime remains authoritative,
+  is a real engineering pattern rather than only an idea
 
-This prototype uses a limited instruction surface for 4x4 Sudoku and streams the
-canonical trace from a Web Worker into a browser UI.
+### Not supported yet
 
-It is not yet transformer-backed. It is the deterministic PSVM substrate and
-trace generator that a local model would later learn to imitate or drive.
+The codebase does **not** yet justify the stronger claims below:
 
-## Minimum VM stack
+- that PSVMs already outperform strong baselines quantitatively
+- that a student model can replace the teacher runtime end to end
+- that the approach scales cleanly from narrow demos to broad arbitrary program
+  execution
+- that "compile arbitrary C into weights" is the immediate right target for
+  this stack
 
-For this project, the **minimum VM stack** means the smallest end-to-end system
-that makes a task-shaped executor claim honest.
+This is important because the project becomes much more credible when it says
+precisely what is and is not already proven.
 
-It has six layers:
+## 8. The Paper's Sharpest Claim
 
-1. **Minimal model-facing op set**  
-   The task is expressed in the smallest executable vocabulary that still
-   preserves future-state changes.
+The most defensible version of the idea is not:
 
-2. **Deterministic teacher runtime**  
-   An exact interpreter or runtime executes those ops without model
-   approximation.
+- "transformers can already execute arbitrary code exactly"
+- "local models can replace exact runtimes"
+- "full VM traces are the right universal target"
 
-3. **Canonical trace generator**  
-   The runtime emits a stable trace under fixed ordering and tie-breaking rules.
+The sharp claim is:
 
-4. **Browser execution path**  
-   The trace can be streamed in a Web Worker and visualized in a static web app.
+**For narrow exact tasks, there is a better intermediate representation than
+both direct answer prediction and full-machine emulation: a problem-shaped VM
+whose instruction surface already matches the task's true legal transitions.**
 
-5. **Student supervision path**  
-   The teacher can generate a supervised dataset for at least one learned target.
+That claim is strong enough to be interesting and narrow enough to defend.
 
-6. **Student runtime path**  
-   A local model can be loaded and wired into the browser execution loop, even if
-   the exact runtime still remains the verifier or fallback.
+## 9. Experiments That Would Turn This Note into a Paper
 
-Anything beyond this, such as full argument-level trace generation, fully
-student-driven execution, or large puzzle scaling, is beyond the minimum stack.
+To move from a strong systems note to a publishable empirical paper, the repo
+needs controlled comparisons.
 
-## Repository verification checklist
+### 9.1 Formulations to compare
 
-The checklist below separates what is already verified in this repository from
-what remains open.
+For a domain such as Sudoku, compare:
 
-### Invoice PSVM
+1. `state -> final answer`
+2. `state -> next domain action`
+3. `state -> next PSVM trace token`
+4. `state -> next token of a broader generic VM`
 
-- [x] Minimal model-facing op set defined
-  - `READ_ITEM`, `LINE_TOTAL`, `ADD_SUBTOTAL`, `APPLY_TAX`, `EMIT_TOTAL`, `HALT`
-- [x] Deterministic teacher runtime implemented
-  - `invoice/psvm.mjs`
-- [x] Canonical trace generation implemented
-- [x] Browser Web Worker execution implemented
-  - `invoice/worker.mjs`
-- [x] Browser UI streams the trace
-  - `invoice/index.html`, `invoice/app.mjs`
-- [x] Reduced-op sample trace verified
-  - sample run uses only the intended six ops
-  - sample run completes in 12 trace events
-- [x] Student dataset generation implemented
-  - `invoice/export_dataset.mjs`
-- [x] Student training path implemented
-  - `invoice/train_transformer.py`
-- [x] Student training smoke test verified
-  - reduced-op smoke run on CPU reached `0.9862` eval accuracy
-  - dataset size in the smoke run: `128` invoices -> `1455` next-op samples
-- [x] Browser student runtime wiring implemented
-  - `invoice/model.mjs` and hybrid logic in `invoice/worker.mjs`
-- [x] Browser student model bundle shipped in repo
-  - `invoice/models/invoice-op-bert/`
-  - exported metadata: `5985` samples, `5387` train, `598` eval, `1.0000` eval accuracy
-- [ ] End-to-end browser student inference verified with shipped weights
-- [ ] Student predicts full argument-level trace, not just next op
-- [ ] Student executes the task without teacher fallback or verifier support
+The same structure can be repeated for invoice-style deterministic tasks.
 
-### Sudoku PSVM
+### 9.2 Metrics
 
-- [x] Minimal model-facing op set defined
-  - `FOCUS_NEXT`, `READ_CANDS`, `PLACE`, `UNDO`, `FAIL`, `HALT`
-- [x] Deterministic teacher runtime implemented
-  - `soduku/psvm4x4.mjs`
-- [x] Canonical trace generation implemented
-- [x] Browser Web Worker execution implemented
-  - `soduku/worker.mjs`
-- [x] Browser UI streams the trace
-  - `soduku/index.html`, `soduku/app.mjs`
-- [x] Reduced-op sample trace verified
-  - default 4x4 sample solves successfully
-  - sample trace length is 28 events
-  - the default puzzle exercised `FOCUS_NEXT`, `READ_CANDS`, `PLACE`, and `HALT`
-- [x] Runtime supports `UNDO` and `FAIL` when search branches require them
-- [ ] Student dataset generation implemented
-- [ ] Student training path implemented
-- [ ] Student training smoke test verified
-- [ ] Browser student runtime wiring implemented
-- [ ] Browser student model bundle shipped in repo
-- [ ] End-to-end browser student inference verified with shipped weights
-
-### Cross-cutting interpretation
-
-What is already proven:
-
-- the task-shaped VM idea can be implemented with a genuinely smaller
-  model-facing vocabulary
-- the reduced vocabulary still preserves exact task semantics under a
-  deterministic teacher runtime
-- the full browser-side teacher path works for both a puzzle domain and a small
-  business-calculation domain
-- at least one domain, invoice, already has a real student path for next-op
-  learning and a shipped local model bundle
-
-What is not yet proven:
-
-- that the student can replace the teacher in-browser end to end
-- that the student can emit full traces with arguments, not just op labels
-- that the same training path scales from invoice to Sudoku cleanly
-- that the minimum stack remains sufficient for harder 9x9 Sudoku instances
-
-## Research question
-
-At a fixed local model budget, is a transformer more reliable when trained to
-execute a **problem-shaped VM trace** than when trained to:
-
-1. predict the final answer directly
-2. predict the next action in raw task space
-3. emulate a broader general-purpose VM
-
-## Hypothesis
-
-We expect PSVMs to outperform the alternatives on:
+The evaluation should emphasize exactness, not only loss:
 
 - exact final solve rate
 - exact step accuracy
-- invalid action rate
+- illegal action rate
+- contradiction or verifier-failure rate
 - average trace length
-- browser latency per solved instance
+- browser latency
+- model size versus exactness tradeoff
 
-## System architecture
+### 9.3 Ablations
 
-The full system has five components.
+The most informative ablations are likely:
 
-### 1. Compiler or normalizer
+- instruction-set size
+- trace canonicalization rules
+- with versus without exact runtime verification
+- op-only versus op-plus-argument prediction
+- browser-local inference cost at fixed quality
 
-Compiles or normalizes a task instance into a PSVM program.
+If those comparisons are strong, the paper moves from an interesting thesis to a
+measured result.
 
-Examples:
+## 10. Why This Could Matter
 
-- Sudoku puzzle -> search program with canonical heuristics
-- invoice JSON -> canonical calculation program
+There is a real gap between two current habits:
 
-### 2. Deterministic interpreter
+- asking models for final answers and hoping they are right
+- routing all exact work to external tools or full symbolic engines
 
-Implemented in Rust/WASM or as an exact local runtime.
+PSVMs propose a middle layer. They keep symbolic truth in code while giving the
+model a narrow, learnable execution surface. That is especially relevant when
+the deployment target is the browser, where latency, memory, and inspectability
+matter more than broad generality.
 
-Used for:
+The argument is not that every exact task should become a PSVM. The argument is
+that many narrow exact tasks already have a small semantic core, and the model
+should be trained on that core rather than on irrelevant machine detail.
 
-- trace generation
-- ground-truth execution
-- optional browser verification
+## 11. Honest Positioning If Shared Now
 
-### 3. Trace generator
+This note is worth sharing **now** if it is framed correctly.
 
-Produces canonical traces for training.
+The right frame is:
 
-Canonicalization matters:
+- a research note
+- a systems essay
+- a workshop or position-paper candidate
+- a repository-backed design argument with concrete prototypes
 
-- fixed instruction order
-- fixed tie-breaking
-- fixed branch ordering
-- fixed emission format
+The wrong frame is:
 
-### 4. Local transformer executor
+- a finished empirical paper
+- a claim that arbitrary-code execution has been solved
+- a claim that the model already replaces the exact runtime
 
-Runs in the browser inside a Web Worker.
+In other words, the idea is shareable today because the conceptual stance is
+clear and the repository already contains meaningful evidence. But the strongest
+publication target right now is something like a workshop note, demo paper, or
+position paper. A full paper needs the baseline study and quantitative
+evaluation described above.
 
-Input:
+## Conclusion
 
-- PSVM program tokens
-- previous trace tokens
+The repo's most interesting idea is not "put a transformer in the browser." It
+is this:
 
-Output:
+`trim the machine to the problem`
 
-- next trace token
+If the task is exact and narrow, the model should not be asked either to guess
+the final answer in one shot or to emulate a full machine whose semantics dwarf
+the problem. It should be asked to operate inside the smallest executable
+substrate that still preserves the task's truth conditions.
 
-### 5. Browser UI
-
-Static web app that streams:
-
-- prompt or program
-- tool or runtime summary
-- readable log
-- token trace
-- state visualization
-
-## Why the browser matters
-
-This is not only a modeling paper. It is also a systems paper about practical
-local execution.
-
-The browser setup matters because it forces the right constraints:
-
-- no server-side tool dependency
-- limited latency budget
-- limited memory budget
-- explicit trace rendering
-- deployable as a static web app
-
-This is exactly the environment where generic LLM orchestration often feels too
-heavy, but one-shot small models are too weak.
-
-## Proposed experiments
-
-## Domain A: Sudoku
-
-### Formulations to compare
-
-1. `board -> solved board`
-2. `board -> next move`
-3. `board -> canonical next PSVM trace token`
-4. `board -> generic tiny VM trace token`
-
-### Metrics
-
-- solved board accuracy
-- exact step accuracy
-- contradiction rate
-- illegal trace token rate
-- average backtracks
-- average trace length
-- latency in browser
-
-### Difficulty bands
-
-- 4x4 Sudoku
-- easy 9x9
-- medium 9x9
-- hard 9x9
-
-## Domain B: Small web apps
-
-Use deterministic browser-native tasks such as:
-
-- invoice total checker
-- travel allowance validator
-- budget cap planner
-- scheduling slot finder
-
-These tasks are useful because they are:
-
-- exact
-- small
-- user-facing
-- more real-world than puzzle-only benchmarks
-
-### Metrics
-
-- exact output accuracy
-- rule violation recall
-- invalid trace rate
-- latency in browser worker
-
-## Baselines
-
-- one-shot transformer answer prediction
-- action-only policy model
-- generic tiny VM execution model
-- pure symbolic solver
-- model plus external tool pipeline
-
-The key comparison is:
-
-**Does a PSVM provide the best accuracy-latency tradeoff for local browser
-execution?**
-
-## Why this could be publishable
-
-The novelty is not simply "use a transformer in the browser." The novelty is
-the combination of:
-
-- task-shaped VM design
-- canonical trace learning
-- local browser execution
-- worker-based streaming UI
-- exact-task evaluation beyond toy arithmetic
-
-The conceptual contribution is:
-
-**problem-specific execution substrates are a better target for local neural
-executors than both direct solution prediction and full machine emulation.**
-
-## Failure modes
-
-This approach can still fail if:
-
-- traces are not canonical enough
-- the instruction set is still too broad
-- the task requires too much hidden state
-- the model learns surface regularities instead of execution semantics
-- browser inference is too slow for long traces
-
-## Key design principle
-
-The paper should insist on one point:
-
-**Trim the machine to the problem.**
-
-If the task is Sudoku, do not make the model learn an entire VM.
-If the task is a small rule-checking or calculation app, do not make the model
-learn an entire VM.
-
-Only expose the operations the task actually needs.
-
-That is the core of the idea.
-
-## Proposed paper structure
-
-1. Introduction
-2. Why one-shot local models fail on exact tasks
-3. Append-only execution and attention as state retrieval
-4. Problem-shaped virtual machines
-5. Sudoku PSVM
-6. Web-app PSVMs
-7. Browser-local architecture with Web Workers and exact runtimes
-8. Experiments
-9. Ablations on instruction-set size
-10. Limitations and future work
-
-## Sharpest version of the thesis
-
-If a general executor story is:
-
-> compile programs into a transformer executor
-
-then this paper's story is:
-
-> for local browser execution, compile the problem into the smallest VM that is
-> still sufficient, then train the transformer on that canonical execution trace
+That is the case for problem-shaped virtual machines.

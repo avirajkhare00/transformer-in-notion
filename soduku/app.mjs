@@ -5,6 +5,10 @@ import {
   buildProgram4x4,
   parsePuzzle4x4,
 } from "./psvm4x4.mjs";
+import {
+  HARD_SUDOKU_BENCHMARK_DELTA,
+  HARD_SUDOKU_PRESETS,
+} from "../logic/sudoku-hard.mjs";
 
 const puzzleInput = document.querySelector("#puzzle-input");
 const exampleButton = document.querySelector("#example-button");
@@ -15,10 +19,22 @@ const traceEl = document.querySelector("#trace");
 const boardEl = document.querySelector("#board");
 const statsEl = document.querySelector("#stats");
 const opsEl = document.querySelector("#ops");
+const hardBenchmarksEl = document.querySelector("#hard-benchmarks");
 
 let worker = null;
 let givenMask = null;
 let traceLines = [];
+
+function countClues(puzzle) {
+  return puzzle.replace(/[^1-9]/g, "").length;
+}
+
+function formatSignedNumber(value) {
+  if (value > 0) {
+    return `+${value.toLocaleString()}`;
+  }
+  return value.toLocaleString();
+}
 
 function setStatus(message, tone = "neutral") {
   statusEl.textContent = message;
@@ -59,6 +75,43 @@ function renderTrace() {
 
 function renderOps() {
   opsEl.innerHTML = PSVM_OPS.map((op) => `<li>${op}</li>`).join("");
+}
+
+function renderHardBenchmarks() {
+  if (!hardBenchmarksEl) {
+    return;
+  }
+
+  hardBenchmarksEl.innerHTML = HARD_SUDOKU_PRESETS.map((preset) => {
+    const benchmark = HARD_SUDOKU_BENCHMARK_DELTA[preset.id];
+    const candidateClass = benchmark.candidateQueriesDelta > 0 ? "bad" : "good";
+    const candidateLabel =
+      benchmark.candidateQueriesDelta > 0 ? "MRV extra queries" : "MRV query savings";
+
+    return `
+      <article class="benchmark-card">
+        <div>
+          <h3>${preset.label}</h3>
+          <p class="note">${countClues(preset.puzzle)} clues. Hard 9x9 preset.</p>
+        </div>
+        <div class="benchmark-meta">
+          <span class="benchmark-badge good">search events saved ${benchmark.searchEventsSaved.toLocaleString()}</span>
+          <span class="benchmark-badge good">placements saved ${benchmark.placementsSaved.toLocaleString()}</span>
+          <span class="benchmark-badge good">backtracks saved ${benchmark.backtracksSaved.toLocaleString()}</span>
+          <span class="benchmark-badge ${candidateClass}">${candidateLabel} ${formatSignedNumber(
+            benchmark.candidateQueriesDelta,
+          )}</span>
+        </div>
+        <div class="actions" style="margin-bottom: 0;">
+          <a class="secondary link-button" href="../sudoku.html?preset=${encodeURIComponent(
+            preset.id,
+          )}">
+            Open in 9x9 route
+          </a>
+        </div>
+      </article>
+    `;
+  }).join("");
 }
 
 function renderBoard(board, event = null) {
@@ -194,4 +247,5 @@ exampleButton.addEventListener("click", loadExample);
 solveButton.addEventListener("click", startSolve);
 
 renderOps();
+renderHardBenchmarks();
 loadExample();

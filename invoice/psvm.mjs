@@ -122,6 +122,35 @@ export function buildInvoiceOpContext(invoice, snapshot, historyOps) {
   ].join(" ");
 }
 
+export function createInvoiceExecutionState() {
+  return {
+    currentItemIndex: 0,
+    currentLineCents: null,
+    phase: "READ_ITEM",
+    halted: false,
+    processedItems: 0,
+    subtotalCents: 0,
+    taxCents: 0,
+    totalCents: 0,
+  };
+}
+
+function snapshotFromState(state) {
+  return {
+    processedItems: state.processedItems,
+    subtotalCents: state.subtotalCents,
+    taxCents: state.taxCents,
+    totalCents: state.totalCents,
+  };
+}
+
+function finalizeEvent(event, state) {
+  return {
+    ...event,
+    snapshot: snapshotFromState(state),
+  };
+}
+
 function createEvent(op, fields = {}) {
   return {
     op,
@@ -129,21 +158,145 @@ function createEvent(op, fields = {}) {
   };
 }
 
-function emitEvent(trace, state, event, onEvent) {
-  const snapshot = {
-    subtotalCents: state.subtotalCents,
-    taxCents: state.taxCents,
-    totalCents: state.totalCents,
-    processedItems: state.processedItems,
-  };
-
-  trace.push({
-    ...event,
-    snapshot,
-  });
+function emitEvent(trace, event, onEvent) {
+  trace.push(event);
 
   if (onEvent) {
-    onEvent({ ...event }, snapshot);
+    const { snapshot, ...fields } = event;
+    onEvent(fields, snapshot);
+  }
+}
+
+export function getInvoiceLegalOps(invoice, state) {
+  if (state.halted) {
+    return [];
+  }
+
+  if (state.currentItemIndex < invoice.items.length) {
+    return [state.phase];
+  }
+
+  if (state.phase === "APPLY_TAX" || state.phase === "EMIT_TOTAL" || state.phase === "HALT") {
+    return [state.phase];
+  }
+
+  return [];
+}
+
+export function executeInvoiceOp(invoice, previousState, op) {
+  const legalOps = getInvoiceLegalOps(invoice, previousState);
+  if (!legalOps.includes(op)) {
+    throw new Error(
+      `Illegal invoice op ${op}. Expected ${legalOps.length > 0 ? legalOps.join(", ") : "no legal ops"}.`,
+    );
+  }
+
+  const state = {
+    currentItemIndex: previousState.currentItemIndex,
+    currentLineCents: previousState.currentLineCents,
+    phase: previousState.phase,
+    halted: previousState.halted,
+    processedItems: previousState.processedItems,
+    subtotalCents: previousState.subtotalCents,
+    taxCents: previousState.taxCents,
+    totalCents: previousState.totalCents,
+  };
+
+  switch (op) {
+    case "READ_ITEM": {
+      const item = invoice.items[state.currentItemIndex];
+      state.phase = "LINE_TOTAL";
+      return {
+        state,
+        event: finalizeEvent(
+          createEvent("READ_ITEM", {
+            index: state.currentItemIndex,
+            label: item.label,
+            quantity: item.quantity,
+            unitCents: item.unitCents,
+          }),
+          state,
+        ),
+      };
+    }
+    case "LINE_TOTAL": {
+      const item = invoice.items[state.currentItemIndex];
+      state.currentLineCents = item.quantity * item.unitCents;
+      state.phase = "ADD_SUBTOTAL";
+      return {
+        state,
+        event: finalizeEvent(
+          createEvent("LINE_TOTAL", {
+            index: state.currentItemIndex,
+            quantity: item.quantity,
+            unitCents: item.unitCents,
+            lineCents: state.currentLineCents,
+          }),
+          state,
+        ),
+      };
+    }
+    case "ADD_SUBTOTAL": {
+      if (typeof state.currentLineCents !== "number") {
+        throw new Error("ADD_SUBTOTAL requires a computed line total.");
+      }
+
+      const index = state.currentItemIndex;
+      state.subtotalCents += state.currentLineCents;
+      state.processedItems += 1;
+      state.currentItemIndex += 1;
+      state.currentLineCents = null;
+      state.phase =
+        state.currentItemIndex < invoice.items.length ? "READ_ITEM" : "APPLY_TAX";
+      return {
+        state,
+        event: finalizeEvent(
+          createEvent("ADD_SUBTOTAL", {
+            index,
+            subtotalCents: state.subtotalCents,
+          }),
+          state,
+        ),
+      };
+    }
+    case "APPLY_TAX": {
+      state.taxCents = Math.round((state.subtotalCents * invoice.taxBasisPoints) / 10000);
+      state.totalCents = state.subtotalCents + state.taxCents;
+      state.phase = "EMIT_TOTAL";
+      return {
+        state,
+        event: finalizeEvent(
+          createEvent("APPLY_TAX", {
+            taxCents: state.taxCents,
+            totalCents: state.totalCents,
+          }),
+          state,
+        ),
+      };
+    }
+    case "EMIT_TOTAL": {
+      state.phase = "HALT";
+      return {
+        state,
+        event: finalizeEvent(
+          createEvent("EMIT_TOTAL", {
+            subtotalCents: state.subtotalCents,
+            taxCents: state.taxCents,
+            totalCents: state.totalCents,
+          }),
+          state,
+        ),
+      };
+    }
+    case "HALT": {
+      state.halted = true;
+      return {
+        state,
+        event: finalizeEvent(createEvent("HALT"), state),
+      };
+    }
+    default:
+      throw new Error(`Unsupported invoice op: ${op}`);
   }
 }
 
@@ -179,75 +332,18 @@ export function runInvoicePsvm(source, options = {}) {
   const { onEvent } = options;
   const invoice = parseInvoice(source);
   const trace = [];
-  const state = {
-    subtotalCents: 0,
-    taxCents: 0,
-    totalCents: 0,
-    processedItems: 0,
-  };
+  let state = createInvoiceExecutionState();
 
-  invoice.items.forEach((item, index) => {
-    emitEvent(
-      trace,
-      state,
-      createEvent("READ_ITEM", {
-        index,
-        label: item.label,
-        quantity: item.quantity,
-        unitCents: item.unitCents,
-      }),
-      onEvent,
-    );
+  while (!state.halted) {
+    const [op] = getInvoiceLegalOps(invoice, state);
+    if (!op) {
+      throw new Error("Invoice PSVM reached a state with no legal ops before HALT.");
+    }
 
-    const lineCents = item.quantity * item.unitCents;
-    emitEvent(
-      trace,
-      state,
-      createEvent("LINE_TOTAL", {
-        index,
-        quantity: item.quantity,
-        unitCents: item.unitCents,
-        lineCents,
-      }),
-      onEvent,
-    );
-
-    state.subtotalCents += lineCents;
-    state.processedItems += 1;
-    emitEvent(
-      trace,
-      state,
-      createEvent("ADD_SUBTOTAL", {
-        index,
-        subtotalCents: state.subtotalCents,
-      }),
-      onEvent,
-    );
-  });
-
-  state.taxCents = Math.round((state.subtotalCents * invoice.taxBasisPoints) / 10000);
-  state.totalCents = state.subtotalCents + state.taxCents;
-
-  emitEvent(
-    trace,
-    state,
-    createEvent("APPLY_TAX", {
-      taxCents: state.taxCents,
-      totalCents: state.totalCents,
-    }),
-    onEvent,
-  );
-  emitEvent(
-    trace,
-    state,
-    createEvent("EMIT_TOTAL", {
-      subtotalCents: state.subtotalCents,
-      taxCents: state.taxCents,
-      totalCents: state.totalCents,
-    }),
-    onEvent,
-  );
-  emitEvent(trace, state, createEvent("HALT"), onEvent);
+    const step = executeInvoiceOp(invoice, state, op);
+    state = step.state;
+    emitEvent(trace, step.event, onEvent);
+  }
 
   return {
     invoice,

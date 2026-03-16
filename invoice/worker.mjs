@@ -1,19 +1,22 @@
 import {
+  buildInvoiceProgram,
   buildInvoiceOpContext,
+  createInvoiceExecutionState,
   createEmptyInvoiceSnapshot,
+  executeInvoiceOp,
   formatInvoiceEvent,
+  getInvoiceLegalOps,
   parseInvoice,
   runInvoicePsvm,
 } from "./psvm.mjs";
 import { predictInvoiceNextOp, warmInvoiceModel } from "./model.mjs";
 
-function formatPredictedLine(line, prediction, matched) {
+function formatPredictedLine(line, prediction) {
   if (!prediction) {
     return line;
   }
 
-  const status = matched ? "match" : "miss";
-  return `[student ${status} ${prediction.op} ${(prediction.score * 100).toFixed(1)}%] ${line}`;
+  return `[student ${prediction.op} ${(prediction.score * 100).toFixed(1)}%] ${line}`;
 }
 
 async function resolveEngine(requestedEngine) {
@@ -23,55 +26,83 @@ async function resolveEngine(requestedEngine) {
 
   try {
     await warmInvoiceModel();
-    return { mode: "student+teacher", error: null };
+    return { mode: "student", error: null };
   } catch (error) {
-    return {
-      mode: "teacher",
-      error: error instanceof Error ? error.message : String(error),
-    };
+    throw new Error(
+      error instanceof Error ? error.message : String(error),
+    );
   }
 }
 
-async function streamTrace(result, invoice, engineMode) {
+async function streamTeacherTrace(result) {
+  for (const event of result.trace) {
+    self.postMessage({
+      type: "event",
+      event,
+      snapshot: event.snapshot,
+      prediction: null,
+      line: formatInvoiceEvent(event, result.invoice.currency),
+      predictionCount: 0,
+      averageConfidence: null,
+    });
+  }
+
+  return { predictionCount: 0, averageConfidence: null };
+}
+
+async function streamStudentTrace(invoice) {
+  let state = createInvoiceExecutionState();
   let previousSnapshot = createEmptyInvoiceSnapshot();
   const historyOps = [];
-  let modelMatches = 0;
-  let modelPredictions = 0;
+  let predictionCount = 0;
+  let confidenceSum = 0;
 
-  for (const event of result.trace) {
-    let prediction = null;
-    let matched = null;
-
-    if (engineMode === "student+teacher") {
-      const context = buildInvoiceOpContext(invoice, previousSnapshot, historyOps);
-      const predictions = await predictInvoiceNextOp(context);
-      prediction = predictions[0] ?? null;
-      matched = prediction ? prediction.op === event.op : null;
-      modelPredictions += 1;
-      if (matched) {
-        modelMatches += 1;
-      }
+  while (!state.halted) {
+    const legalOps = getInvoiceLegalOps(invoice, state);
+    const context = buildInvoiceOpContext(invoice, previousSnapshot, historyOps);
+    const predictions = await predictInvoiceNextOp(context);
+    const prediction = predictions[0] ?? null;
+    if (!prediction) {
+      throw new Error("Invoice student returned no prediction.");
     }
+
+    predictionCount += 1;
+    confidenceSum += prediction.score;
+
+    if (!legalOps.includes(prediction.op)) {
+      throw new Error(
+        `Illegal student op ${prediction.op}. Expected ${legalOps.join(", ")}.`,
+      );
+    }
+
+    const step = executeInvoiceOp(invoice, state, prediction.op);
+    const event = step.event;
 
     self.postMessage({
       type: "event",
       event,
       snapshot: event.snapshot,
       prediction,
-      line: formatPredictedLine(
-        formatInvoiceEvent(event, invoice.currency),
-        prediction,
-        matched,
-      ),
-      modelMatches,
-      modelPredictions,
+      line: formatPredictedLine(formatInvoiceEvent(event, invoice.currency), prediction),
+      predictionCount,
+      averageConfidence: confidenceSum / predictionCount,
     });
 
+    state = step.state;
     previousSnapshot = event.snapshot;
     historyOps.push(event.op);
   }
 
-  return { modelMatches, modelPredictions };
+  return {
+    result: {
+      subtotalCents: state.subtotalCents,
+      taxCents: state.taxCents,
+      totalCents: state.totalCents,
+    },
+    traceLength: historyOps.length,
+    predictionCount,
+    averageConfidence: predictionCount > 0 ? confidenceSum / predictionCount : null,
+  };
 }
 
 async function handleRun(data) {
@@ -79,35 +110,38 @@ async function handleRun(data) {
 
   try {
     const invoice = parseInvoice(data.source);
-    const engine = await resolveEngine(data.engine ?? "student");
-    const result = runInvoicePsvm(data.source);
-
+    const requestedEngine = data.engine ?? "student";
+    const engine = await resolveEngine(requestedEngine);
     self.postMessage({
       type: "start",
       invoice,
-      program: result.program,
+      program: buildInvoiceProgram(data.source),
       engine: engine.mode,
-      modelError: engine.error,
     });
 
-    const { modelMatches, modelPredictions } = await streamTrace(
-      result,
-      invoice,
-      engine.mode,
-    );
+    const execution =
+      engine.mode === "teacher"
+        ? await (async () => {
+            const result = runInvoicePsvm(data.source);
+            const streamed = await streamTeacherTrace(result);
+            return {
+              result: result.result,
+              traceLength: result.trace.length,
+              predictionCount: streamed.predictionCount,
+              averageConfidence: streamed.averageConfidence,
+            };
+          })()
+        : await streamStudentTrace(invoice);
 
     self.postMessage({
       type: "done",
       invoice,
-      result: result.result,
-      traceLength: result.trace.length,
+      result: execution.result,
+      traceLength: execution.traceLength,
       elapsedMs: Math.round(performance.now() - startedAt),
       engine: engine.mode,
-      modelMatches,
-      modelPredictions,
-      modelAccuracy:
-        modelPredictions > 0 ? modelMatches / modelPredictions : null,
-      modelError: engine.error,
+      predictionCount: execution.predictionCount,
+      averageConfidence: execution.averageConfidence,
     });
   } catch (error) {
     self.postMessage({

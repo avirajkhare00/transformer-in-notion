@@ -54,11 +54,15 @@ The first learned target is intentionally small:
 
 That is not full trace generation yet. It is the first honest learned step.
 
-The browser worker is wired for a hybrid mode:
+The browser worker now runs a strict student-driven loop:
 
-- if a local invoice model bundle exists, the worker shows student next-op
-  predictions alongside the exact teacher trace
-- if no local bundle exists, it falls back to the exact teacher only
+- build normalized context from the current PSVM snapshot
+- ask the local model for the next op
+- verify that the predicted op is legal for the current state
+- execute that op through the deterministic interpreter
+
+So the student now drives the live trace instead of being scored beside a
+teacher replay.
 
 ## Current verification
 

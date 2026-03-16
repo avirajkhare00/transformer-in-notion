@@ -65,8 +65,8 @@ function renderSummary(result = {}, extras = {}) {
   if (typeof extras.elapsedMs === "number") {
     cards.push(["worker ms", String(extras.elapsedMs)]);
   }
-  if (typeof extras.modelAccuracy === "number") {
-    cards.push(["student acc", `${(extras.modelAccuracy * 100).toFixed(1)}%`]);
+  if (typeof extras.averageConfidence === "number") {
+    cards.push(["avg conf", `${(extras.averageConfidence * 100).toFixed(1)}%`]);
   }
   if (extras.engine) {
     cards.push(["engine", extras.engine]);
@@ -98,7 +98,7 @@ function loadSample() {
   renderSummary();
   traceLines = [];
   renderTrace();
-  setStatus("Sample invoice loaded. Run to stream the PSVM trace.");
+  setStatus("Sample invoice loaded. Run to stream the student-driven PSVM trace.");
 }
 
 function startRun() {
@@ -120,8 +120,8 @@ function startRun() {
   stopWorker();
   traceLines = [];
   renderTrace();
-  renderSummary();
-  setStatus("Worker running invoice PSVM...", "busy");
+  renderSummary({}, { engine: "student" });
+  setStatus("Worker running student-driven invoice PSVM...", "busy");
 
   worker = new Worker(new URL("./worker.mjs", import.meta.url), {
     type: "module",
@@ -132,13 +132,11 @@ function startRun() {
       activeCurrency = data.invoice.currency;
       renderItems(data.invoice);
       renderProgram(data.program);
-      if (data.modelError) {
+      if (data.engine === "student") {
         setStatus(
-          `Model unavailable, falling back to exact PSVM teacher. ${data.modelError}`,
+          "Worker running a strict student loop: predict next op, verify legality, execute.",
           "busy",
         );
-      } else if (data.engine === "student+teacher") {
-        setStatus("Worker running invoice PSVM with local transformer next-op predictions...", "busy");
       }
       return;
     }
@@ -162,12 +160,12 @@ function startRun() {
       renderSummary(data.result, {
         traceLength: data.traceLength,
         elapsedMs: data.elapsedMs,
-        modelAccuracy: data.modelAccuracy,
+        averageConfidence: data.averageConfidence,
         engine: data.engine,
       });
       setStatus(
-        data.engine === "student+teacher"
-          ? `Invoice total ready in ${data.elapsedMs} ms across ${data.traceLength} trace events. Student next-op accuracy: ${(data.modelAccuracy * 100).toFixed(1)}%.`
+        data.engine === "student"
+          ? `Student-driven invoice run finished in ${data.elapsedMs} ms across ${data.traceLength} trace events. Average confidence: ${(data.averageConfidence * 100).toFixed(1)}%.`
           : `Invoice total ready in ${data.elapsedMs} ms across ${data.traceLength} trace events.`,
         "success",
       );

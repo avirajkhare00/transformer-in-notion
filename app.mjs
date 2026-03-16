@@ -142,6 +142,7 @@ const refs = {
   sudokuModelRun: document.querySelector("#sudoku-model-run"),
   sudokuModelStatus: document.querySelector("#sudoku-model-status"),
   sudokuModelStats: document.querySelector("#sudoku-model-stats"),
+  sudokuFlow: document.querySelector("#sudoku-flow"),
   tttCells: [],
   sudokuCells: [],
 };
@@ -190,7 +191,8 @@ function hasSudokuUI() {
       refs.sudokuLoad &&
       refs.sudokuModelRun &&
       refs.sudokuModelStatus &&
-      refs.sudokuModelStats
+      refs.sudokuModelStats &&
+      refs.sudokuFlow
   );
 }
 
@@ -345,6 +347,10 @@ function formatSudokuTokenRate(value) {
     return "—";
   }
   return `${Math.round(value)} tok/s`;
+}
+
+function countSudokuClues(board) {
+  return board.flat().filter(Boolean).length;
 }
 
 function formatSudokuSpeedComparison(wasmMs, baselineMs) {
@@ -1075,6 +1081,7 @@ function renderSudoku() {
     : "Run model trace";
   renderSudokuStats();
   renderSudokuModelStats();
+  renderSudokuFlow();
   renderSudokuArtifacts();
   renderList(refs.sudokuLog, sudokuState.log);
 }
@@ -1242,6 +1249,82 @@ function renderSudokuModelStats() {
       <span class="stat-value">${item.value}</span>
     `;
     refs.sudokuModelStats.append(card);
+  });
+}
+
+function renderSudokuFlow() {
+  const clueCount = countSudokuClues(sudokuState.initialBoard);
+  const preset = describeSudokuPreset(sudokuState.puzzle).value;
+  const traceLength = sudokuState.result?.trace.length ?? sudokuModelState.traceLength;
+  const replayMode = SUDOKU_REPLAY_MODES[sudokuState.replayMode] ?? SUDOKU_REPLAY_MODES.normal;
+  const replayDetail = sudokuState.isAnimating
+    ? `${replayMode.statusVerb.toLowerCase()} ${Math.min(sudokuState.stepIndex, traceLength || 0)} / ${traceLength || "—"}`
+    : sudokuState.result && sudokuState.stepIndex >= sudokuState.result.trace.length
+      ? `complete · ${sudokuState.result.trace.length} / ${sudokuState.result.trace.length}`
+      : traceLength
+        ? `ready · 0 / ${traceLength}`
+        : "waiting for solve";
+
+  const nodes = [
+    {
+      title: "Board state",
+      badge: "input",
+      detail: `${preset} · ${clueCount} clues`,
+      active: sudokuState.isLoading,
+    },
+    {
+      title: "Local transformer",
+      badge: sudokuModelState.isRunning ? "active" : "model",
+      detail: sudokuModelState.isRunning
+        ? sudokuModelState.status
+        : sudokuModelState.tokenCount
+          ? `${formatSudokuTokenRate(sudokuModelState.tokensPerSecond)} · ${formatSudokuPercent(sudokuModelState.accuracy)} op top-1`
+          : "Optional next-op + PLACE-value probe",
+      active: sudokuModelState.isRunning,
+    },
+    {
+      title: "PSVM ops",
+      badge: "ops",
+      detail: "FOCUS_NEXT · READ_CANDS · PLACE · UNDO · FAIL · HALT",
+      active: sudokuModelState.isRunning,
+    },
+    {
+      title: "WASM executor",
+      badge: sudokuState.isLoading ? "active" : "exact",
+      detail: sudokuState.isLoading
+        ? `${formatSudokuDuration(getCurrentSudokuSolveMs())} … solving`
+        : sudokuState.result
+          ? `${formatSudokuDuration(sudokuState.solveElapsedMs)} · ${sudokuState.result.trace.length} events`
+          : "warming exact runtime",
+      active: sudokuState.isLoading,
+    },
+    {
+      title: "Trace / replay",
+      badge: sudokuState.isAnimating ? "live" : "trace",
+      detail: replayDetail,
+      active: sudokuState.isAnimating,
+    },
+  ];
+
+  refs.sudokuFlow.innerHTML = "";
+  nodes.forEach((node, index) => {
+    const card = document.createElement("div");
+    card.className = `flow-node${node.active ? " is-active" : ""}`;
+    card.innerHTML = `
+      <div class="flow-node-head">
+        <span class="flow-node-title">${node.title}</span>
+        <span class="flow-badge${node.active ? " is-active" : ""}">${node.badge}</span>
+      </div>
+      <p class="flow-node-body">${node.detail}</p>
+    `;
+    refs.sudokuFlow.append(card);
+
+    if (index < nodes.length - 1) {
+      const arrow = document.createElement("span");
+      arrow.className = "flow-arrow";
+      arrow.textContent = "→";
+      refs.sudokuFlow.append(arrow);
+    }
   });
 }
 

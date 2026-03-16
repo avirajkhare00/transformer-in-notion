@@ -595,6 +595,70 @@ body.notion-embed-page::after {
   gap: 10px;
 }
 
+.flow-strip {
+  margin-top: 12px;
+  display: flex;
+  align-items: stretch;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.flow-node {
+  flex: 1 1 180px;
+  min-width: 0;
+  border-radius: 14px;
+  padding: 12px;
+  background: rgba(255, 255, 255, 0.62);
+  border: 1px solid var(--line);
+}
+
+.flow-node.is-active {
+  background:
+    linear-gradient(135deg, rgba(191, 233, 215, 0.24), rgba(255, 215, 109, 0.16)),
+    rgba(255, 255, 255, 0.82);
+  border-color: rgba(46, 123, 104, 0.22);
+}
+
+.flow-node-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.flow-node-title {
+  font-size: 0.82rem;
+  font-weight: 600;
+}
+
+.flow-node-body {
+  margin: 8px 0 0;
+  color: var(--muted);
+  font-size: 0.76rem;
+  line-height: 1.55;
+}
+
+.flow-badge {
+  padding: 4px 8px;
+  border-radius: 999px;
+  background: rgba(32, 26, 22, 0.08);
+  color: var(--muted);
+  font-size: 0.66rem;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+}
+
+.flow-badge.is-active {
+  background: rgba(46, 123, 104, 0.16);
+  color: var(--mint-deep);
+}
+
+.flow-arrow {
+  align-self: center;
+  color: var(--muted);
+  font-size: 1rem;
+}
+
 .stat-card {
   border-radius: 14px;
   padding: 12px;
@@ -748,5 +812,13 @@ body.notion-embed-page .mini-card {
 
   .ttt-cell {
     border-radius: 18px;
+  }
+
+  .flow-strip {
+    flex-direction: column;
+  }
+
+  .flow-arrow {
+    display: none;
   }
 }

@@ -1,6 +1,7 @@
 @import url("https://fonts.googleapis.com/css2?family=Fraunces:wght@600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap");
 
 :root {
+  color-scheme: light;
   --bg-top: #fff4df;
   --bg-bottom: #f5fbff;
   --paper: rgba(255, 252, 247, 0.86);
@@ -62,6 +63,15 @@ body::after {
   width: 220px;
   height: 220px;
   background: rgba(255, 140, 105, 0.2);
+}
+
+body.notion-embed-page {
+  background: transparent;
+}
+
+body.notion-embed-page::before,
+body.notion-embed-page::after {
+  display: none;
 }
 
 .page-shell {
@@ -227,6 +237,64 @@ body::after {
   gap: 8px;
 }
 
+.tool-call-card {
+  display: grid;
+  gap: 12px;
+  padding: 12px 14px;
+  border-radius: 14px;
+  border: 1px solid var(--line);
+  background:
+    linear-gradient(135deg, rgba(255, 215, 109, 0.12), rgba(191, 233, 215, 0.14)),
+    rgba(255, 255, 255, 0.82);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.72);
+}
+
+.tool-call-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.tool-call-name {
+  font-family: "Fraunces", serif;
+  font-size: 1.06rem;
+  letter-spacing: -0.02em;
+}
+
+.tool-call-badge {
+  padding: 5px 9px;
+  border-radius: 999px;
+  background: rgba(32, 26, 22, 0.08);
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+}
+
+.tool-call-grid {
+  display: grid;
+  gap: 10px;
+}
+
+.tool-call-row {
+  display: grid;
+  grid-template-columns: 64px minmax(0, 1fr);
+  gap: 10px;
+  align-items: start;
+}
+
+.tool-call-key {
+  color: var(--muted);
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+}
+
+.tool-call-value {
+  line-height: 1.55;
+  word-break: break-word;
+}
+
 .code-label {
   margin: 0;
   color: var(--muted);
@@ -384,12 +452,79 @@ body::after {
   gap: 8px;
 }
 
+.trace-list-scroll {
+  max-height: 240px;
+  overflow: auto;
+  padding-right: 4px;
+  scrollbar-gutter: stable;
+}
+
 .trace-list li {
   padding: 10px 12px;
   border-radius: 14px;
   background: rgba(255, 255, 255, 0.62);
   border: 1px solid var(--line);
   line-height: 1.5;
+}
+
+.trace-list-scroll::-webkit-scrollbar {
+  width: 8px;
+}
+
+.trace-list-scroll::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  background: rgba(32, 26, 22, 0.18);
+}
+
+.sudoku-source-card {
+  display: grid;
+  gap: 10px;
+}
+
+.field-label {
+  color: var(--muted);
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.16em;
+}
+
+.field-input {
+  width: 100%;
+  font: inherit;
+  color: var(--ink);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.9);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.72);
+}
+
+.field-select {
+  padding: 11px 14px;
+}
+
+.field-textarea {
+  min-height: 128px;
+  padding: 12px 14px;
+  resize: vertical;
+  line-height: 1.55;
+}
+
+.field-hint {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.76rem;
+  line-height: 1.55;
+}
+
+.control-row-compact {
+  margin-top: 2px;
+}
+
+.button-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  text-decoration: none;
 }
 
 .sudoku-board {
@@ -484,6 +619,76 @@ body::after {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 22px;
+}
+
+.single-demo-shell {
+  width: min(980px, calc(100vw - 24px));
+  padding-top: 24px;
+}
+
+.single-demo-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+}
+
+.single-demo-shell .playground {
+  grid-template-columns: minmax(320px, 0.95fr) minmax(0, 1.05fr);
+}
+
+.single-demo-shell .inspector-column {
+  order: 1;
+}
+
+.single-demo-shell .board-column {
+  order: 2;
+}
+
+body.notion-embed-page .page-shell {
+  width: min(1100px, calc(100vw - 8px));
+  padding: 8px 0 10px;
+}
+
+body.notion-embed-page .single-demo-grid {
+  margin-top: 0;
+}
+
+body.notion-embed-page .panel {
+  background: transparent;
+  border: 0;
+  box-shadow: none;
+  backdrop-filter: none;
+  padding: 0;
+  overflow: visible;
+}
+
+body.notion-embed-page .panel::before,
+body.notion-embed-page .hero,
+body.notion-embed-page .panel-head {
+  display: none;
+}
+
+body.notion-embed-page .playground {
+  margin-top: 0;
+  gap: 14px;
+}
+
+body.notion-embed-page .single-demo-shell .playground {
+  grid-template-columns: minmax(320px, 0.95fr) minmax(0, 1.05fr);
+}
+
+body.notion-embed-page .status-card,
+body.notion-embed-page .mini-card {
+  background: rgba(255, 255, 255, 0.9);
+  box-shadow: none;
+}
+
+.hero-compact {
+  padding-bottom: 20px;
+}
+
+.hero-compact h1 {
+  font-size: clamp(2.5rem, 5vw, 4rem);
+  max-width: none;
 }
 
 .rationale-card {

@@ -6,9 +6,10 @@ The current version deliberately keeps the stack simple, but it now adopts a
 Percepta-style surface:
 
 - Tic-tac-toe with a visible local transformer policy trace
-- Sudoku with an animated browser-side WASM trace
+- Sudoku with preset loading, custom puzzle input, and an animated browser-side WASM trace
 - Prompt -> pseudo-program -> execution trace panels for both demos
 - Static files only, so GitHub Pages can host it directly
+- Separate standalone HTML entry pages for direct Notion embeds
 
 The embed story now has both halves:
 
@@ -25,6 +26,12 @@ Because the UI contract is explicit, the remaining solver logic can still be rep
 - a WASM runtime
 - or a hybrid model + executor path
 
+The repo now also includes two problem-shaped VM prototypes outside the main
+gallery:
+
+- `invoice/` - a small invoice-calculator PSVM with exact money arithmetic
+- `soduku/` - a 4x4 Sudoku PSVM with a streamed worker trace
+
 ## What this branch adds
 
 This branch moves the repo from a mock executor surface to real browser-side
@@ -32,7 +39,12 @@ artifacts:
 
 - Tic-tac-toe now loads a shipped ONNX model bundle from `models/tictactoe-bert/`
   through Transformers.js.
+- The Tic-tac-toe bundle now ships both `onnx/model.onnx` and
+  `onnx/model_quantized.onnx` so browser runtimes that still request the
+  quantized filename do not 404 on Pages.
 - Sudoku now loads a shipped WebAssembly binary from `wasm/sudoku_solver.wasm`.
+- Sudoku now supports preset selection and bring-your-own 81-cell puzzle input
+  in the browser.
 - The existing prompt -> program -> trace UI stays the same, but the engines
   behind the two cards are now different and real:
   - local transformer weights for Tic-tac-toe
@@ -82,7 +94,27 @@ Then open `http://localhost:8000`.
 
 ## Files
 
+- `LICENSE` - Apache-2.0 license for the repository
 - `index.html` - page shell and demo layout
+- `tic-tac-toe.html` - standalone Tic-tac-toe embed page
+- `sudoku.html` - standalone Sudoku embed page
+- `soduku/index.html` - standalone 4x4 Sudoku PSVM prototype
+- `soduku/app.mjs` - browser UI for the 4x4 Sudoku PSVM
+- `soduku/worker.mjs` - worker-side 4x4 Sudoku execution loop
+- `soduku/psvm4x4.mjs` - limited-op 4x4 Sudoku PSVM and canonical trace generator
+- `invoice/index.html` - standalone invoice-calculator PSVM prototype
+- `invoice/app.mjs` - browser UI for the invoice PSVM
+- `invoice/worker.mjs` - worker-side invoice execution loop
+- `invoice/model.mjs` - browser-side invoice next-op model loader
+- `invoice/psvm.mjs` - invoice-calculator PSVM and canonical trace generator
+- `invoice/export_dataset.mjs` - synthetic dataset generator for invoice next-op supervision
+- `invoice/train_transformer.py` - tiny invoice next-op transformer trainer/exporter
+- `invoice/models/invoice-op-bert/` - shipped ONNX bundle for the invoice next-op student
+- `invoice/README.md` - invoice-calculator PSVM note and op-set summary
+- `docs/executor-v1-spec.md` - v1 transformer-executor spec and training target
+- `docs/paper-idea-problem-shaped-vms.md` - paper note for custom task-shaped VMs in browser-local transformers
+- `docs/use-case-matrix.md` - architecture combinations and small real-world use cases
+- `soduku/README.md` - Sudoku-specific workspace note and the recommended first benchmark
 - `styles.css` - visual system tuned for an iframe or Notion embed
 - `app.mjs` - UI wiring and animations
 - `logic/tictactoe.mjs` - minimax engine
@@ -100,7 +132,12 @@ Then open `http://localhost:8000`.
 ## GitHub Pages
 
 The workflow in `.github/workflows/pages.yml` publishes the repo root as a Pages site.
-Once Pages is enabled, the resulting URL can be pasted straight into a Notion embed block.
+Once Pages is enabled, any of these URLs can be pasted straight into a Notion
+embed block:
+
+- `/`
+- `/tic-tac-toe.html`
+- `/sudoku.html`
 
 ## Training the tic-tac-toe model
 
@@ -112,8 +149,10 @@ node scripts/export_tictactoe_dataset.mjs
 ```
 
 That writes an ONNX-ready Hugging Face model bundle to `models/tictactoe-bert/`,
-with the ONNX graph stored at `models/tictactoe-bert/onnx/model.onnx`, which the
-browser loads via Transformers.js.
+with the ONNX graph stored at `models/tictactoe-bert/onnx/model.onnx`. The
+training/export step also writes a compatibility copy to
+`models/tictactoe-bert/onnx/model_quantized.onnx` so browser runtimes that still
+probe for the quantized filename work without extra deploy logic.
 
 ## Building the Sudoku WASM executor
 
@@ -125,6 +164,28 @@ sh scripts/build_sudoku_wasm.sh
 
 That writes the runtime artifact to `wasm/sudoku_solver.wasm`, which the page
 loads directly with `WebAssembly.instantiate`.
+
+## Running the PSVM prototypes
+
+Serve the repo root, then open either of these standalone prototype pages:
+
+- `/soduku/`
+- `/invoice/`
+
+The current prototype split is:
+
+- `invoice/` - exact invoice calculation expressed as a compact PSVM and executed in a Web Worker
+- `soduku/` - 4x4 Sudoku search expressed as a compact PSVM and executed in a Web Worker
+
+Neither browser prototype is transformer-backed yet. They are the deterministic
+execution substrates that the local model will eventually learn to imitate or
+drive.
+
+The invoice directory now also contains the first student-model path:
+
+- `invoice/export_dataset.mjs` generates synthetic `(context -> next op)` samples
+- `invoice/train_transformer.py` trains a tiny next-op classifier on that dataset
+- `invoice/models/invoice-op-bert/` contains the exported local model bundle
 
 ## Verified
 
@@ -140,6 +201,93 @@ loads directly with `WebAssembly.instantiate`.
 
 ## Next steps
 
-- Add puzzle presets and difficulty levels
 - Add a true model + executor pair for a larger puzzle
+- Add a small chess legality or mate-in-one example before full chess
 - Add a tighter mobile/embed height mode for narrower Notion columns
+
+## Execution model
+
+The repo is moving toward a stricter systems view of transformer execution.
+
+For exact tasks, a transformer is often a better conceptual fit for an
+**append-only execution machine** than for a mutable RAM machine:
+
+- a normal computer mutates state in place
+- an autoregressive transformer extends a history of state records
+- attention reconstructs the current state by retrieving the right prior records
+
+That suggests a better formulation for local exact computation:
+
+- not `input -> final answer`
+- not `task -> full general-purpose VM trace`
+- instead `task -> problem-shaped VM program -> canonical execution trace`
+
+The core design goal is to make the model learn **composition of useful
+operations**, not simulation of irrelevant machine detail.
+
+In practice that means:
+
+- keep the execution vocabulary small
+- keep the trace canonical and inspectable
+- push exact semantics into a deterministic interpreter or verifier
+- reserve model capacity for choosing and ordering operations
+
+For Sudoku, that points toward a task-shaped executor with ops like
+`FOCUS_NEXT`, `READ_CANDS`, `PLACE`, `UNDO`, `FAIL`, and `HALT`, not a full VM
+on day one.
+
+The invoice prototype shows the same idea in a non-puzzle setting: a small web
+app can expose only the exact business operations it needs, such as
+`READ_ITEM`, `LINE_TOTAL`, `ADD_SUBTOTAL`, `APPLY_TAX`, `EMIT_TOTAL`, and
+`HALT`.
+
+## License
+
+This repository is licensed under Apache-2.0. That gives downstream users broad
+reuse rights and includes the standard patent grant plus warranty/liability
+disclaimers.
+
+What it does **not** do is fully shield anyone from every copyright or other IP
+claim. No open-source license can honestly promise that. The practical boundary
+is:
+
+- the repo owner can license only the material they have rights to license
+- contributors should submit only code, weights, assets, and docs they are
+  allowed to contribute
+- third-party code, models, datasets, fonts, and media keep their own licenses
+  and restrictions
+
+If the goal is stronger protection in practice, the real controls are provenance
+and review: keep dependency and model sources documented, avoid copying
+unlicensed material, and require contributors to contribute only material they
+own or are allowed to relicense.
+
+## Architecture ideas
+
+If you are deciding what kind of demo to build next, see
+`docs/use-case-matrix.md` for a table of:
+
+- `LLM / model / tool / executor / verifier` combinations
+- the small real-world use cases each combination fits best
+- which examples are worth building in this repo next
+
+If you want the concrete next build target for the "computer inside a
+transformer" direction, see:
+
+- `docs/executor-v1-spec.md`
+- `docs/examples/executor-v1-add-two.json`
+
+If you want the paper-shaped framing for the more specific direction of
+`transformer + custom VM + Sudoku/web apps + WASM + browser`, see:
+
+- `docs/paper-idea-problem-shaped-vms.md`
+- `soduku/README.md`
+- `soduku/`
+- `invoice/`
+
+The paper note now also includes a concrete **minimum VM stack** checklist that
+separates:
+
+- what is already verified in this repo
+- what is only partially wired
+- what remains unimplemented

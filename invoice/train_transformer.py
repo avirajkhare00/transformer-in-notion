@@ -18,18 +18,7 @@ from tokenizers.processors import TemplateProcessing
 from torch.utils.data import DataLoader, TensorDataset
 from transformers import BertConfig, BertForSequenceClassification, PreTrainedTokenizerFast
 
-VOCAB = {
-    "[PAD]": 0,
-    "[UNK]": 1,
-    "[CLS]": 2,
-    "[SEP]": 3,
-    "[MASK]": 4,
-    "X": 5,
-    "O": 6,
-    ".": 7,
-}
-
-MOVE_LABELS = {index: f"move_{index}" for index in range(9)}
+SPECIAL_TOKENS = ["[PAD]", "[UNK]", "[CLS]", "[SEP]", "[MASK]"]
 
 
 @dataclass
@@ -43,19 +32,54 @@ def set_seed(seed: int) -> None:
     torch.manual_seed(seed)
 
 
-def load_dataset(dataset_path: Path) -> SampleSet:
+def load_dataset(dataset_path: Path) -> tuple[SampleSet, list[str]]:
     payload = json.loads(dataset_path.read_text())
-    texts = [sample["board"] for sample in payload["samples"]]
-    labels = [int(sample["bestMove"]) for sample in payload["samples"]]
-    return SampleSet(texts=texts, labels=labels)
+    texts = [sample["context"] for sample in payload["samples"]]
+    labels = [int(sample["label"]) for sample in payload["samples"]]
+    return SampleSet(texts=texts, labels=labels), list(payload["opLabels"])
 
 
-def build_tokenizer() -> PreTrainedTokenizerFast:
-    tokenizer = Tokenizer(WordLevel(vocab=VOCAB, unk_token="[UNK]"))
+def split_dataset(samples: SampleSet, eval_ratio: float, seed: int) -> tuple[SampleSet, SampleSet]:
+    indices = list(range(len(samples.texts)))
+    random.Random(seed).shuffle(indices)
+
+    eval_size = max(1, int(len(indices) * eval_ratio))
+    eval_indices = set(indices[:eval_size])
+
+    train_texts: list[str] = []
+    train_labels: list[int] = []
+    eval_texts: list[str] = []
+    eval_labels: list[int] = []
+
+    for index, (text, label) in enumerate(zip(samples.texts, samples.labels, strict=True)):
+        if index in eval_indices:
+            eval_texts.append(text)
+            eval_labels.append(label)
+        else:
+            train_texts.append(text)
+            train_labels.append(label)
+
+    return (
+        SampleSet(texts=train_texts, labels=train_labels),
+        SampleSet(texts=eval_texts, labels=eval_labels),
+    )
+
+
+def build_vocab(texts: list[str]) -> dict[str, int]:
+    vocab = {token: index for index, token in enumerate(SPECIAL_TOKENS)}
+    tokens = sorted({token for text in texts for token in text.split()})
+    for token in tokens:
+        if token not in vocab:
+            vocab[token] = len(vocab)
+    return vocab
+
+
+def build_tokenizer(vocab: dict[str, int]) -> PreTrainedTokenizerFast:
+    tokenizer = Tokenizer(WordLevel(vocab=vocab, unk_token="[UNK]"))
     tokenizer.pre_tokenizer = Whitespace()
     tokenizer.post_processor = TemplateProcessing(
         single="[CLS] $A [SEP]",
-        special_tokens=[("[CLS]", VOCAB["[CLS]"]), ("[SEP]", VOCAB["[SEP]"])],
+        special_tokens=[("[CLS]", vocab["[CLS]"]), ("[SEP]", vocab["[SEP]"])],
     )
 
     return PreTrainedTokenizerFast(
@@ -68,31 +92,43 @@ def build_tokenizer() -> PreTrainedTokenizerFast:
     )
 
 
-def encode_dataset(tokenizer: PreTrainedTokenizerFast, samples: SampleSet) -> dict[str, torch.Tensor]:
+def compute_max_length(texts: list[str]) -> int:
+    token_count = max(len(text.split()) for text in texts)
+    return max(16, min(96, token_count + 2))
+
+
+def encode_dataset(
+    tokenizer: PreTrainedTokenizerFast,
+    samples: SampleSet,
+    max_length: int,
+) -> dict[str, torch.Tensor]:
     encoded = tokenizer(
         samples.texts,
         padding="max_length",
         truncation=True,
-        max_length=16,
+        max_length=max_length,
         return_tensors="pt",
     )
     encoded["labels"] = torch.tensor(samples.labels, dtype=torch.long)
     return encoded
 
 
-def build_model() -> BertForSequenceClassification:
+def build_model(vocab_size: int, label_names: list[str]) -> BertForSequenceClassification:
+    id2label = {index: label for index, label in enumerate(label_names)}
+    label2id = {label: index for index, label in id2label.items()}
+
     config = BertConfig(
-        vocab_size=len(VOCAB),
+        vocab_size=vocab_size,
         hidden_size=128,
         num_hidden_layers=4,
         num_attention_heads=8,
         intermediate_size=256,
-        max_position_embeddings=32,
+        max_position_embeddings=128,
         type_vocab_size=2,
-        num_labels=9,
-        pad_token_id=VOCAB["[PAD]"],
-        label2id={label: index for index, label in MOVE_LABELS.items()},
-        id2label=MOVE_LABELS,
+        num_labels=len(label_names),
+        pad_token_id=0,
+        label2id=label2id,
+        id2label=id2label,
         classifier_dropout=0.0,
         hidden_dropout_prob=0.0,
         attention_probs_dropout_prob=0.0,
@@ -183,6 +219,9 @@ def save_and_export(
     export_dir: Path,
     metrics: dict[str, float],
     sample_count: int,
+    train_count: int,
+    eval_count: int,
+    skip_export: bool,
 ) -> None:
     if raw_dir.exists():
         shutil.rmtree(raw_dir)
@@ -191,8 +230,19 @@ def save_and_export(
     model.save_pretrained(raw_dir)
     tokenizer.save_pretrained(raw_dir)
     (raw_dir / "metadata.json").write_text(
-        json.dumps({"sampleCount": sample_count, **metrics}, indent=2)
+        json.dumps(
+            {
+                "sampleCount": sample_count,
+                "trainCount": train_count,
+                "evalCount": eval_count,
+                **metrics,
+            },
+            indent=2,
+        )
     )
+
+    if skip_export:
+        return
 
     if export_dir.exists():
         shutil.rmtree(export_dir)
@@ -230,15 +280,17 @@ def save_and_export(
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Train and export a tiny tic-tac-toe transformer.")
-    parser.add_argument("--dataset", type=Path, default=Path("training/tictactoe-dataset.json"))
-    parser.add_argument("--raw-dir", type=Path, default=Path("training/tictactoe-bert"))
-    parser.add_argument("--export-dir", type=Path, default=Path("models/tictactoe-bert"))
-    parser.add_argument("--epochs", type=int, default=180)
+    parser = argparse.ArgumentParser(description="Train and export a tiny invoice PSVM op transformer.")
+    parser.add_argument("--dataset", type=Path, default=Path("invoice/training/invoice-op-dataset.json"))
+    parser.add_argument("--raw-dir", type=Path, default=Path("invoice/training/invoice-op-bert"))
+    parser.add_argument("--export-dir", type=Path, default=Path("invoice/models/invoice-op-bert"))
+    parser.add_argument("--epochs", type=int, default=80)
     parser.add_argument("--batch-size", type=int, default=64)
     parser.add_argument("--lr", type=float, default=1e-3)
     parser.add_argument("--target-accuracy", type=float, default=0.995)
-    parser.add_argument("--seed", type=int, default=7)
+    parser.add_argument("--eval-ratio", type=float, default=0.1)
+    parser.add_argument("--seed", type=int, default=17)
+    parser.add_argument("--skip-export", action="store_true")
     return parser.parse_args()
 
 
@@ -253,17 +305,29 @@ def main() -> None:
     if not dataset_path.exists():
         raise FileNotFoundError(f"Dataset not found: {dataset_path}")
 
-    samples = load_dataset(dataset_path)
-    tokenizer = build_tokenizer()
-    encoded = encode_dataset(tokenizer, samples)
+    samples, label_names = load_dataset(dataset_path)
+    train_samples, eval_samples = split_dataset(samples, eval_ratio=args.eval_ratio, seed=args.seed)
 
-    dataset = TensorDataset(
-        encoded["input_ids"],
-        encoded["attention_mask"],
-        encoded["labels"],
+    vocab = build_vocab(train_samples.texts + eval_samples.texts)
+    tokenizer = build_tokenizer(vocab)
+    max_length = compute_max_length(train_samples.texts + eval_samples.texts)
+
+    train_encoded = encode_dataset(tokenizer, train_samples, max_length=max_length)
+    eval_encoded = encode_dataset(tokenizer, eval_samples, max_length=max_length)
+
+    train_dataset = TensorDataset(
+        train_encoded["input_ids"],
+        train_encoded["attention_mask"],
+        train_encoded["labels"],
     )
-    dataloader = DataLoader(dataset, batch_size=args.batch_size, shuffle=True)
-    eval_loader = DataLoader(dataset, batch_size=args.batch_size, shuffle=False)
+    eval_dataset = TensorDataset(
+        eval_encoded["input_ids"],
+        eval_encoded["attention_mask"],
+        eval_encoded["labels"],
+    )
+
+    train_loader = DataLoader(train_dataset, batch_size=args.batch_size, shuffle=True)
+    eval_loader = DataLoader(eval_dataset, batch_size=args.batch_size, shuffle=False)
 
     if torch.cuda.is_available():
         device = torch.device("cuda")
@@ -271,12 +335,15 @@ def main() -> None:
         device = torch.device("mps")
     else:
         device = torch.device("cpu")
-    print(f"training on {device} with {len(samples.texts)} samples")
+    print(
+        f"training on {device} with train={len(train_samples.texts)} eval={len(eval_samples.texts)} "
+        f"max_length={max_length} vocab={len(vocab)}"
+    )
 
-    model = build_model()
+    model = build_model(vocab_size=len(vocab), label_names=label_names)
     model, metrics = train_model(
         model=model,
-        train_loader=dataloader,
+        train_loader=train_loader,
         eval_loader=eval_loader,
         device=device,
         epochs=args.epochs,
@@ -296,10 +363,14 @@ def main() -> None:
         export_dir=export_dir,
         metrics=metrics,
         sample_count=len(samples.texts),
+        train_count=len(train_samples.texts),
+        eval_count=len(eval_samples.texts),
+        skip_export=args.skip_export,
     )
 
+    export_message = "raw checkpoint only" if args.skip_export else f"exported model to {export_dir}"
     print(
-        f"exported model to {export_dir} with accuracy={metrics['accuracy']:.4f} "
+        f"{export_message} with accuracy={metrics['accuracy']:.4f} "
         f"and train_loss={metrics['train_loss']:.4f}"
     )
 

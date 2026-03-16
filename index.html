@@ -52,6 +52,9 @@
                 <button id="ttt-ai-first" class="button button-secondary" type="button">
                   Model starts
                 </button>
+                <a class="button button-secondary button-link" href="tic-tac-toe.html">
+                  Standalone page
+                </a>
               </div>
             </div>
 
@@ -69,7 +72,11 @@
                     <pre id="ttt-prompt" class="code-block"></pre>
                   </div>
                   <div class="code-section">
-                    <p class="code-label">Program</p>
+                    <p class="code-label">Tool call</p>
+                    <div id="ttt-tool" class="tool-call-card"></div>
+                  </div>
+                  <div class="code-section">
+                    <p class="code-label">Program sketch</p>
                     <pre id="ttt-program" class="code-block"></pre>
                   </div>
                   <div class="code-section">
@@ -81,7 +88,7 @@
 
               <section class="mini-card">
                 <p class="mini-label">Readable log</p>
-                <ol id="ttt-log" class="trace-list"></ol>
+                <ol id="ttt-log" class="trace-list trace-list-scroll"></ol>
               </section>
             </div>
           </div>
@@ -111,7 +118,30 @@
                 <button id="sudoku-solve" class="button button-secondary" type="button">
                   Solve instantly
                 </button>
+                <a class="button button-secondary button-link" href="sudoku.html">
+                  Standalone page
+                </a>
               </div>
+              <section class="mini-card sudoku-source-card">
+                <p class="mini-label">Puzzle source</p>
+                <label class="field-label" for="sudoku-preset">Presets</label>
+                <select id="sudoku-preset" class="field-input field-select">
+                  <option value="custom">Bring your own</option>
+                </select>
+                <label class="field-label" for="sudoku-input">Bring your own</label>
+                <textarea
+                  id="sudoku-input"
+                  class="field-input field-textarea"
+                  spellcheck="false"
+                  rows="6"
+                ></textarea>
+                <div class="control-row control-row-compact">
+                  <button id="sudoku-load" class="button button-secondary" type="button">
+                    Load puzzle
+                  </button>
+                </div>
+                <p class="field-hint">Use 81 digits. `0` or `.` means blank.</p>
+              </section>
             </div>
 
             <div class="inspector-column">
@@ -128,7 +158,11 @@
                     <pre id="sudoku-prompt" class="code-block"></pre>
                   </div>
                   <div class="code-section">
-                    <p class="code-label">Program</p>
+                    <p class="code-label">Tool call</p>
+                    <div id="sudoku-tool" class="tool-call-card"></div>
+                  </div>
+                  <div class="code-section">
+                    <p class="code-label">Program sketch</p>
                     <pre id="sudoku-program" class="code-block"></pre>
                   </div>
                   <div class="code-section">
@@ -140,7 +174,7 @@
 
               <section class="mini-card">
                 <p class="mini-label">Readable log</p>
-                <ol id="sudoku-log" class="trace-list"></ol>
+                <ol id="sudoku-log" class="trace-list trace-list-scroll"></ol>
               </section>
             </div>
           </div>

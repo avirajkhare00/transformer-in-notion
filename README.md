@@ -1,64 +1,44 @@
 # Transformer in Notion
 
-This repo is a small embeddable demo site for Notion pages.
+This repo is a small embeddable demo site for browser-local problem-shaped VM
+prototypes.
 
-The current version deliberately keeps the stack simple, but it now adopts a
-Percepta-style surface:
+The default landing page now stays focused on two PSVM examples:
 
-- Tic-tac-toe with a visible local transformer policy trace
-- Sudoku with preset loading, custom puzzle input, and an animated browser-side WASM trace
-- Prompt -> pseudo-program -> execution trace panels for both demos
+- `invoice/` for compact business-logic execution
+- `soduku/` for compact search execution
 - Static files only, so GitHub Pages can host it directly
-- Separate standalone HTML entry pages for direct Notion embeds
-
-The embed story now has both halves:
-
-- Tic-tac-toe uses a tiny model bundle loaded locally in the browser
-- Sudoku uses a browser-side WebAssembly executor
+- Separate standalone HTML entry pages for direct embeds
 
 That keeps the deployment contract simple:
 
 `Notion page -> embed block -> hosted app -> browser runtime`
 
-Because the UI contract is explicit, the remaining solver logic can still be replaced with:
+Because the UI contract is explicit, the execution layer can still be replaced with:
 
 - a tiny in-browser model
 - a WASM runtime
 - or a hybrid model + executor path
 
-The repo now also includes two problem-shaped VM prototypes outside the main
-gallery:
-
 - `invoice/` - a small invoice-calculator PSVM with exact money arithmetic
 - `soduku/` - a 4x4 Sudoku PSVM with a streamed worker trace
 
-## What this branch adds
+## Current emphasis
 
-This branch moves the repo from a mock executor surface to real browser-side
-artifacts:
+The repo currently emphasizes the PSVM track:
 
-- Tic-tac-toe now loads a shipped ONNX model bundle from `models/tictactoe-bert/`
-  through Transformers.js.
-- The Tic-tac-toe bundle now ships both `onnx/model.onnx` and
-  `onnx/model_quantized.onnx` so browser runtimes that still request the
-  quantized filename do not 404 on Pages.
-- Sudoku now loads a shipped WebAssembly binary from `wasm/sudoku_solver.wasm`.
-- Sudoku now supports preset selection and bring-your-own 81-cell puzzle input
-  in the browser.
-- The existing prompt -> program -> trace UI stays the same, but the engines
-  behind the two cards are now different and real:
-  - local transformer weights for Tic-tac-toe
-  - local Rust/WASM executor for Sudoku
+- `invoice/` includes the deterministic runtime, worker UI, dataset export, and
+  a shipped local next-op model bundle
+- `soduku/` includes the deterministic runtime, worker UI, and canonical trace
+  surface for the first Sudoku-specific VM
 
-This is the intended split for the project:
-
-- small policy-style examples can use local model weights
-- longer exact traces can use a browser-side executor
+Other older pages still exist as separate routes, but they are no longer the
+main entry story.
 
 ## Why these demos
 
-The first gallery should prove one thing clearly: a Notion embed can host
-local weights or an executor-style runtime and still make computation feel
+The first gallery should prove one thing clearly: a browser page can host
+task-shaped runtimes with explicit traces and still make computation feel
 legible.
 
 That is why the early examples bias toward:
@@ -68,8 +48,8 @@ That is why the early examples bias toward:
 - visible traces instead of opaque results
 - short cold starts inside the browser
 
-This makes examples such as tic-tac-toe, 24 Game, sorting, maze search, and
-mini Sudoku stronger early showcases than larger games.
+This makes examples such as invoice checking, 4x4 Sudoku, 24 Game, sorting,
+maze search, and mini schedulers stronger early showcases than larger games.
 
 ## Why not bigger examples yet
 
@@ -95,9 +75,9 @@ Then open `http://localhost:8000`.
 ## Files
 
 - `LICENSE` - Apache-2.0 license for the repository
-- `index.html` - page shell and demo layout
-- `tic-tac-toe.html` - standalone Tic-tac-toe embed page
-- `sudoku.html` - standalone Sudoku embed page
+- `index.html` - PSVM-first landing page
+- `tic-tac-toe.html` - older standalone Tic-tac-toe demo route
+- `sudoku.html` - older standalone Sudoku demo route
 - `soduku/index.html` - standalone 4x4 Sudoku PSVM prototype
 - `soduku/app.mjs` - browser UI for the 4x4 Sudoku PSVM
 - `soduku/worker.mjs` - worker-side 4x4 Sudoku execution loop

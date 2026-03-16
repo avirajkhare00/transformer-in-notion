@@ -194,6 +194,14 @@ body.notion-embed-page::after {
   align-items: start;
 }
 
+.psvm-card-stack {
+  position: relative;
+  z-index: 1;
+  margin-top: 22px;
+  display: grid;
+  gap: 16px;
+}
+
 .board-column,
 .inspector-column {
   display: grid;

@@ -543,7 +543,7 @@ That is the core of the idea.
 
 ## Sharpest version of the thesis
 
-If Percepta's story is:
+If a general executor story is:
 
 > compile programs into a transformer executor
 

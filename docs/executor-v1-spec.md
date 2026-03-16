@@ -1,6 +1,6 @@
 # Executor V1 Spec
 
-This is the first serious step toward the Percepta-style goal:
+This is the first serious step toward a transformer-native executor:
 
 `program tokens -> transformer executes via next-trace-token prediction -> visible trace -> result`
 
@@ -34,7 +34,7 @@ V1 does not attempt:
 - one-shot `input -> final answer` reasoning
 - full WebAssembly
 - full Sudoku execution
-- Percepta-style fast-path decoding yet
+- specialized fast-path decoding yet
 
 The first success condition is much smaller:
 

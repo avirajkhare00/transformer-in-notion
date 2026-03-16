@@ -36,7 +36,7 @@ These are the best candidates if the goal is a **small, legible, embeddable** de
 | Unit/budget planner | `LLM + tool + verifier` | "Can I do this under $200?" | Parsed plan + checked totals | Great for visible tool-call traces |
 | Tiny invoice auditor | `WASM executor only` or `LLM + verifier` | Line items, tax rules, totals | Mismatch report | Exactness matters and errors are obvious |
 | Mini shipping planner | `LLM + WASM executor` | Box sizes, weight, destination rules | Cheapest valid packing option | Nice constraint-solving story |
-| Formula or DSL runner | `LLM + model + WASM executor` | Short program or natural-language description | Program, stack trace, result | Closest to Percepta-style execution |
+| Formula or DSL runner | `LLM + model + WASM executor` | Short program or natural-language description | Program, stack trace, result | Closest to transformer-native execution |
 | Support note router | `Tiny model only` | Short internal note | Team / priority / action tag | Tiny local model is enough |
 | Receipt field validator | `Tiny model + verifier` | Parsed merchant/date/total fields | Accepted fields + flagged conflicts | Model suggests, verifier guards |
 | Checklist planner | `LLM only` or `LLM + verifier` | Messy task notes | Ordered checklist | Good if the user wants help, not proof |

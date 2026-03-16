@@ -6,176 +6,104 @@
     <title>Pocket Solver Garden</title>
     <meta
       name="description"
-      content="Embeddable Tic-tac-toe and Sudoku demos built for a clean Notion embed."
+      content="Problem-shaped VM demos for browser-local execution."
     >
     <link rel="stylesheet" href="styles.css">
   </head>
   <body>
     <main class="page-shell">
       <section class="hero">
-        <p class="eyebrow">Embeddable computation demos</p>
+        <p class="eyebrow">Problem-shaped VM demos</p>
         <h1>Pocket Solver Garden</h1>
         <p class="lede">
-          Two small examples that fit naturally inside a Notion embed: a
-          local transformer for Tic-tac-toe and a browser-side Sudoku WASM
-          executor with an explicit trace.
+          Two browser-local PSVM examples with explicit state transitions,
+          worker execution, and inspectable traces. The landing page stays
+          focused on the task-shaped runtimes only.
         </p>
         <div class="pill-row">
           <span class="pill">Static site</span>
-          <span class="pill">Local model weights</span>
-          <span class="pill">WASM executor</span>
-          <span class="pill">Planner -> program -> trace</span>
+          <span class="pill">Custom ISA</span>
+          <span class="pill">Web Workers</span>
+          <span class="pill">Exact trace</span>
+          <span class="pill">Browser-local runtime</span>
           <span class="pill">GitHub Pages friendly</span>
-          <span class="pill">Easy to drop into Notion</span>
+          <span class="pill">Embeddable routes</span>
         </div>
       </section>
 
-      <section class="demo-grid" aria-label="solver demos">
+      <section class="demo-grid" aria-label="psvm demos">
         <article class="panel panel-coral">
           <div class="panel-head">
-            <p class="kicker">Demo 1</p>
-            <h2>Tic-tac-toe</h2>
+            <p class="kicker">PSVM 1</p>
+            <h2>Invoice</h2>
             <p class="panel-copy">
-              Play against a tiny local transformer policy trained on optimal
-              boards and watch its move distribution before every reply.
+              A compact invoice-calculation VM with explicit business ops,
+              exact money arithmetic, worker execution, and a shipped next-op
+              student bundle.
             </p>
           </div>
-
-          <div class="playground">
-            <div class="board-column">
-              <div id="ttt-status" class="status-card"></div>
-              <div id="ttt-board" class="ttt-board" aria-label="Tic-tac-toe board"></div>
-              <div class="control-row">
-                <button id="ttt-reset" class="button button-primary" type="button">
-                  New board
-                </button>
-                <button id="ttt-ai-first" class="button button-secondary" type="button">
-                  Model starts
-                </button>
-                <a class="button button-secondary button-link" href="tic-tac-toe.html">
-                  Standalone page
-                </a>
-              </div>
-            </div>
-
-            <div class="inspector-column">
-              <section class="mini-card">
-                <p class="mini-label">Model policy</p>
-                <div id="ttt-analysis" class="analysis-list"></div>
-              </section>
-
-              <section class="mini-card">
-                <p class="mini-label">Hybrid path</p>
-                <div class="code-stack">
-                  <div class="code-section">
-                    <p class="code-label">Prompt</p>
-                    <pre id="ttt-prompt" class="code-block"></pre>
-                  </div>
-                  <div class="code-section">
-                    <p class="code-label">Tool call</p>
-                    <div id="ttt-tool" class="tool-call-card"></div>
-                  </div>
-                  <div class="code-section">
-                    <p class="code-label">Program sketch</p>
-                    <pre id="ttt-program" class="code-block"></pre>
-                  </div>
-                  <div class="code-section">
-                    <p class="code-label">Execution trace</p>
-                    <pre id="ttt-trace" class="code-block code-block-trace"></pre>
-                  </div>
-                </div>
-              </section>
-
-              <section class="mini-card">
-                <p class="mini-label">Readable log</p>
-                <ol id="ttt-log" class="trace-list trace-list-scroll"></ol>
-              </section>
+          <div class="psvm-card-stack">
+            <section class="mini-card">
+              <p class="mini-label">Ops</p>
+              <ul class="rationale-list">
+                <li><code>READ_ITEM</code></li>
+                <li><code>LINE_TOTAL</code></li>
+                <li><code>ADD_SUBTOTAL</code></li>
+                <li><code>APPLY_TAX</code></li>
+                <li><code>EMIT_TOTAL</code></li>
+                <li><code>HALT</code></li>
+              </ul>
+            </section>
+            <section class="mini-card">
+              <p class="mini-label">What it proves</p>
+              <ul class="rationale-list">
+                <li>Minimum business-logic ISA can stay small and exact.</li>
+                <li>Worker execution is enough for a usable browser app loop.</li>
+                <li>The runtime is legible enough to become model supervision later.</li>
+              </ul>
+            </section>
+            <div class="control-row">
+              <a class="button button-primary button-link" href="invoice/">
+                Open invoice PSVM
+              </a>
             </div>
           </div>
         </article>
 
         <article class="panel panel-mint">
           <div class="panel-head">
-            <p class="kicker">Demo 2</p>
-            <h2>Sudoku</h2>
+            <p class="kicker">PSVM 2</p>
+            <h2>Sudoku 4x4</h2>
             <p class="panel-copy">
-              Animate a complete 9x9 solve from a browser-side WebAssembly
-              executor and keep the trace visible while the board fills.
+              A task-shaped Sudoku VM with canonical search actions, streamed
+              from a worker so the full solve stays inspectable from focus to
+              halt.
             </p>
           </div>
-
-          <div class="playground">
-            <div class="board-column">
-              <div id="sudoku-status" class="status-card"></div>
-              <div id="sudoku-board" class="sudoku-board" aria-label="Sudoku board"></div>
-              <div class="control-row">
-                <button id="sudoku-reset" class="button button-primary" type="button">
-                  Reload puzzle
-                </button>
-                <button id="sudoku-animate" class="button button-secondary" type="button">
-                  Animate solve
-                </button>
-                <button id="sudoku-solve" class="button button-secondary" type="button">
-                  Solve instantly
-                </button>
-                <a class="button button-secondary button-link" href="sudoku.html">
-                  Standalone page
-                </a>
-              </div>
-              <section class="mini-card sudoku-source-card">
-                <p class="mini-label">Puzzle source</p>
-                <label class="field-label" for="sudoku-preset">Presets</label>
-                <select id="sudoku-preset" class="field-input field-select">
-                  <option value="custom">Bring your own</option>
-                </select>
-                <label class="field-label" for="sudoku-input">Bring your own</label>
-                <textarea
-                  id="sudoku-input"
-                  class="field-input field-textarea"
-                  spellcheck="false"
-                  rows="6"
-                ></textarea>
-                <div class="control-row control-row-compact">
-                  <button id="sudoku-load" class="button button-secondary" type="button">
-                    Load puzzle
-                  </button>
-                </div>
-                <p class="field-hint">Use 81 digits. `0` or `.` means blank.</p>
-              </section>
-            </div>
-
-            <div class="inspector-column">
-              <section class="mini-card">
-                <p class="mini-label">Executor stats</p>
-                <div id="sudoku-stats" class="stats-grid"></div>
-              </section>
-
-              <section class="mini-card">
-                <p class="mini-label">Hybrid path</p>
-                <div class="code-stack">
-                  <div class="code-section">
-                    <p class="code-label">Prompt</p>
-                    <pre id="sudoku-prompt" class="code-block"></pre>
-                  </div>
-                  <div class="code-section">
-                    <p class="code-label">Tool call</p>
-                    <div id="sudoku-tool" class="tool-call-card"></div>
-                  </div>
-                  <div class="code-section">
-                    <p class="code-label">Program sketch</p>
-                    <pre id="sudoku-program" class="code-block"></pre>
-                  </div>
-                  <div class="code-section">
-                    <p class="code-label">Execution trace</p>
-                    <pre id="sudoku-trace" class="code-block code-block-trace"></pre>
-                  </div>
-                </div>
-              </section>
-
-              <section class="mini-card">
-                <p class="mini-label">Readable log</p>
-                <ol id="sudoku-log" class="trace-list trace-list-scroll"></ol>
-              </section>
+          <div class="psvm-card-stack">
+            <section class="mini-card">
+              <p class="mini-label">Ops</p>
+              <ul class="rationale-list">
+                <li><code>FOCUS_NEXT</code></li>
+                <li><code>READ_CANDS</code></li>
+                <li><code>PLACE</code></li>
+                <li><code>UNDO</code></li>
+                <li><code>FAIL</code></li>
+                <li><code>HALT</code></li>
+              </ul>
+            </section>
+            <section class="mini-card">
+              <p class="mini-label">What it proves</p>
+              <ul class="rationale-list">
+                <li>The VM surface can follow search semantics instead of generic bytecode.</li>
+                <li>Canonical traces make later transformer training realistic.</li>
+                <li>4x4 is small enough to debug ISA and trace issues before 9x9.</li>
+              </ul>
+            </section>
+            <div class="control-row">
+              <a class="button button-primary button-link" href="soduku/">
+                Open Sudoku PSVM
+              </a>
             </div>
           </div>
         </article>
@@ -183,42 +111,38 @@
 
       <section class="rationale-grid" aria-label="why these demos">
         <article class="mini-card rationale-card">
-          <p class="mini-label">Why these demos</p>
+          <p class="mini-label">Why PSVM first</p>
           <p class="rationale-copy">
-            The early gallery favors exact, visual problems with short state
-            representations. They are easy to verify, small enough for local
-            weights, and easy to explain as prompt, program, trace, and result.
+            The landing page now shows only the problem-shaped VM track. That
+            keeps the repo centered on the smallest sound ISA, canonical traces,
+            and exact worker runtimes.
           </p>
           <ul class="rationale-list">
-            <li>Tic-tac-toe gives instant interaction and obvious correctness.</li>
-            <li>Sudoku gives a longer, more mechanical WASM execution trace.</li>
-            <li>Next demos like 24 Game, sorting, or maze search keep the same shape.</li>
+            <li>Domain ops are easier to verify than generic execution tokens.</li>
+            <li>Short exact traces are better training targets than one-shot answers.</li>
+            <li>The same shape can grow into model-backed executors later.</li>
           </ul>
         </article>
 
         <article class="mini-card rationale-card">
-          <p class="mini-label">Why not yet</p>
+          <p class="mini-label">Routes kept separate</p>
           <p class="rationale-copy">
-            Bigger examples are deferred until the local model and executor path
-            is more mature.
+            The older transformer-policy and 9x9 WASM pages can still exist as
+            direct routes, but they are no longer the default story at `/`.
           </p>
           <ul class="rationale-list">
-            <li>Full chess needs stricter move legality and much stronger search.</li>
-            <li>Large puzzles increase model size, cold start, and browser cost.</li>
-            <li>Weak results break trust faster on complex games than on exact mini demos.</li>
+            <li>Landing page scope stays aligned with the PSVM direction.</li>
+            <li>Embeds can point straight at `/invoice/` or `/soduku/`.</li>
+            <li>The repo can still keep experimental routes without promoting them.</li>
           </ul>
         </article>
       </section>
 
       <footer class="footer-note">
         <p>
-          Tic-tac-toe now runs from local model weights in the embed. Sudoku now
-          runs from a browser-side WASM executor. Both demos share the same
-          prompt, program, trace, and result contract.
+          Default landing routes: <code>/invoice/</code> and <code>/soduku/</code>.
         </p>
       </footer>
     </main>
-
-    <script type="module" src="app.mjs"></script>
   </body>
 </html>

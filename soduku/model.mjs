@@ -1,7 +1,6 @@
 import { HARD_OP_LABELS } from "./hard-op-context.mjs";
 import {
   buildStructuredFeeds,
-  fetchStructuredModel,
   getOrtRuntime,
   softmax,
   topK,
@@ -22,8 +21,7 @@ async function loadSession() {
       let lastError = null;
       for (const modelUrl of MODEL_URLS) {
         try {
-          const modelBytes = await fetchStructuredModel(modelUrl.href);
-          return await ort.InferenceSession.create(modelBytes, {
+          return await ort.InferenceSession.create(modelUrl.href, {
             executionProviders: ["wasm"],
             graphOptimizationLevel: "all",
           });

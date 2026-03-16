@@ -1,3 +1,4 @@
+import { once } from "node:events";
 import { createWriteStream, mkdirSync, writeFileSync } from "node:fs";
 import { dirname, resolve, relative } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -23,6 +24,39 @@ const DEFAULT_OUTPUT_DIR = resolve(__dirname, "training/extreme");
 const DEFAULT_EVAL_PERCENT = 5;
 const DEFAULT_MIN_RATING = 0;
 const DEFAULT_STATUS_EVERY = 100;
+const WRITE_BUFFER_BYTES = 1 << 20;
+
+class BufferedLineWriter {
+  constructor(path) {
+    this.path = path;
+    this.stream = createWriteStream(path, { encoding: "utf8" });
+    this.buffer = "";
+  }
+
+  async writeLine(line) {
+    this.buffer += line;
+    if (this.buffer.length >= WRITE_BUFFER_BYTES) {
+      await this.flush();
+    }
+  }
+
+  async flush() {
+    if (!this.buffer) {
+      return;
+    }
+    const chunk = this.buffer;
+    this.buffer = "";
+    if (!this.stream.write(chunk)) {
+      await once(this.stream, "drain");
+    }
+  }
+
+  async close() {
+    await this.flush();
+    this.stream.end();
+    await once(this.stream, "finish");
+  }
+}
 
 function parseArgs(argv) {
   let input = DEFAULT_INPUT;
@@ -272,10 +306,10 @@ async function main() {
   const valueTrainPath = resolve(options.outputDir, "extreme-value-train.jsonl");
   const valueEvalPath = resolve(options.outputDir, "extreme-value-eval.jsonl");
 
-  const opTrain = createWriteStream(opTrainPath, { encoding: "utf8" });
-  const opEval = createWriteStream(opEvalPath, { encoding: "utf8" });
-  const valueTrain = createWriteStream(valueTrainPath, { encoding: "utf8" });
-  const valueEval = createWriteStream(valueEvalPath, { encoding: "utf8" });
+  const opTrain = new BufferedLineWriter(opTrainPath);
+  const opEval = new BufferedLineWriter(opEvalPath);
+  const valueTrain = new BufferedLineWriter(valueTrainPath);
+  const valueEval = new BufferedLineWriter(valueEvalPath);
 
   const splitCounts = {
     trainPuzzles: 0,
@@ -340,7 +374,7 @@ async function main() {
             strategy: result.strategy,
           });
 
-          opWriter.write(
+          await opWriter.writeLine(
             `${JSON.stringify({
               ...state,
               nextOp,
@@ -387,7 +421,7 @@ async function main() {
               strategy: result.strategy,
             });
 
-            valueWriter.write(
+            await valueWriter.writeLine(
               `${JSON.stringify({
                 ...state,
                 nextValue: String(event.value),
@@ -440,10 +474,10 @@ async function main() {
     }
   } finally {
     await Promise.all([
-      new Promise((resolveStream) => opTrain.end(resolveStream)),
-      new Promise((resolveStream) => opEval.end(resolveStream)),
-      new Promise((resolveStream) => valueTrain.end(resolveStream)),
-      new Promise((resolveStream) => valueEval.end(resolveStream)),
+      opTrain.close(),
+      opEval.close(),
+      valueTrain.close(),
+      valueEval.close(),
     ]);
   }
 

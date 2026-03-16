@@ -113,6 +113,7 @@ mature.
 Serve the repo root with any static file server:
 
 ```bash
+.venv/bin/python -m pip install -r requirements.txt
 python3 -m http.server 8000
 ```
 
@@ -122,20 +123,19 @@ Then open `http://localhost:8000`.
 
 - `LICENSE` - Apache-2.0 license for the repository
 - `index.html` - PSVM-first landing page
-- `tic-tac-toe.html` - older standalone Tic-tac-toe demo route
-- `sudoku.html` - older standalone Sudoku demo route
-- `sudoku-model.html` - standalone 9x9 Sudoku trace-token transformer probe
-- `sudoku-benchmark.html` - standalone 100-run WASM-only Sudoku benchmark page
+- `sudoku.html` - final Sudoku page with exact WASM solve, replay, and local model trace
 - `soduku/index.html` - standalone 4x4 Sudoku PSVM prototype
 - `soduku/app.mjs` - browser UI for the 4x4 Sudoku PSVM
 - `soduku/worker.mjs` - worker-side 4x4 Sudoku execution loop
 - `soduku/psvm4x4.mjs` - limited-op 4x4 Sudoku PSVM and canonical trace generator
 - `soduku/hard-op-context.mjs` - shared 9x9 hard-Sudoku next-op context builder
-- `soduku/model.mjs` - browser-side local next-op model loader for hard 9x9 Sudoku
-- `soduku/value-model.mjs` - browser-side local `PLACE`-value model loader for hard 9x9 Sudoku
-- `soduku/model-worker.mjs` - worker-side 9x9 next-op probing loop against an exact teacher trace
-- `soduku/models/hard-op-bert/` - shipped ONNX bundle for the hard 9x9 next-op classifier
-- `soduku/models/hard-value-bert/` - shipped ONNX bundle for the hard 9x9 `PLACE`-value classifier
+- `soduku/model.mjs` - browser-side structured next-op model loader for hard 9x9 Sudoku
+- `soduku/value-model.mjs` - browser-side structured `PLACE`-value model loader for hard 9x9 Sudoku
+- `soduku/model-worker.mjs` - worker-side 9x9 trace probe loop against the exact reference trace
+- `soduku/structured-onnx.mjs` - ONNX Runtime tensor feed builder for structured Sudoku state
+- `soduku/structured_transformer_common.py` - shared structured transformer trainer/export helpers
+- `soduku/models/hard-op-structured/` - shipped structured ONNX bundle for hard 9x9 next-op prediction
+- `soduku/models/hard-value-structured/` - shipped structured ONNX bundle for hard 9x9 `PLACE`-value prediction
 - `invoice/index.html` - standalone invoice-calculator PSVM prototype
 - `invoice/app.mjs` - browser UI for the invoice PSVM
 - `invoice/worker.mjs` - worker-side invoice execution loop
@@ -155,11 +155,12 @@ Then open `http://localhost:8000`.
 - `docs/use-case-matrix.md` - architecture combinations and small real-world use cases
 - `soduku/README.md` - Sudoku-specific workspace note and the recommended first benchmark
 - `soduku/export_hard_dataset.mjs` - hard-puzzle next-op dataset exporter with puzzle-held-out splits
-- `soduku/train_transformer.py` - tiny hard-set Sudoku next-op trainer/exporter
+- `soduku/train_transformer.py` - structured hard-set Sudoku next-op trainer/exporter
+- `soduku/export_value_dataset.mjs` - structured hard-set `PLACE`-value dataset exporter
+- `soduku/train_value_transformer.py` - structured hard-set `PLACE`-value trainer/exporter
+- `requirements.txt` - Python training/export dependencies for the local model path
 - `styles.css` - visual system tuned for an iframe or Notion embed
 - `app.mjs` - UI wiring and animations
-- `logic/tictactoe.mjs` - minimax engine
-- `logic/tictactoe-model.mjs` - local Transformers.js runtime wrapper
 - `logic/sudoku.mjs` - Sudoku board parsing and formatting helpers
 - `logic/sudoku-wasm.mjs` - WebAssembly loader and JS wrapper for Sudoku execution
 - `logic/executor.mjs` - prompt/program/trace artifact builder
@@ -173,14 +174,12 @@ Then open `http://localhost:8000`.
 ## GitHub Pages
 
 The workflow in `.github/workflows/pages.yml` publishes the repo root as a Pages site.
-Once Pages is enabled, any of these URLs can be pasted straight into a Notion
+Once Pages is enabled, these URLs can be pasted straight into a Notion
 embed block:
 
 - `/`
-- `/tic-tac-toe.html`
 - `/sudoku.html`
-- `/sudoku-model.html`
-- `/sudoku-benchmark.html`
+- `/weiqi/`
 
 ## Training the tic-tac-toe model
 
@@ -240,11 +239,10 @@ also includes:
 - `scripts/benchmark_sudoku_hard.mjs` - apples-to-apples policy benchmark of the same JS DFS solver
 - `scripts/export_sudoku_hard_traces.mjs` - trace export for the hard corpus
 - `soduku/export_hard_dataset.mjs` - held-out hard-set next-op dataset export
-- `soduku/train_transformer.py` - tiny hard-set next-op student training
-- `soduku/export_value_dataset.mjs` - held-out hard-set `PLACE`-value dataset export
-- `soduku/train_value_transformer.py` - tiny hard-set `PLACE`-value student training
-- `sudoku-benchmark.html` - browser page for 100 isolated WASM solves on one puzzle
-- `sudoku-model.html` - browser page where local transformers emit the next op token and `PLACE` value token on the exact 9x9 trace
+- `soduku/train_transformer.py` - structured hard-set next-op training/export
+- `soduku/export_value_dataset.mjs` - held-out hard-set structured `PLACE`-value dataset export
+- `soduku/train_value_transformer.py` - structured hard-set `PLACE`-value training/export
+- `requirements.txt` - one-file Python env for the structured training/export path
 
 ## Verified
 
@@ -260,14 +258,13 @@ also includes:
   the original clues. On the current curated hard set, MRV cuts search work by
   large margins on every puzzle, while still losing wall-clock time on `Arto
   Inkala 2012` because chooser overhead increases candidate lookups.
-- The first hard-set Sudoku student path is now real:
-  - exported dataset size in the smoke run: `12,591` samples
-  - eval split: held-out `AI Escargot`
-  - tiny next-op classifier smoke accuracy: `96.79%`
-- The next trace-token step is now real too:
+- The structured hard-set Sudoku model path is now real:
+  - exported next-op dataset size: `60,591` samples
   - exported `PLACE`-value dataset size: `54,029` samples
   - eval split: held-out `AI Escargot`
-  - tiny `PLACE`-value classifier smoke accuracy: `100.00%`
+  - structured next-op model accuracy: `97.12%`
+  - structured `PLACE`-value model accuracy: `96.35%`
+  - both ONNX bundles are quantized and loaded directly through ONNX Runtime in the browser
 - `node --check` passes for the frontend modules, and `cargo check` passes for
   the Rust executor crate.
 

@@ -113,14 +113,16 @@ function buildSamplesForPreset(preset, options) {
         throw new Error("PLACE event row/col does not match the active focus.");
       }
 
+      const state = buildHardOpContext({
+        board,
+        focus,
+        historyOps,
+        historyWindow: options.historyWindow,
+        strategy: result.strategy,
+      });
+
       samples.push({
-        context: buildHardOpContext({
-          board,
-          focus,
-          historyOps,
-          historyWindow: options.historyWindow,
-          strategy: result.strategy,
-        }),
+        ...state,
         nextValue: String(event.value),
         label: event.value - 1,
         split: options.evalPuzzles.has(preset.id) ? "eval" : "train",
@@ -182,6 +184,7 @@ function main() {
 
   const payload = {
     generator: "soduku/export_value_dataset.mjs",
+    format: "structured-state-v1",
     valueLabels: VALUE_LABELS,
     historyWindow: options.historyWindow,
     limitPerPuzzle: options.limitPerPuzzle,

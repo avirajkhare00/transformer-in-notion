@@ -1,59 +1,55 @@
-const TRANSFORMERS_CDN =
-  "https://cdn.jsdelivr.net/npm/@huggingface/transformers@3.8.1/+esm";
-const MODEL_ID = "hard-op-bert";
+import { HARD_OP_LABELS } from "./hard-op-context.mjs";
+import { buildStructuredFeeds, getOrtRuntime, softmax, topK } from "./structured-onnx.mjs";
 
-let runtimePromise = null;
-let classifierPromise = null;
+const MODEL_URL = new URL("./models/hard-op-structured/onnx/model_quantized.onnx", import.meta.url);
 
-function normalizeClassifierBatchOutput(result) {
-  if (!Array.isArray(result)) {
-    return [];
-  }
-  if (result.length === 0) {
-    return [];
-  }
-  if (Array.isArray(result[0])) {
-    return result;
-  }
-  return [result];
-}
+let sessionPromise = null;
 
-async function getRuntime() {
-  if (!runtimePromise) {
-    runtimePromise = import(TRANSFORMERS_CDN);
-  }
-  return runtimePromise;
-}
-
-async function loadClassifier() {
-  if (!classifierPromise) {
-    classifierPromise = (async () => {
-      const { env, pipeline } = await getRuntime();
-      env.allowLocalModels = true;
-      env.allowRemoteModels = false;
-      env.localModelPath = new URL("./models/", import.meta.url).pathname;
-
-      return pipeline("text-classification", MODEL_ID, {
-        local_files_only: true,
-        device: "wasm",
-        dtype: "fp32",
+async function loadSession() {
+  if (!sessionPromise) {
+    sessionPromise = (async () => {
+      const ort = await getOrtRuntime();
+      ort.env.wasm.numThreads = 1;
+      return ort.InferenceSession.create(MODEL_URL.href, {
+        executionProviders: ["wasm"],
+        graphOptimizationLevel: "all",
       });
     })();
   }
-  return classifierPromise;
+  return sessionPromise;
+}
+
+function decodeLogits(batchLogits, topKLimit) {
+  return batchLogits.map((logits) =>
+    topK(softmax(logits), HARD_OP_LABELS, topKLimit).map((item) => ({
+      op: item.label,
+      score: item.score,
+    }))
+  );
+}
+
+function normalizeLogits(logitsData, batchSize) {
+  const classCount = HARD_OP_LABELS.length;
+  const rows = [];
+  for (let index = 0; index < batchSize; index += 1) {
+    const start = index * classCount;
+    rows.push(Array.from(logitsData.slice(start, start + classCount)));
+  }
+  return rows;
 }
 
 export async function warmHardSudokuModel() {
-  await loadClassifier();
+  await loadSession();
 }
 
 export async function predictHardSudokuNextOps(
   contexts,
-  topK = 3,
-  batchSize = 128,
+  topKLimit = 3,
+  batchSize = 256,
   onProgress = null
 ) {
-  const classifier = await loadClassifier();
+  const session = await loadSession();
+  const ort = await getOrtRuntime();
   const inputs = Array.isArray(contexts) ? contexts : [contexts];
   const allPredictions = [];
 
@@ -63,19 +59,11 @@ export async function predictHardSudokuNextOps(
 
   for (let index = 0; index < inputs.length; index += batchSize) {
     const batch = inputs.slice(index, index + batchSize);
-    const results = normalizeClassifierBatchOutput(
-      await classifier(batch, {
-        top_k: topK,
-      })
-    );
-    allPredictions.push(
-      ...results.map((items) =>
-        items.map((item) => ({
-          op: item.label,
-          score: item.score,
-        }))
-      )
-    );
+    const feeds = buildStructuredFeeds(ort, batch);
+    const output = await session.run(feeds);
+    const logits = output.logits ?? output[session.outputNames[0]];
+    const decoded = decodeLogits(normalizeLogits(logits.data, batch.length), topKLimit);
+    allPredictions.push(...decoded);
 
     if (typeof onProgress === "function") {
       onProgress({
@@ -88,7 +76,7 @@ export async function predictHardSudokuNextOps(
   return allPredictions;
 }
 
-export async function predictHardSudokuNextOp(context, topK = 3) {
-  const [predictions] = await predictHardSudokuNextOps([context], topK, 1);
+export async function predictHardSudokuNextOp(context, topKLimit = 3) {
+  const [predictions] = await predictHardSudokuNextOps([context], topKLimit, 1);
   return predictions;
 }

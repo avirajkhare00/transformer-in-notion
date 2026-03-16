@@ -147,13 +147,13 @@ claims about "better" solving.
 
 ## Hard-set students
 
-There are now two 9x9 hard-set student paths.
+There are now two 9x9 hard-set local-model paths.
 
-They are still **trace-token students**, not a full learned Sudoku executor.
+They are still **trace-token probes**, not a full learned Sudoku executor.
 
 What the first one does:
 
-- uses the deterministic MRV solver as teacher
+- uses the deterministic MRV solver as the exact reference path
 - exports `(context -> next op)` samples from hard traces
 - splits train and eval by puzzle id, not by random trace step
 - trains a tiny local classifier on that held-out split
@@ -164,17 +164,18 @@ trace prefixes into both train and eval and give misleading numbers.
 Example flow:
 
 ```bash
+.venv/bin/python -m pip install -r requirements.txt
 node soduku/export_hard_dataset.mjs --eval-puzzles ai-escargot
-.venv/bin/python soduku/train_transformer.py --skip-export
+.venv/bin/python soduku/train_transformer.py
 ```
 
-In the smoke run used for this branch, the held-out `AI Escargot` split reached
-`96.79%` eval accuracy with a tiny op classifier after the board context was
-tokenized at the cell level rather than treated as one opaque string token.
+The current structured-state run reached `97.12%` eval accuracy on held-out
+`AI Escargot`, using fixed integer tensors for board state, focus cell,
+candidate mask, recent ops, filled count, and search depth.
 
 What the second one does:
 
-- uses the same deterministic MRV teacher trace
+- uses the same deterministic MRV reference trace
 - exports `(focused context -> next PLACE value)` samples
 - keeps the same puzzle-held-out eval split
 - trains a tiny local classifier that predicts the branch value token
@@ -186,8 +187,8 @@ node soduku/export_value_dataset.mjs --eval-puzzles ai-escargot
 .venv/bin/python soduku/train_value_transformer.py
 ```
 
-In the smoke run used for this branch, the held-out `AI Escargot` split reached
-`100.00%` eval accuracy on `54,029` supervised `PLACE`-value samples.
+The current structured-state run reached `96.35%` eval accuracy on `54,029`
+held-out `PLACE`-value samples from the same hard-set curriculum.
 
 ## Best action space
 

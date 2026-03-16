@@ -5,16 +5,20 @@ import { fileURLToPath } from "node:url";
 import { HARD_SUDOKU_PRESETS } from "../logic/sudoku-hard.mjs";
 import {
   cloneSudokuBoard,
-  countFilledSudokuCells,
   parseSudoku,
   solveSudokuWithTrace,
 } from "../logic/sudoku.mjs";
+import {
+  HARD_OP_HISTORY_WINDOW,
+  HARD_OP_LABELS,
+  applyHardTraceEvent,
+  buildHardOpContext,
+} from "./hard-op-context.mjs";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
-const OP_LABELS = Object.freeze(["FOCUS_NEXT", "PLACE", "UNDO"]);
 const DEFAULT_OUTPUT = resolve(__dirname, "training/hard-op-dataset.json");
-const DEFAULT_HISTORY_WINDOW = 8;
+const DEFAULT_HISTORY_WINDOW = HARD_OP_HISTORY_WINDOW;
 const DEFAULT_LIMIT_PER_PUZZLE = 20_000;
 const DEFAULT_EVAL_PUZZLES = ["ai-escargot"];
 
@@ -94,50 +98,6 @@ function takeEvenlyDistributedSamples(samples, limit) {
   return selected;
 }
 
-function buildContext({ board, focus, historyOps, historyWindow, strategy }) {
-  const history =
-    historyOps.length === 0
-      ? "START"
-      : historyOps.slice(-historyWindow).join(" ");
-  const boardTokens = board
-    .flat()
-    .map((value) => (value === 0 ? "." : String(value)))
-    .join(" ");
-  const focusRow = focus ? String(focus.row + 1) : "none";
-  const focusCol = focus ? String(focus.col + 1) : "none";
-  const candidateTokens =
-    focus && focus.candidates.length > 0 ? focus.candidates.join(" ") : "none";
-
-  return [
-    `strategy ${strategy}`,
-    `board ${boardTokens}`,
-    `filled ${countFilledSudokuCells(board)}`,
-    `focus_row ${focusRow}`,
-    `focus_col ${focusCol}`,
-    `cands ${candidateTokens}`,
-    `history ${history}`,
-  ].join(" ");
-}
-
-function applyEvent(board, event, focus) {
-  switch (event.type) {
-    case "focus":
-      return {
-        row: event.row,
-        col: event.col,
-        candidates: [...event.candidates],
-      };
-    case "place":
-      board[event.row][event.col] = event.value;
-      return focus;
-    case "backtrack":
-      board[event.row][event.col] = 0;
-      return focus;
-    default:
-      throw new Error(`Unsupported Sudoku trace event: ${event.type}`);
-  }
-}
-
 function buildSamplesForPreset(preset, options) {
   const startBoard = parseSudoku(preset.puzzle);
   const result = solveSudokuWithTrace(startBoard, { strategy: "mrv" });
@@ -149,19 +109,20 @@ function buildSamplesForPreset(preset, options) {
   for (let traceIndex = 0; traceIndex < result.trace.length; traceIndex += 1) {
     const event = result.trace[traceIndex];
     const nextOp = eventToOp(event);
-    const label = OP_LABELS.indexOf(nextOp);
+    const label = HARD_OP_LABELS.indexOf(nextOp);
     if (label < 0) {
       throw new Error(`Unknown Sudoku op label: ${nextOp}`);
     }
 
+    const state = buildHardOpContext({
+      board,
+      focus,
+      historyOps,
+      historyWindow: options.historyWindow,
+    });
+
     samples.push({
-      context: buildContext({
-        board,
-        focus,
-        historyOps,
-        historyWindow: options.historyWindow,
-        strategy: result.strategy,
-      }),
+      ...state,
       nextOp,
       label,
       split: options.evalPuzzles.has(preset.id) ? "eval" : "train",
@@ -174,7 +135,7 @@ function buildSamplesForPreset(preset, options) {
       value: typeof event.value === "number" ? event.value : null,
     });
 
-    focus = applyEvent(board, event, focus);
+    focus = applyHardTraceEvent(board, event, focus);
     historyOps.push(nextOp);
   }
 
@@ -204,7 +165,8 @@ function main() {
 
   const payload = {
     generator: "soduku/export_hard_dataset.mjs",
-    opLabels: OP_LABELS,
+    format: "structured-state-v1",
+    opLabels: HARD_OP_LABELS,
     historyWindow: options.historyWindow,
     limitPerPuzzle: options.limitPerPuzzle,
     evalPuzzleIds: [...options.evalPuzzles],

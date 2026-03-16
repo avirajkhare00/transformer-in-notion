@@ -196,6 +196,8 @@ def save_and_export(
 
     if export_dir.exists():
         shutil.rmtree(export_dir)
+    export_dir.mkdir(parents=True, exist_ok=True)
+    onnx_dir = export_dir / "onnx"
 
     optimum_cli = Path(sys.executable).parent / "optimum-cli"
     command = [
@@ -206,7 +208,7 @@ def save_and_export(
         str(raw_dir),
         "--task",
         "text-classification",
-        str(export_dir),
+        str(onnx_dir),
     ]
     subprocess.run(command, check=True)
 

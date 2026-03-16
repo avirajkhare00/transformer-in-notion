@@ -25,6 +25,24 @@ Because the UI contract is explicit, the remaining solver logic can still be rep
 - a WASM runtime
 - or a hybrid model + executor path
 
+## What this branch adds
+
+This branch moves the repo from a mock executor surface to real browser-side
+artifacts:
+
+- Tic-tac-toe now loads a shipped ONNX model bundle from `models/tictactoe-bert/`
+  through Transformers.js.
+- Sudoku now loads a shipped WebAssembly binary from `wasm/sudoku_solver.wasm`.
+- The existing prompt -> program -> trace UI stays the same, but the engines
+  behind the two cards are now different and real:
+  - local transformer weights for Tic-tac-toe
+  - local Rust/WASM executor for Sudoku
+
+This is the intended split for the project:
+
+- small policy-style examples can use local model weights
+- longer exact traces can use a browser-side executor
+
 ## Why these demos
 
 The first gallery should prove one thing clearly: a Notion embed can host
@@ -72,10 +90,12 @@ Then open `http://localhost:8000`.
 - `logic/sudoku.mjs` - Sudoku board parsing and formatting helpers
 - `logic/sudoku-wasm.mjs` - WebAssembly loader and JS wrapper for Sudoku execution
 - `logic/executor.mjs` - prompt/program/trace artifact builder
+- `models/tictactoe-bert/` - shipped ONNX model bundle for the Tic-tac-toe demo
 - `scripts/export_tictactoe_dataset.mjs` - dataset export from the oracle solver
 - `scripts/train_tictactoe_transformer.py` - train + ONNX export for the browser model
 - `scripts/build_sudoku_wasm.sh` - build and copy the browser Sudoku executor
 - `wasm/sudoku-executor/` - Rust crate compiled to WebAssembly
+- `wasm/sudoku_solver.wasm` - shipped browser runtime for the Sudoku demo
 
 ## GitHub Pages
 
@@ -104,6 +124,18 @@ sh scripts/build_sudoku_wasm.sh
 
 That writes the runtime artifact to `wasm/sudoku_solver.wasm`, which the page
 loads directly with `WebAssembly.instantiate`.
+
+## Verified
+
+- The exported Tic-tac-toe ONNX bundle reached `99.54%` accuracy on the full
+  `4,520`-board oracle dataset and predicts center on the empty board.
+- The Sudoku WASM executor returns the same solved grid and the same traced
+  search summary as the earlier JS reference path:
+  - `458` trace events
+  - `173` placements
+  - `117` backtracks
+- `node --check` passes for the frontend modules, and `cargo check` passes for
+  the Rust executor crate.
 
 ## Next steps
 

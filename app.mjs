@@ -861,7 +861,7 @@ function handleSudokuModelMessage(runId, message) {
   }
 
   if (data.type === "start") {
-    sudokuModelState.status = `Teacher trace ready. ${data.traceLength} op steps queued.`;
+    sudokuModelState.status = `Reference trace ready. ${data.traceLength} op steps queued.`;
     sudokuModelState.traceLength = data.traceLength ?? sudokuModelState.traceLength;
     renderSudoku();
     return;
@@ -1235,7 +1235,7 @@ function renderSudokuModelStats() {
       value: formatSudokuDuration(sudokuModelState.elapsedMs),
     },
     {
-      label: "Teacher trace",
+      label: "Reference trace",
       value: sudokuModelState.traceLength || "—",
     },
   ];
@@ -1294,7 +1294,7 @@ function renderSudokuFlow() {
       detail: sudokuState.isLoading
         ? `${formatSudokuDuration(getCurrentSudokuSolveMs())} … solving`
         : sudokuState.result
-          ? `${formatSudokuDuration(sudokuState.solveElapsedMs)} · ${sudokuState.result.trace.length} events`
+          ? `${formatSudokuDuration(sudokuState.solveElapsedMs)} · ${sudokuState.result.trace.length} exact events`
           : "warming exact runtime",
       active: sudokuState.isLoading,
     },

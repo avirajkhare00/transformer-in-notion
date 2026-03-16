@@ -83,7 +83,47 @@
 
               <section class="mini-card">
                 <p class="mini-label">Model to VM</p>
-                <div id="sudoku-flow" class="flow-strip"></div>
+                <div id="sudoku-flow" class="flow-strip">
+                  <div class="flow-node">
+                    <div class="flow-node-head">
+                      <span class="flow-node-title">Board state</span>
+                      <span class="flow-badge">input</span>
+                    </div>
+                    <p class="flow-node-body">Load a Sudoku grid and expose the exact rule state.</p>
+                  </div>
+                  <span class="flow-arrow">→</span>
+                  <div class="flow-node">
+                    <div class="flow-node-head">
+                      <span class="flow-node-title">Local transformer</span>
+                      <span class="flow-badge">model</span>
+                    </div>
+                    <p class="flow-node-body">Predict the next PSVM op and `PLACE` value tokens.</p>
+                  </div>
+                  <span class="flow-arrow">→</span>
+                  <div class="flow-node">
+                    <div class="flow-node-head">
+                      <span class="flow-node-title">PSVM ops</span>
+                      <span class="flow-badge">ops</span>
+                    </div>
+                    <p class="flow-node-body">FOCUS_NEXT · READ_CANDS · PLACE · UNDO · FAIL · HALT</p>
+                  </div>
+                  <span class="flow-arrow">→</span>
+                  <div class="flow-node">
+                    <div class="flow-node-head">
+                      <span class="flow-node-title">WASM executor</span>
+                      <span class="flow-badge">exact</span>
+                    </div>
+                    <p class="flow-node-body">Apply exact rules, generate the trace, and produce the solved grid.</p>
+                  </div>
+                  <span class="flow-arrow">→</span>
+                  <div class="flow-node">
+                    <div class="flow-node-head">
+                      <span class="flow-node-title">Replay</span>
+                      <span class="flow-badge">trace</span>
+                    </div>
+                    <p class="flow-node-body">Animate the exact trace or jump straight to the final board.</p>
+                  </div>
+                </div>
               </section>
 
               <section class="mini-card">

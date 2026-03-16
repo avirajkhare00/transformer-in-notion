@@ -184,7 +184,7 @@ async function scoreTeacherTrace(initialBoard, result) {
     phase: "build-contexts",
     completed: 0,
     total: result.trace.length,
-    message: `Building teacher contexts 0 / ${result.trace.length}.`,
+    message: `Building reference contexts 0 / ${result.trace.length}.`,
   });
   const { opContexts, valueTasks } = await buildTeacherContexts(initialBoard, result, ({
     completed,
@@ -194,7 +194,7 @@ async function scoreTeacherTrace(initialBoard, result) {
       phase: "build-contexts",
       completed,
       total,
-      message: `Building teacher contexts ${completed} / ${total}.`,
+      message: `Building reference contexts ${completed} / ${total}.`,
     });
   });
 
@@ -290,7 +290,7 @@ async function runModelTrace(puzzle) {
   const initialBoard = parseSudoku(puzzle);
   const result = solveSudokuWithTrace(initialBoard, { strategy: "mrv" });
   if (!result.solved) {
-    throw new Error("Deterministic teacher trace failed to solve the puzzle.");
+    throw new Error("Deterministic reference trace failed to solve the puzzle.");
   }
 
   self.postMessage({

@@ -31,6 +31,7 @@ gallery:
 
 - `invoice/` - a small invoice-calculator PSVM with exact money arithmetic
 - `soduku/` - a 4x4 Sudoku PSVM with a streamed worker trace
+- `weiqi/` - a 5x5 Weiqi capture PSVM with exact local rules and a streamed worker trace
 
 ## What this branch adds
 
@@ -111,6 +112,11 @@ Then open `http://localhost:8000`.
 - `invoice/train_transformer.py` - tiny invoice next-op transformer trainer/exporter
 - `invoice/models/invoice-op-bert/` - shipped ONNX bundle for the invoice next-op student
 - `invoice/README.md` - invoice-calculator PSVM note and op-set summary
+- `weiqi/index.html` - standalone 5x5 Weiqi PSVM prototype
+- `weiqi/app.mjs` - browser UI for the Weiqi PSVM
+- `weiqi/worker.mjs` - worker-side Weiqi search loop
+- `weiqi/psvm5x5.mjs` - 5x5 Weiqi rules engine and bounded capture solver
+- `weiqi/README.md` - Weiqi-specific workspace note and VM scope
 - `docs/executor-v1-spec.md` - v1 transformer-executor spec and training target
 - `docs/paper-idea-problem-shaped-vms.md` - paper note for custom task-shaped VMs in browser-local transformers
 - `docs/use-case-matrix.md` - architecture combinations and small real-world use cases
@@ -178,6 +184,7 @@ The current prototype split is:
 
 - `invoice/` - exact invoice calculation expressed as a compact PSVM and executed in a Web Worker
 - `soduku/` - 4x4 Sudoku search expressed as a compact PSVM and executed in a Web Worker
+- `weiqi/` - 5x5 Weiqi capture problems expressed as a compact PSVM and executed in a Web Worker
 
 Neither browser prototype is transformer-backed yet. They are the deterministic
 execution substrates that the local model will eventually learn to imitate or

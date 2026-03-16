@@ -208,13 +208,28 @@
             <li>Weak results break trust faster on complex games than on exact mini demos.</li>
           </ul>
         </article>
+
+        <article class="mini-card rationale-card">
+          <p class="mini-label">New PSVM</p>
+          <p class="rationale-copy">
+            The new Weiqi prototype keeps the board small and the op set tight:
+            exact 5x5 capture problems with worker-side search and a visible
+            move/capture/undo trace.
+          </p>
+          <div class="control-row" style="margin-top: 14px;">
+            <a class="button button-secondary button-link" href="weiqi/">
+              Open Weiqi PSVM
+            </a>
+          </div>
+        </article>
       </section>
 
       <footer class="footer-note">
         <p>
           Tic-tac-toe now runs from local model weights in the embed. Sudoku now
-          runs from a browser-side WASM executor. Both demos share the same
-          prompt, program, trace, and result contract.
+          runs from a browser-side WASM executor. The PSVM track now also
+          includes a small-board Weiqi capture prototype. All of them share the
+          same prompt, program, trace, and result contract.
         </p>
       </footer>
     </main>

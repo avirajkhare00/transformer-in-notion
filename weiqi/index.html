@@ -1,0 +1,394 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Weiqi PSVM Prototype</title>
+    <style>
+      :root {
+        color-scheme: light;
+        --paper: #f6eddc;
+        --ink: #1f1a17;
+        --muted: #6b6259;
+        --card: rgba(255, 255, 255, 0.84);
+        --line: rgba(31, 26, 23, 0.12);
+        --accent: #1f6c57;
+        --busy: #a46510;
+        --bad: #c14b3f;
+        --good: #1e7b48;
+        --board: #e6c690;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        min-height: 100vh;
+        background:
+          radial-gradient(circle at top left, rgba(31, 108, 87, 0.12), transparent 28%),
+          radial-gradient(circle at bottom right, rgba(230, 198, 144, 0.26), transparent 30%),
+          var(--paper);
+        color: var(--ink);
+        font-family: Menlo, Consolas, Monaco, "Courier New", monospace;
+      }
+
+      main {
+        width: min(1260px, calc(100vw - 32px));
+        margin: 0 auto;
+        padding: 32px 0 48px;
+      }
+
+      .hero {
+        margin-bottom: 20px;
+      }
+
+      .eyebrow {
+        margin: 0 0 8px;
+        color: var(--muted);
+        font-size: 13px;
+        letter-spacing: 0.18em;
+        text-transform: uppercase;
+      }
+
+      h1,
+      h2 {
+        font-family: Georgia, "Times New Roman", serif;
+        margin: 0;
+      }
+
+      h1 {
+        font-size: clamp(2.5rem, 5vw, 4.4rem);
+        line-height: 0.95;
+      }
+
+      .subtitle {
+        max-width: 70ch;
+        margin: 16px 0 0;
+        color: var(--muted);
+        line-height: 1.68;
+      }
+
+      .layout {
+        display: grid;
+        grid-template-columns: minmax(0, 1.05fr) minmax(420px, 0.95fr);
+        gap: 20px;
+      }
+
+      .card {
+        border: 1px solid var(--line);
+        border-radius: 24px;
+        background: var(--card);
+        backdrop-filter: blur(16px);
+        box-shadow: 0 22px 44px rgba(24, 33, 47, 0.08);
+      }
+
+      .controls {
+        padding: 20px;
+        margin-bottom: 20px;
+      }
+
+      label {
+        display: block;
+        margin-bottom: 12px;
+        font-size: 13px;
+        color: var(--muted);
+      }
+
+      select {
+        width: 100%;
+        margin-top: 8px;
+        border: 1px solid var(--line);
+        border-radius: 14px;
+        padding: 14px 16px;
+        background: rgba(255, 255, 255, 0.92);
+        color: var(--ink);
+        font: inherit;
+      }
+
+      .actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 12px;
+        margin-bottom: 14px;
+      }
+
+      button {
+        border: 0;
+        border-radius: 999px;
+        padding: 12px 18px;
+        cursor: pointer;
+        font: inherit;
+      }
+
+      button.primary {
+        background: var(--ink);
+        color: white;
+      }
+
+      button.secondary {
+        background: white;
+        color: var(--ink);
+        border: 1px solid var(--line);
+      }
+
+      #status {
+        margin: 0;
+        min-height: 1.5em;
+        color: var(--muted);
+      }
+
+      #status[data-tone="success"] {
+        color: var(--good);
+      }
+
+      #status[data-tone="error"] {
+        color: var(--bad);
+      }
+
+      #status[data-tone="busy"] {
+        color: var(--busy);
+      }
+
+      .panel {
+        padding: 20px;
+      }
+
+      .panel + .panel {
+        border-top: 1px solid var(--line);
+      }
+
+      .panel h2 {
+        margin-bottom: 12px;
+        font-size: 1.4rem;
+      }
+
+      pre {
+        margin: 0;
+        white-space: pre-wrap;
+        word-break: break-word;
+        line-height: 1.55;
+      }
+
+      .scroll {
+        max-height: 420px;
+        overflow: auto;
+        padding-right: 8px;
+      }
+
+      .board-wrap {
+        display: grid;
+        gap: 12px;
+      }
+
+      .board {
+        position: relative;
+        display: grid;
+        grid-template-columns: repeat(5, minmax(0, 1fr));
+        gap: 0;
+        width: min(520px, 100%);
+        border: 1px solid rgba(31, 26, 23, 0.18);
+        background: linear-gradient(180deg, #eacb96, var(--board));
+        overflow: hidden;
+      }
+
+      .cell {
+        position: relative;
+        aspect-ratio: 1;
+        border-right: 1px solid rgba(31, 26, 23, 0.18);
+        border-bottom: 1px solid rgba(31, 26, 23, 0.18);
+      }
+
+      .cell::before,
+      .cell::after {
+        content: "";
+        position: absolute;
+        background: rgba(31, 26, 23, 0.35);
+      }
+
+      .cell::before {
+        top: 50%;
+        left: 12%;
+        right: 12%;
+        height: 1px;
+        transform: translateY(-50%);
+      }
+
+      .cell::after {
+        left: 50%;
+        top: 12%;
+        bottom: 12%;
+        width: 1px;
+        transform: translateX(-50%);
+      }
+
+      .cell.target {
+        background: rgba(31, 108, 87, 0.12);
+      }
+
+      .cell.active {
+        background: rgba(255, 255, 255, 0.18);
+      }
+
+      .cell.undo {
+        background: rgba(193, 75, 63, 0.14);
+      }
+
+      .cell.captured {
+        background: rgba(193, 75, 63, 0.22);
+      }
+
+      .stone {
+        position: absolute;
+        inset: 18%;
+        border-radius: 999px;
+        z-index: 2;
+        box-shadow: 0 6px 12px rgba(31, 26, 23, 0.16);
+      }
+
+      .stone-black {
+        background: radial-gradient(circle at 30% 30%, #5c5450, #171311 68%);
+      }
+
+      .stone-white {
+        background: radial-gradient(circle at 30% 30%, #fffef9, #d8d2ca 70%);
+        border: 1px solid rgba(31, 26, 23, 0.12);
+      }
+
+      .stone.given {
+        box-shadow:
+          0 0 0 3px rgba(255, 255, 255, 0.16),
+          0 8px 14px rgba(31, 26, 23, 0.18);
+      }
+
+      .summary,
+      .stats {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 10px;
+        margin: 0;
+      }
+
+      .stat {
+        border: 1px solid var(--line);
+        border-radius: 14px;
+        padding: 12px 14px;
+        background: rgba(255, 255, 255, 0.74);
+      }
+
+      .stat dt {
+        margin-bottom: 4px;
+        color: var(--muted);
+        font-size: 12px;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+      }
+
+      .stat dd {
+        margin: 0;
+        font-size: 1.02rem;
+      }
+
+      #ops {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 10px;
+        padding: 0;
+        margin: 0;
+        list-style: none;
+      }
+
+      #ops li {
+        border: 1px solid var(--line);
+        border-radius: 14px;
+        padding: 12px 14px;
+        background: rgba(255, 255, 255, 0.72);
+      }
+
+      .note {
+        margin: 0;
+        color: var(--muted);
+        line-height: 1.62;
+      }
+
+      @media (max-width: 980px) {
+        .layout {
+          grid-template-columns: 1fr;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <section class="hero">
+        <p class="eyebrow">Problem-shaped VM demo</p>
+        <h1>Weiqi</h1>
+        <p class="subtitle">
+          A 5x5 capture-PSVM with a deliberately tiny op set. The worker solves a local
+          capture problem exactly while the UI streams the search trace. The visible VM
+          surface is just <code>PLAY</code>, <code>CAPTURE</code>, <code>UNDO</code>,
+          <code>PASS</code>, and <code>HALT</code>; liberties, suicide, and ko remain
+          deterministic engine semantics underneath.
+        </p>
+      </section>
+
+      <section class="layout">
+        <div>
+          <section class="card controls">
+            <label for="preset">Preset
+              <select id="preset"></select>
+            </label>
+            <div class="actions">
+              <button id="load-button" class="secondary" type="button">Load preset</button>
+              <button id="solve-button" class="primary" type="button">Solve in worker</button>
+            </div>
+            <p id="status"></p>
+          </section>
+
+          <section class="card panel">
+            <h2>Board</h2>
+            <div class="board-wrap">
+              <div id="board" class="board" aria-label="5x5 Weiqi board"></div>
+              <dl id="summary" class="summary"></dl>
+            </div>
+          </section>
+
+          <section class="card panel">
+            <h2>Readable trace</h2>
+            <pre id="trace" class="scroll"></pre>
+          </section>
+        </div>
+
+        <div class="card">
+          <section class="panel">
+            <h2>Program</h2>
+            <pre id="program"></pre>
+          </section>
+
+          <section class="panel">
+            <h2>Stats</h2>
+            <dl id="stats" class="stats"></dl>
+          </section>
+
+          <section class="panel">
+            <h2>Op set</h2>
+            <ul id="ops"></ul>
+          </section>
+
+          <section class="panel">
+            <h2>Why this shape</h2>
+            <p class="note">
+              Full 19x19 Go is the wrong first benchmark for a browser-local PSVM. A
+              small-board local capture problem keeps the state exact and the instruction
+              set honest, while still forcing the runtime to handle chain detection,
+              capture, suicide, and ko correctly.
+            </p>
+          </section>
+        </div>
+      </section>
+    </main>
+
+    <script type="module" src="./app.mjs"></script>
+  </body>
+</html>

@@ -113,23 +113,36 @@
         margin-bottom: 14px;
       }
 
-      button {
+      button,
+      .link-button {
         border: 0;
         border-radius: 999px;
         padding: 12px 18px;
-        cursor: pointer;
         font: inherit;
       }
 
-      button.primary {
+      button {
+        cursor: pointer;
+      }
+
+      button.primary,
+      .primary.link-button {
         background: var(--ink);
         color: white;
       }
 
-      button.secondary {
+      button.secondary,
+      .secondary.link-button {
         background: white;
         color: var(--ink);
         border: 1px solid var(--line);
+      }
+
+      .link-button {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        text-decoration: none;
       }
 
       #status {
@@ -263,8 +276,60 @@
         background: rgba(255, 255, 255, 0.76);
       }
 
+      .note {
+        margin: 0;
+        color: var(--muted);
+        line-height: 1.65;
+      }
+
+      .benchmark-grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 12px;
+      }
+
+      .benchmark-card {
+        border: 1px solid var(--line);
+        border-radius: 18px;
+        padding: 14px;
+        background: rgba(255, 255, 255, 0.74);
+        display: grid;
+        gap: 10px;
+      }
+
+      .benchmark-card h3 {
+        margin: 0;
+        font-size: 1rem;
+      }
+
+      .benchmark-meta {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 8px;
+      }
+
+      .benchmark-badge {
+        border-radius: 999px;
+        padding: 6px 10px;
+        background: rgba(255, 255, 255, 0.86);
+        border: 1px solid var(--line);
+        font-size: 12px;
+      }
+
+      .benchmark-badge.bad {
+        color: var(--bad);
+      }
+
+      .benchmark-badge.good {
+        color: var(--good);
+      }
+
       @media (max-width: 860px) {
         .layout {
+          grid-template-columns: 1fr;
+        }
+
+        .benchmark-grid {
           grid-template-columns: 1fr;
         }
 
@@ -283,7 +348,8 @@
         <p class="subtitle">
           A concrete first implementation of the limited-op Sudoku VM idea:
           canonical search trace, small instruction surface, and browser-side
-          execution through a Web Worker.
+          execution through a Web Worker. This page now also surfaces the hard
+          9x9 benchmark set and links straight into the 9x9 route.
         </p>
       </header>
 
@@ -303,6 +369,9 @@
           <button class="primary" id="solve-button" type="button">
             Solve in worker
           </button>
+          <a class="secondary link-button" href="../sudoku.html">
+            Open 9x9 route
+          </a>
         </div>
         <p id="status">Ready.</p>
       </section>
@@ -333,6 +402,22 @@
             <ul id="ops"></ul>
           </section>
         </article>
+      </section>
+
+      <section class="card" style="margin-top: 20px;">
+        <section class="panel">
+          <h2>Hard 9x9 benchmark set</h2>
+          <p class="note">
+            The hardest curated 9x9 cases are benchmarked on the full 9x9 path,
+            not forced into this 4x4 executor. What is shown here is the
+            apples-to-apples delta from the same JS DFS solver under two chooser
+            policies: row-major vs MRV. Open any card in the 9x9 route to test
+            the actual puzzle there.
+          </p>
+        </section>
+        <section class="panel">
+          <div class="benchmark-grid" id="hard-benchmarks"></div>
+        </section>
       </section>
     </main>
 

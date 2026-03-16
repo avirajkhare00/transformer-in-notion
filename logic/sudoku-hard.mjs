@@ -24,3 +24,34 @@ export const HARD_SUDOKU_PRESETS = Object.freeze([
       "002800000030060007100000040600090000050600009000057060000300100070006008400000020",
   },
 ]);
+
+export const HARD_SUDOKU_BENCHMARK_DELTA = Object.freeze({
+  "ai-escargot": {
+    searchEventsSaved: 17500,
+    placementsSaved: 8750,
+    backtracksSaved: 8750,
+    candidateQueriesDelta: -6872,
+    chooserCellScansDelta: -369469,
+  },
+  "inkala-2012": {
+    searchEventsSaved: 71496,
+    placementsSaved: 35748,
+    backtracksSaved: 35748,
+    candidateQueriesDelta: 134103,
+    chooserCellScansDelta: -1455731,
+  },
+  "benchmark-28": {
+    searchEventsSaved: 5975470,
+    placementsSaved: 2987735,
+    backtracksSaved: 2987735,
+    candidateQueriesDelta: -2227196,
+    chooserCellScansDelta: -146747784,
+  },
+  "benchmark-49": {
+    searchEventsSaved: 2060734,
+    placementsSaved: 1030367,
+    backtracksSaved: 1030367,
+    candidateQueriesDelta: -740987,
+    chooserCellScansDelta: -43877333,
+  },
+});

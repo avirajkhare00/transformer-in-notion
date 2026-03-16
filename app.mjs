@@ -160,8 +160,15 @@ function initTicTacToe() {
 function initSudoku() {
   buildSudokuBoard();
   buildSudokuPresetMenu();
-  syncSudokuInput(DEFAULT_PUZZLE);
-  selectSudokuPresetForPuzzle(DEFAULT_PUZZLE);
+  const initialPreset = getSudokuPresetFromLocation();
+  const initialPuzzle = initialPreset ? initialPreset.puzzle : DEFAULT_PUZZLE;
+  sudokuState.puzzle = initialPuzzle;
+  sudokuState.initialBoard = parseSudoku(initialPuzzle);
+  sudokuState.loadMessage = initialPreset
+    ? `Loaded preset: ${initialPreset.label}.`
+    : "";
+  syncSudokuInput(initialPuzzle);
+  selectSudokuPresetForPuzzle(initialPuzzle);
   bindSudokuEvents();
   resetSudoku();
 }
@@ -261,6 +268,29 @@ function findSudokuPreset(id) {
   return SUDOKU_PRESETS.find((preset) => preset.id === id) ?? null;
 }
 
+function getSudokuPresetFromLocation() {
+  const url = new URL(window.location.href);
+  const presetId = url.searchParams.get("preset");
+  if (!presetId) {
+    return null;
+  }
+  return findSudokuPreset(presetId);
+}
+
+function syncSudokuPresetInLocation(puzzle) {
+  const url = new URL(window.location.href);
+  const normalized = normalizeSudokuPuzzleText(puzzle);
+  const match = SUDOKU_PRESETS.find((preset) => preset.puzzle === normalized);
+
+  if (match) {
+    url.searchParams.set("preset", match.id);
+  } else {
+    url.searchParams.delete("preset");
+  }
+
+  window.history.replaceState({}, "", url);
+}
+
 function applySudokuPuzzle(rawPuzzle, loadMessage) {
   try {
     const normalized = normalizeSudokuPuzzleText(rawPuzzle);
@@ -270,6 +300,7 @@ function applySudokuPuzzle(rawPuzzle, loadMessage) {
     sudokuState.loadMessage = loadMessage;
     syncSudokuInput(normalized);
     selectSudokuPresetForPuzzle(normalized);
+    syncSudokuPresetInLocation(normalized);
     resetSudoku();
   } catch (error) {
     sudokuState.executorError = "";

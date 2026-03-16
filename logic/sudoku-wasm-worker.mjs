@@ -37,8 +37,58 @@ function normalizeSolvePayload(result, elapsedMs) {
   };
 }
 
-async function solveSudokuWithWorkerWasm(puzzle) {
-  const executor = await getSudokuExecutor();
+function percentile(sortedValues, fraction) {
+  if (!sortedValues.length) {
+    return NaN;
+  }
+
+  const index = Math.min(
+    sortedValues.length - 1,
+    Math.max(0, Math.ceil(sortedValues.length * fraction) - 1)
+  );
+  return sortedValues[index];
+}
+
+function summarizeSamples(values) {
+  if (!values.length) {
+    return {
+      count: 0,
+      minMs: NaN,
+      maxMs: NaN,
+      meanMs: NaN,
+      medianMs: NaN,
+      p95Ms: NaN,
+    };
+  }
+
+  const sorted = [...values].sort((left, right) => left - right);
+  const total = values.reduce((sum, value) => sum + value, 0);
+
+  return {
+    count: values.length,
+    minMs: sorted[0],
+    maxMs: sorted.at(-1),
+    meanMs: total / values.length,
+    medianMs: percentile(sorted, 0.5),
+    p95Ms: percentile(sorted, 0.95),
+  };
+}
+
+function ensureSolved(result, label) {
+  if (!result.solved) {
+    throw new Error(`${label} failed to solve the puzzle.`);
+  }
+}
+
+function collectCoreStats(result) {
+  return {
+    traceLength: result.trace.length,
+    placements: result.stats.placements,
+    backtracks: result.stats.backtracks,
+  };
+}
+
+async function runSudokuWasmSolve(executor, puzzle) {
   const input = new TextEncoder().encode(puzzle);
   const pointer = executor.alloc(input.length);
   const view = new Uint8Array(executor.memory.buffer, pointer, input.length);
@@ -57,15 +107,47 @@ async function solveSudokuWithWorkerWasm(puzzle) {
   }
 }
 
+async function solveSudokuWithWorkerWasm(puzzle) {
+  const executor = await getSudokuExecutor();
+  return runSudokuWasmSolve(executor, puzzle);
+}
+
+async function benchmarkSudokuWasmSolver(puzzle, runs = 100) {
+  const instantiateStartedAt = performance.now();
+  const executor = await getSudokuExecutor();
+  const instantiateMs = performance.now() - instantiateStartedAt;
+  const samples = [];
+  let firstResult = null;
+
+  for (let runIndex = 0; runIndex < runs; runIndex += 1) {
+    const result = await runSudokuWasmSolve(executor, puzzle);
+    ensureSolved(result, "WASM benchmark");
+    samples.push(result.elapsedMs);
+    if (!firstResult) {
+      firstResult = result;
+    }
+  }
+
+  const warmSamples = samples.slice(1);
+
+  return {
+    runs,
+    instantiateMs,
+    firstSolveMs: samples[0],
+    all: summarizeSamples(samples),
+    warm: summarizeSamples(warmSamples),
+    samplesMs: samples,
+    ...collectCoreStats(firstResult),
+  };
+}
+
 function benchmarkDeterministicSolver(puzzle, strategy) {
   const board = parseSudoku(puzzle);
   const startedAt = performance.now();
   const result = solveSudokuWithTrace(board, { strategy });
   const elapsedMs = performance.now() - startedAt;
 
-  if (!result.solved) {
-    throw new Error(`Deterministic ${strategy} solver failed to solve the puzzle.`);
-  }
+  ensureSolved(result, `Deterministic ${strategy} solver`);
 
   return {
     strategy: result.strategy,
@@ -93,6 +175,12 @@ self.addEventListener("message", async (event) => {
 
     if (type === "benchmark") {
       const result = benchmarkDeterministicSolver(payload.puzzle, payload.strategy ?? "mrv");
+      self.postMessage({ requestId, ok: true, payload: result });
+      return;
+    }
+
+    if (type === "benchmark-wasm") {
+      const result = await benchmarkSudokuWasmSolver(payload.puzzle, payload.runs ?? 100);
       self.postMessage({ requestId, ok: true, payload: result });
       return;
     }

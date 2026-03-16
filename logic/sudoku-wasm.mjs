@@ -34,6 +34,12 @@ function createSudokuRuntime() {
   return { worker, pending };
 }
 
+function destroySudokuRuntime(runtime) {
+  runtime.pending.forEach(({ reject }) => reject(new Error("Sudoku worker terminated.")));
+  runtime.pending.clear();
+  runtime.worker.terminate();
+}
+
 async function getSudokuRuntime() {
   if (!runtimePromise) {
     runtimePromise = Promise.resolve(createSudokuRuntime());
@@ -41,8 +47,7 @@ async function getSudokuRuntime() {
   return runtimePromise;
 }
 
-async function sendSudokuRuntimeMessage(type, payload = {}) {
-  const runtime = await getSudokuRuntime();
+async function sendSudokuRuntimeMessageWithRuntime(runtime, type, payload = {}) {
   const requestId = nextRequestId;
   nextRequestId += 1;
 
@@ -50,6 +55,21 @@ async function sendSudokuRuntimeMessage(type, payload = {}) {
     runtime.pending.set(requestId, { resolve, reject });
     runtime.worker.postMessage({ type, requestId, payload });
   });
+}
+
+async function sendSudokuRuntimeMessage(type, payload = {}) {
+  const runtime = await getSudokuRuntime();
+  return sendSudokuRuntimeMessageWithRuntime(runtime, type, payload);
+}
+
+async function runSudokuIsolatedJob(type, payload = {}) {
+  const runtime = createSudokuRuntime();
+
+  try {
+    return await sendSudokuRuntimeMessageWithRuntime(runtime, type, payload);
+  } finally {
+    destroySudokuRuntime(runtime);
+  }
 }
 
 function normalizeSolveResult(result) {
@@ -77,4 +97,8 @@ export async function solveSudokuWithWasm(puzzle) {
 
 export async function benchmarkSudokuDeterministic(puzzle, strategy = "mrv") {
   return sendSudokuRuntimeMessage("benchmark", { puzzle, strategy });
+}
+
+export async function benchmarkSudokuWasm(puzzle, runs = 100) {
+  return runSudokuIsolatedJob("benchmark-wasm", { puzzle, runs });
 }

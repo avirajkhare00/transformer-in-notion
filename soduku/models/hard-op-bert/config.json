@@ -1,0 +1,35 @@
+{
+  "architectures": [
+    "BertForSequenceClassification"
+  ],
+  "attention_probs_dropout_prob": 0.0,
+  "classifier_dropout": 0.0,
+  "dtype": "float32",
+  "hidden_act": "gelu",
+  "hidden_dropout_prob": 0.0,
+  "hidden_size": 96,
+  "id2label": {
+    "0": "FOCUS_NEXT",
+    "1": "PLACE",
+    "2": "UNDO"
+  },
+  "initializer_range": 0.02,
+  "intermediate_size": 192,
+  "label2id": {
+    "FOCUS_NEXT": 0,
+    "PLACE": 1,
+    "UNDO": 2
+  },
+  "layer_norm_eps": 1e-12,
+  "max_position_embeddings": 192,
+  "model_type": "bert",
+  "num_attention_heads": 6,
+  "num_hidden_layers": 3,
+  "pad_token_id": 0,
+  "position_embedding_type": "absolute",
+  "problem_type": "single_label_classification",
+  "transformers_version": "4.57.6",
+  "type_vocab_size": 2,
+  "use_cache": true,
+  "vocab_size": 88
+}

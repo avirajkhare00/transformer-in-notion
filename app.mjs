@@ -15,7 +15,11 @@ import {
   parseSudoku,
 } from "./logic/sudoku.mjs";
 import { HARD_SUDOKU_PRESETS } from "./logic/sudoku-hard.mjs";
-import { solveSudokuWithWasm, warmSudokuExecutor } from "./logic/sudoku-wasm.mjs";
+import {
+  benchmarkSudokuDeterministic,
+  solveSudokuWithWasm,
+  warmSudokuExecutor,
+} from "./logic/sudoku-wasm.mjs";
 import {
   buildSudokuExecutorArtifacts,
   buildTicTacToeExecutorArtifacts,
@@ -70,10 +74,16 @@ const sudokuState = {
   emphasis: null,
   stepIndex: 0,
   timerId: 0,
+  solveClockId: 0,
+  solveStartedAt: 0,
+  solveElapsedMs: 0,
   isAnimating: false,
   isLoading: false,
   executorReady: false,
   executorError: "",
+  baselineTiming: null,
+  baselinePending: false,
+  baselineError: "",
   requestId: 0,
 };
 
@@ -254,13 +264,74 @@ function formatSudokuPuzzleText(puzzle) {
   return rows.join("\n");
 }
 
+function findSudokuPresetByPuzzle(puzzle) {
+  const normalized = normalizeSudokuPuzzleText(puzzle);
+  return SUDOKU_PRESETS.find((preset) => preset.puzzle === normalized) ?? null;
+}
+
+function describeSudokuPreset(puzzle) {
+  const preset = findSudokuPresetByPuzzle(puzzle);
+  if (!preset) {
+    return {
+      cardLabel: "Preset",
+      value: "Custom puzzle",
+      prefix: "Custom puzzle",
+    };
+  }
+
+  const isHard = HARD_SUDOKU_PRESETS.some((candidate) => candidate.id === preset.id);
+  return {
+    cardLabel: isHard ? "Hard preset" : "Preset",
+    value: preset.label,
+    prefix: isHard ? `Hard preset: ${preset.label}` : `Preset: ${preset.label}`,
+  };
+}
+
+function formatSudokuDuration(ms) {
+  if (!Number.isFinite(ms) || ms <= 0) {
+    return "—";
+  }
+  if (ms < 1000) {
+    return `${ms.toFixed(ms < 100 ? 1 : 0)} ms`;
+  }
+  return `${(ms / 1000).toFixed(2)} s`;
+}
+
+function getCurrentSudokuSolveMs() {
+  if (sudokuState.isLoading && sudokuState.solveStartedAt) {
+    return performance.now() - sudokuState.solveStartedAt;
+  }
+  return sudokuState.solveElapsedMs;
+}
+
+function startSudokuSolveClock() {
+  stopSudokuSolveClock();
+  sudokuState.solveStartedAt = performance.now();
+  sudokuState.solveElapsedMs = 0;
+  sudokuState.solveClockId = window.setInterval(() => {
+    renderSudoku();
+  }, 80);
+}
+
+function stopSudokuSolveClock(finalElapsedMs = null) {
+  window.clearInterval(sudokuState.solveClockId);
+  sudokuState.solveClockId = 0;
+
+  if (Number.isFinite(finalElapsedMs)) {
+    sudokuState.solveElapsedMs = finalElapsedMs;
+  } else if (sudokuState.solveStartedAt) {
+    sudokuState.solveElapsedMs = performance.now() - sudokuState.solveStartedAt;
+  }
+
+  sudokuState.solveStartedAt = 0;
+}
+
 function syncSudokuInput(puzzle) {
   refs.sudokuInput.value = formatSudokuPuzzleText(puzzle);
 }
 
 function selectSudokuPresetForPuzzle(puzzle) {
-  const normalized = normalizeSudokuPuzzleText(puzzle);
-  const match = SUDOKU_PRESETS.find((preset) => preset.puzzle === normalized);
+  const match = findSudokuPresetByPuzzle(puzzle);
   refs.sudokuPreset.value = match ? match.id : "custom";
 }
 
@@ -533,6 +604,7 @@ function renderTicTacToeArtifacts() {
 async function resetSudoku() {
   const requestId = ++sudokuState.requestId;
   stopSudokuAnimation();
+  stopSudokuSolveClock();
   sudokuState.givenMask = buildGivenMask(sudokuState.initialBoard);
   sudokuState.board = cloneSudokuBoard(sudokuState.initialBoard);
   sudokuState.result = null;
@@ -543,6 +615,10 @@ async function resetSudoku() {
   sudokuState.stepIndex = 0;
   sudokuState.isLoading = true;
   sudokuState.executorError = "";
+  sudokuState.solveElapsedMs = 0;
+  sudokuState.baselineTiming = null;
+  sudokuState.baselinePending = false;
+  sudokuState.baselineError = "";
   pushSudokuLog(
     sudokuState.executorReady
       ? "Puzzle loaded. Running the browser-side WASM executor."
@@ -562,25 +638,59 @@ async function resetSudoku() {
       sudokuState.executorReady = true;
     }
 
+    startSudokuSolveClock();
     const result = await solveSudokuWithWasm(sudokuState.puzzle);
     if (requestId !== sudokuState.requestId) {
       return;
     }
 
+    stopSudokuSolveClock(result.elapsedMs);
     sudokuState.result = result;
     sudokuState.isLoading = false;
     pushSudokuLog(
-      `WASM executor traced ${result.trace.length} events before reaching the solved grid.`
+      `WASM executor traced ${result.trace.length} events in ${formatSudokuDuration(result.elapsedMs)} before reaching the solved grid.`
+    );
+    renderSudoku();
+    void queueSudokuDeterministicBaseline(requestId);
+  } catch (error) {
+    if (requestId !== sudokuState.requestId) {
+      return;
+    }
+    stopSudokuSolveClock();
+    sudokuState.isLoading = false;
+    sudokuState.executorReady = false;
+    sudokuState.executorError = error instanceof Error ? error.message : "WASM executor failed.";
+    pushSudokuLog(sudokuState.executorError);
+    renderSudoku();
+  }
+}
+
+async function queueSudokuDeterministicBaseline(requestId) {
+  sudokuState.baselinePending = true;
+  sudokuState.baselineError = "";
+  renderSudoku();
+
+  try {
+    const result = await benchmarkSudokuDeterministic(sudokuState.puzzle, "mrv");
+    if (requestId !== sudokuState.requestId) {
+      return;
+    }
+
+    sudokuState.baselineTiming = result;
+    sudokuState.baselinePending = false;
+    pushSudokuLog(
+      `Best deterministic baseline (MRV JS) finished in ${formatSudokuDuration(result.elapsedMs)}.`
     );
     renderSudoku();
   } catch (error) {
     if (requestId !== sudokuState.requestId) {
       return;
     }
-    sudokuState.isLoading = false;
-    sudokuState.executorReady = false;
-    sudokuState.executorError = error instanceof Error ? error.message : "WASM executor failed.";
-    pushSudokuLog(sudokuState.executorError);
+
+    sudokuState.baselinePending = false;
+    sudokuState.baselineError =
+      error instanceof Error ? error.message : "Deterministic benchmark failed.";
+    pushSudokuLog(sudokuState.baselineError);
     renderSudoku();
   }
 }
@@ -709,55 +819,82 @@ function renderSudoku() {
 }
 
 function getSudokuStatus() {
+  const preset = describeSudokuPreset(sudokuState.puzzle).prefix;
   if (sudokuState.executorError) {
     return sudokuState.executorError;
   }
   if (sudokuState.isLoading) {
     return sudokuState.executorReady
-      ? "Browser-side WASM executor is solving the puzzle."
-      : "Loading browser-side WASM executor.";
+      ? `${preset}. Browser-side WASM executor is solving the puzzle.`
+      : `${preset}. Loading browser-side WASM executor.`;
   }
   if (sudokuState.isAnimating) {
     return `WASM trace ${sudokuState.stepIndex + 1} / ${sudokuState.result.trace.length}`;
   }
 
   if (sudokuState.result && sudokuState.stepIndex >= sudokuState.result.trace.length) {
-    return "Puzzle solved. The whole WASM trace stays browser-side.";
+    return `${preset}. Puzzle solved. The whole WASM trace stays browser-side.`;
   }
 
-  return "Ready to animate a full WASM solve.";
+  return `${preset}. Ready to animate a full WASM solve.`;
 }
 
 function renderSudokuStats() {
-  if (!sudokuState.result) {
+  const preset = describeSudokuPreset(sudokuState.puzzle);
+  const items = [
+    {
+      label: preset.cardLabel,
+      value: preset.value,
+    },
+    {
+      label: "WASM solve",
+      value: sudokuState.isLoading
+        ? sudokuState.solveStartedAt
+          ? `${formatSudokuDuration(getCurrentSudokuSolveMs())} …`
+          : "warming…"
+        : formatSudokuDuration(sudokuState.solveElapsedMs),
+    },
+    {
+      label: "MRV JS",
+      value: sudokuState.baselinePending
+        ? "measuring…"
+        : sudokuState.baselineTiming
+          ? formatSudokuDuration(sudokuState.baselineTiming.elapsedMs)
+          : sudokuState.baselineError
+            ? "failed"
+            : "pending",
+    },
+  ];
+
+  if (!sudokuState.result && !sudokuState.isLoading) {
     refs.sudokuStats.innerHTML = "";
     const placeholder = document.createElement("p");
     placeholder.className = "empty-state";
-    placeholder.textContent = sudokuState.isLoading
-      ? "The WASM executor is preparing the full search trace."
-      : "Sudoku stats appear after the WASM executor loads.";
+    placeholder.textContent = "Sudoku stats appear after the WASM executor loads.";
     refs.sudokuStats.append(placeholder);
     return;
   }
 
-  const items = [
-    {
-      label: "Placements",
-      value: sudokuState.result.stats.placements,
-    },
-    {
-      label: "Backtracks",
-      value: sudokuState.result.stats.backtracks,
-    },
-    {
-      label: "Trace events",
-      value: sudokuState.result.trace.length,
-    },
-    {
-      label: "Progress",
-      value: `${Math.min(sudokuState.stepIndex, sudokuState.result.trace.length)} / ${sudokuState.result.trace.length}`,
-    },
-  ];
+  if (sudokuState.result) {
+    items.push(
+      {
+        label: "Placements",
+        value: sudokuState.result.stats.placements,
+      },
+      {
+        label: "Backtracks",
+        value: sudokuState.result.stats.backtracks,
+      },
+      {
+        label: "Trace events",
+        value: sudokuState.result.trace.length,
+      },
+      {
+        label: "Progress",
+        value: `${Math.min(sudokuState.stepIndex, sudokuState.result.trace.length)} / ${sudokuState.result.trace.length}`,
+      }
+    );
+  }
 
   refs.sudokuStats.innerHTML = "";
   items.forEach((item) => {

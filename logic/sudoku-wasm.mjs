@@ -1,29 +1,58 @@
 import { parseSudoku } from "./sudoku.mjs";
 
-const WASM_URL = new URL("../wasm/sudoku_solver.wasm", import.meta.url);
+let runtimePromise = null;
+let nextRequestId = 1;
 
-let wasmPromise = null;
+function createSudokuRuntime() {
+  const worker = new Worker(new URL("./sudoku-wasm-worker.mjs", import.meta.url), {
+    type: "module",
+  });
+  const pending = new Map();
 
-async function instantiateSudokuExecutor() {
-  const response = await fetch(WASM_URL);
-  const bytes = await response.arrayBuffer();
-  const { instance } = await WebAssembly.instantiate(bytes, {});
-  return instance.exports;
+  worker.addEventListener("message", (event) => {
+    const { requestId, ok, payload, error } = event.data ?? {};
+    const entry = pending.get(requestId);
+    if (!entry) {
+      return;
+    }
+    pending.delete(requestId);
+
+    if (ok) {
+      entry.resolve(payload);
+      return;
+    }
+
+    entry.reject(new Error(error || "Sudoku worker request failed."));
+  });
+
+  worker.addEventListener("error", (event) => {
+    const message = event.message || "Sudoku worker crashed.";
+    pending.forEach(({ reject }) => reject(new Error(message)));
+    pending.clear();
+  });
+
+  return { worker, pending };
 }
 
-async function getSudokuExecutor() {
-  if (!wasmPromise) {
-    wasmPromise = instantiateSudokuExecutor();
+async function getSudokuRuntime() {
+  if (!runtimePromise) {
+    runtimePromise = Promise.resolve(createSudokuRuntime());
   }
-  return wasmPromise;
+  return runtimePromise;
 }
 
-function readUtf8(memory, pointer, length) {
-  const bytes = new Uint8Array(memory.buffer, pointer, length);
-  return new TextDecoder().decode(bytes);
+async function sendSudokuRuntimeMessage(type, payload = {}) {
+  const runtime = await getSudokuRuntime();
+  const requestId = nextRequestId;
+  nextRequestId += 1;
+
+  return new Promise((resolve, reject) => {
+    runtime.pending.set(requestId, { resolve, reject });
+    runtime.worker.postMessage({ type, requestId, payload });
+  });
 }
 
-function normalizeResult(result) {
+function normalizeSolveResult(result) {
   if (result.error) {
     throw new Error(result.error);
   }
@@ -33,27 +62,19 @@ function normalizeResult(result) {
     solution: parseSudoku(result.solution),
     trace: result.trace,
     stats: result.stats,
+    elapsedMs: result.elapsedMs,
   };
 }
 
 export async function warmSudokuExecutor() {
-  await getSudokuExecutor();
+  await sendSudokuRuntimeMessage("warm");
 }
 
 export async function solveSudokuWithWasm(puzzle) {
-  const executor = await getSudokuExecutor();
-  const input = new TextEncoder().encode(puzzle);
-  const pointer = executor.alloc(input.length);
-  const view = new Uint8Array(executor.memory.buffer, pointer, input.length);
-  view.set(input);
+  const result = await sendSudokuRuntimeMessage("solve", { puzzle });
+  return normalizeSolveResult(result);
+}
 
-  try {
-    executor.solve(pointer, input.length);
-    const resultPointer = executor.result_ptr();
-    const resultLength = executor.result_len();
-    const json = readUtf8(executor.memory, resultPointer, resultLength);
-    return normalizeResult(JSON.parse(json));
-  } finally {
-    executor.dealloc(pointer, input.length);
-  }
+export async function benchmarkSudokuDeterministic(puzzle, strategy = "mrv") {
+  return sendSudokuRuntimeMessage("benchmark", { puzzle, strategy });
 }

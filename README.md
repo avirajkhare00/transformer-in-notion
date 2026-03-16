@@ -92,6 +92,7 @@ Then open `http://localhost:8000`.
 - `tic-tac-toe.html` - standalone Tic-tac-toe embed page
 - `sudoku.html` - standalone Sudoku embed page
 - `docs/executor-v1-spec.md` - v1 transformer-executor spec and training target
+- `docs/paper-idea-problem-shaped-vms.md` - paper note for custom task-shaped VMs in browser-local transformers
 - `docs/use-case-matrix.md` - architecture combinations and small real-world use cases
 - `styles.css` - visual system tuned for an iframe or Notion embed
 - `app.mjs` - UI wiring and animations
@@ -175,3 +176,8 @@ transformer" direction, see:
 
 - `docs/executor-v1-spec.md`
 - `docs/examples/executor-v1-add-two.json`
+
+If you want the paper-shaped framing for the more specific direction of
+`transformer + custom VM + Sudoku/web apps + WASM + browser`, see:
+
+- `docs/paper-idea-problem-shaped-vms.md`

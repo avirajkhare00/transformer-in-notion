@@ -1,0 +1,33 @@
+{
+  "sampleCount": 7516928,
+  "trainPuzzleIds": [],
+  "evalPuzzleIds": [],
+  "limitPerPuzzle": 0,
+  "historyWindow": 8,
+  "format": "structured-state-v1-ptshards",
+  "sourceCsv": "/Users/avirajkhare/hack2/transformers/transformer-in-notion/soduku/train_data/train.csv",
+  "evalPercent": 5,
+  "minRating": 80,
+  "packedFrom": "extreme-op-manifest.json",
+  "shardRows": 65536,
+  "trainCount": 2603218,
+  "evalCount": 142546,
+  "accuracy": 0.9428114433235587,
+  "train_loss": 0.22099313216713845,
+  "labels": [
+    "FOCUS_NEXT",
+    "PLACE",
+    "UNDO"
+  ],
+  "inputNames": [
+    "board_tokens",
+    "focus_row",
+    "focus_col",
+    "candidate_mask",
+    "history_ops",
+    "filled_count",
+    "search_depth"
+  ],
+  "sequenceLength": 103,
+  "modelKind": "structured-sudoku-transformer"
+}

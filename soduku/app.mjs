@@ -84,7 +84,7 @@ function renderBoard(board, event = null) {
       }
       if (highlightKey === `${row}:${col}`) {
         cell.classList.add("focus");
-        if (event.op === "TRY_VALUE") {
+        if (event.op === "PLACE") {
           cell.classList.add("trial");
         }
         if (event.op === "UNDO" || event.op === "FAIL") {

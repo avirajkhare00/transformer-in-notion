@@ -105,13 +105,10 @@ For the first Sudoku-specific custom VM, the best action surface is:
 
 - `FOCUS_NEXT`
 - `READ_CANDS`
-- `TRY_VALUE`
 - `PLACE`
 - `UNDO`
-- `ADVANCE`
 - `FAIL`
-- `HALT_IF_SOLVED`
-- `EMIT`
+- `HALT`
 
 This is much better than a generic VM for the first pass because it puts all of
 the model capacity into Sudoku search behavior.

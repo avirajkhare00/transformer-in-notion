@@ -1,9 +1,6 @@
 export const INVOICE_PSVM_OPS = Object.freeze([
-  "LOAD_INVOICE",
   "READ_ITEM",
-  "PARSE_QTY",
-  "PARSE_PRICE",
-  "MUL_LINE_TOTAL",
+  "LINE_TOTAL",
   "ADD_SUBTOTAL",
   "APPLY_TAX",
   "EMIT_TOTAL",
@@ -96,10 +93,33 @@ export function parseInvoice(source) {
 export function buildInvoiceProgram(source) {
   const invoice = parseInvoice(source);
   return [
-    `LOAD_INVOICE items=${invoice.items.length} tax_bp=${invoice.taxBasisPoints}`,
-    "FOR_EACH_ITEM READ_ITEM PARSE_QTY PARSE_PRICE MUL_LINE_TOTAL ADD_SUBTOTAL",
+    `INVOICE items=${invoice.items.length} tax_bp=${invoice.taxBasisPoints}`,
+    "FOR_EACH_ITEM READ_ITEM LINE_TOTAL ADD_SUBTOTAL",
     "APPLY_TAX EMIT_TOTAL HALT",
   ];
+}
+
+export function createEmptyInvoiceSnapshot() {
+  return {
+    processedItems: 0,
+    subtotalCents: 0,
+    taxCents: 0,
+    totalCents: 0,
+  };
+}
+
+export function buildInvoiceOpContext(invoice, snapshot, historyOps) {
+  return [
+    `currency_${invoice.currency}`,
+    `items_${invoice.items.length}`,
+    `taxbp_${invoice.taxBasisPoints}`,
+    `processed_${snapshot.processedItems}`,
+    `subtotal_${snapshot.subtotalCents}`,
+    `tax_${snapshot.taxCents}`,
+    `total_${snapshot.totalCents}`,
+    "history",
+    ...(historyOps.length > 0 ? historyOps : ["NONE"]),
+  ].join(" ");
 }
 
 function createEvent(op, fields = {}) {
@@ -138,16 +158,10 @@ export function formatCents(cents, currency = "USD") {
 
 export function formatInvoiceEvent(event, currency = "USD") {
   switch (event.op) {
-    case "LOAD_INVOICE":
-      return `LOAD_INVOICE items=${event.itemCount} tax_bp=${event.taxBasisPoints}`;
     case "READ_ITEM":
       return `READ_ITEM #${event.index + 1} ${event.label}`;
-    case "PARSE_QTY":
-      return `PARSE_QTY #${event.index + 1} -> ${event.quantity}`;
-    case "PARSE_PRICE":
-      return `PARSE_PRICE #${event.index + 1} -> ${formatCents(event.unitCents, currency)}`;
-    case "MUL_LINE_TOTAL":
-      return `MUL_LINE_TOTAL #${event.index + 1} -> ${formatCents(event.lineCents, currency)}`;
+    case "LINE_TOTAL":
+      return `LINE_TOTAL #${event.index + 1} ${event.quantity} x ${formatCents(event.unitCents, currency)} -> ${formatCents(event.lineCents, currency)}`;
     case "ADD_SUBTOTAL":
       return `ADD_SUBTOTAL -> ${formatCents(event.subtotalCents, currency)}`;
     case "APPLY_TAX":
@@ -172,16 +186,6 @@ export function runInvoicePsvm(source, options = {}) {
     processedItems: 0,
   };
 
-  emitEvent(
-    trace,
-    state,
-    createEvent("LOAD_INVOICE", {
-      itemCount: invoice.items.length,
-      taxBasisPoints: invoice.taxBasisPoints,
-    }),
-    onEvent,
-  );
-
   invoice.items.forEach((item, index) => {
     emitEvent(
       trace,
@@ -189,23 +193,7 @@ export function runInvoicePsvm(source, options = {}) {
       createEvent("READ_ITEM", {
         index,
         label: item.label,
-      }),
-      onEvent,
-    );
-    emitEvent(
-      trace,
-      state,
-      createEvent("PARSE_QTY", {
-        index,
         quantity: item.quantity,
-      }),
-      onEvent,
-    );
-    emitEvent(
-      trace,
-      state,
-      createEvent("PARSE_PRICE", {
-        index,
         unitCents: item.unitCents,
       }),
       onEvent,
@@ -215,8 +203,10 @@ export function runInvoicePsvm(source, options = {}) {
     emitEvent(
       trace,
       state,
-      createEvent("MUL_LINE_TOTAL", {
+      createEvent("LINE_TOTAL", {
         index,
+        quantity: item.quantity,
+        unitCents: item.unitCents,
         lineCents,
       }),
       onEvent,

@@ -1,7 +1,12 @@
 import { mkdirSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { INVOICE_PSVM_OPS, runInvoicePsvm } from "./psvm.mjs";
+import {
+  INVOICE_PSVM_OPS,
+  buildInvoiceOpContext,
+  createEmptyInvoiceSnapshot,
+  runInvoicePsvm,
+} from "./psvm.mjs";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -121,32 +126,10 @@ function makeInvoiceSource(rng) {
   );
 }
 
-function buildHistoryTokens(trace, upToIndex) {
-  if (upToIndex === 0) {
-    return ["NONE"];
-  }
-  return trace.slice(0, upToIndex).map((event) => event.op);
-}
-
 function buildContext(result, traceIndex) {
-  const previousSnapshot =
-    traceIndex === 0
-      ? { processedItems: 0, subtotalCents: 0, taxCents: 0, totalCents: 0 }
-      : result.trace[traceIndex - 1].snapshot;
-
-  const tokens = [
-    "currency_USD",
-    `items_${result.invoice.items.length}`,
-    `taxbp_${result.invoice.taxBasisPoints}`,
-    `processed_${previousSnapshot.processedItems}`,
-    `subtotal_${previousSnapshot.subtotalCents}`,
-    `tax_${previousSnapshot.taxCents}`,
-    `total_${previousSnapshot.totalCents}`,
-    "history",
-    ...buildHistoryTokens(result.trace, traceIndex),
-  ];
-
-  return tokens.join(" ");
+  const previousSnapshot = traceIndex === 0 ? createEmptyInvoiceSnapshot() : result.trace[traceIndex - 1].snapshot;
+  const historyOps = result.trace.slice(0, traceIndex).map((event) => event.op);
+  return buildInvoiceOpContext(result.invoice, previousSnapshot, historyOps);
 }
 
 function buildSamples(result) {

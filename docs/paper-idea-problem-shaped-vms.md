@@ -158,16 +158,12 @@ family instead of from general-purpose computing.
 
 Possible instruction set:
 
-- `LOAD_PUZZLE`
 - `FOCUS_NEXT`
 - `READ_CANDS`
-- `TRY_VALUE`
 - `PLACE`
 - `UNDO`
-- `ADVANCE`
 - `FAIL`
-- `HALT_IF_SOLVED`
-- `EMIT`
+- `HALT`
 
 This is not a full computer. It is a compact execution substrate for depth-first
 constraint search.
@@ -176,11 +172,8 @@ constraint search.
 
 For a small browser-side invoice calculator, the instruction set can instead be:
 
-- `LOAD_INVOICE`
 - `READ_ITEM`
-- `PARSE_QTY`
-- `PARSE_PRICE`
-- `MUL_LINE_TOTAL`
+- `LINE_TOTAL`
 - `ADD_SUBTOTAL`
 - `APPLY_TAX`
 - `EMIT_TOTAL`

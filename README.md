@@ -105,6 +105,7 @@ Then open `http://localhost:8000`.
 - `invoice/index.html` - standalone invoice-calculator PSVM prototype
 - `invoice/app.mjs` - browser UI for the invoice PSVM
 - `invoice/worker.mjs` - worker-side invoice execution loop
+- `invoice/model.mjs` - browser-side invoice next-op model loader
 - `invoice/psvm.mjs` - invoice-calculator PSVM and canonical trace generator
 - `invoice/export_dataset.mjs` - synthetic dataset generator for invoice next-op supervision
 - `invoice/train_transformer.py` - tiny invoice next-op transformer trainer/exporter
@@ -230,13 +231,13 @@ In practice that means:
 - reserve model capacity for choosing and ordering operations
 
 For Sudoku, that points toward a task-shaped executor with ops like
-`FOCUS_NEXT`, `READ_CANDS`, `TRY_VALUE`, `PLACE`, and `UNDO`, not a full VM on
-day one.
+`FOCUS_NEXT`, `READ_CANDS`, `PLACE`, `UNDO`, `FAIL`, and `HALT`, not a full VM
+on day one.
 
 The invoice prototype shows the same idea in a non-puzzle setting: a small web
 app can expose only the exact business operations it needs, such as
-`READ_ITEM`, `PARSE_QTY`, `PARSE_PRICE`, `MUL_LINE_TOTAL`, `ADD_SUBTOTAL`, and
-`APPLY_TAX`.
+`READ_ITEM`, `LINE_TOTAL`, `ADD_SUBTOTAL`, `APPLY_TAX`, `EMIT_TOTAL`, and
+`HALT`.
 
 ## License
 

@@ -1,14 +1,10 @@
 export const PSVM_OPS = Object.freeze([
-  "LOAD_PUZZLE",
   "FOCUS_NEXT",
   "READ_CANDS",
-  "TRY_VALUE",
   "PLACE",
   "UNDO",
-  "ADVANCE",
   "FAIL",
-  "HALT_IF_SOLVED",
-  "EMIT",
+  "HALT",
 ]);
 
 export const DEFAULT_4X4_PUZZLE = "1..4.4....434..1";
@@ -76,9 +72,9 @@ export function buildGivenMask4x4(board) {
 export function buildProgram4x4(puzzle) {
   const normalized = normalizePuzzle4x4(puzzle);
   return [
-    `LOAD_PUZZLE ${normalized}`,
-    "LOOP FOCUS_NEXT READ_CANDS TRY_VALUE PLACE UNDO ADVANCE FAIL HALT_IF_SOLVED",
-    "EMIT solution",
+    `PUZZLE ${normalized}`,
+    "LOOP FOCUS_NEXT READ_CANDS PLACE UNDO FAIL",
+    "HALT when full",
   ];
 }
 
@@ -160,26 +156,18 @@ function emitEvent(trace, board, event, onEvent) {
 
 export function formatPsvmEvent(event) {
   switch (event.op) {
-    case "LOAD_PUZZLE":
-      return `LOAD_PUZZLE ${event.puzzle}`;
     case "FOCUS_NEXT":
       return `FOCUS_NEXT r${event.row + 1}c${event.col + 1} depth=${event.depth}`;
     case "READ_CANDS":
       return `READ_CANDS r${event.row + 1}c${event.col + 1} -> [${event.candidates.join(", ")}]`;
-    case "TRY_VALUE":
-      return `TRY_VALUE r${event.row + 1}c${event.col + 1} = ${event.value}`;
     case "PLACE":
       return `PLACE r${event.row + 1}c${event.col + 1} = ${event.value}`;
     case "UNDO":
       return `UNDO r${event.row + 1}c${event.col + 1} = ${event.value}`;
-    case "ADVANCE":
-      return `ADVANCE r${event.row + 1}c${event.col + 1} -> try ${event.nextValue}`;
     case "FAIL":
       return `FAIL ${event.reason}${typeof event.row === "number" ? ` at r${event.row + 1}c${event.col + 1}` : ""}`;
-    case "HALT_IF_SOLVED":
-      return "HALT_IF_SOLVED";
-    case "EMIT":
-      return `EMIT ${event.solution}`;
+    case "HALT":
+      return `HALT solved=${event.solution}`;
     default:
       return event.op;
   }
@@ -197,22 +185,31 @@ export function solveWithPsvm4x4(puzzle, options = {}) {
     contradictions: 0,
   };
 
-  emitEvent(
-    trace,
-    board,
-    createEvent("LOAD_PUZZLE", { puzzle: serializeBoard4x4(board) }),
-    onEvent,
-  );
-
   function search(depth = 0) {
     if (isSolved4x4(board)) {
-      emitEvent(trace, board, createEvent("HALT_IF_SOLVED", { depth }), onEvent);
+      emitEvent(
+        trace,
+        board,
+        createEvent("HALT", {
+          depth,
+          solution: serializeBoard4x4(board),
+        }),
+        onEvent,
+      );
       return true;
     }
 
     const next = chooseNextCell4x4(board);
     if (!next) {
-      emitEvent(trace, board, createEvent("HALT_IF_SOLVED", { depth }), onEvent);
+      emitEvent(
+        trace,
+        board,
+        createEvent("HALT", {
+          depth,
+          solution: serializeBoard4x4(board),
+        }),
+        onEvent,
+      );
       return true;
     }
 
@@ -257,18 +254,6 @@ export function solveWithPsvm4x4(puzzle, options = {}) {
 
     for (let index = 0; index < next.candidates.length; index += 1) {
       const value = next.candidates[index];
-      emitEvent(
-        trace,
-        board,
-        createEvent("TRY_VALUE", {
-          row: next.row,
-          col: next.col,
-          value,
-          depth,
-        }),
-        onEvent,
-      );
-
       board[next.row][next.col] = value;
       stats.placements += 1;
       emitEvent(
@@ -300,20 +285,6 @@ export function solveWithPsvm4x4(puzzle, options = {}) {
         }),
         onEvent,
       );
-
-      if (index < next.candidates.length - 1) {
-        emitEvent(
-          trace,
-          board,
-          createEvent("ADVANCE", {
-            row: next.row,
-            col: next.col,
-            nextValue: next.candidates[index + 1],
-            depth,
-          }),
-          onEvent,
-        );
-      }
     }
 
     stats.contradictions += 1;
@@ -332,16 +303,6 @@ export function solveWithPsvm4x4(puzzle, options = {}) {
   }
 
   const solved = search(0);
-  if (solved) {
-    emitEvent(
-      trace,
-      board,
-      createEvent("EMIT", {
-        solution: serializeBoard4x4(board),
-      }),
-      onEvent,
-    );
-  }
 
   return {
     solved,

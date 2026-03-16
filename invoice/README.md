@@ -10,6 +10,7 @@ The implementation lives in:
 - `index.html` - standalone browser demo
 - `app.mjs` - UI wiring for the invoice page
 - `worker.mjs` - worker-side execution loop
+- `model.mjs` - browser-side local model loader for next-op prediction
 - `psvm.mjs` - invoice-calculator PSVM and canonical trace generator
 - `export_dataset.mjs` - synthetic dataset generator for next-op supervision
 - `train_transformer.py` - tiny invoice next-op transformer trainer/exporter
@@ -27,11 +28,8 @@ because it is:
 
 ## Current op set
 
-- `LOAD_INVOICE`
 - `READ_ITEM`
-- `PARSE_QTY`
-- `PARSE_PRICE`
-- `MUL_LINE_TOTAL`
+- `LINE_TOTAL`
 - `ADD_SUBTOTAL`
 - `APPLY_TAX`
 - `EMIT_TOTAL`
@@ -54,6 +52,12 @@ The first learned target is intentionally small:
 - output: next op in the invoice PSVM
 
 That is not full trace generation yet. It is the first honest learned step.
+
+The browser worker is wired for a hybrid mode:
+
+- if a local invoice model bundle exists, the worker shows student next-op
+  predictions alongside the exact teacher trace
+- if no local bundle exists, it falls back to the exact teacher only
 
 ## Local training flow
 

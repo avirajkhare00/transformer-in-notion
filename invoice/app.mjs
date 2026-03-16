@@ -65,6 +65,12 @@ function renderSummary(result = {}, extras = {}) {
   if (typeof extras.elapsedMs === "number") {
     cards.push(["worker ms", String(extras.elapsedMs)]);
   }
+  if (typeof extras.modelAccuracy === "number") {
+    cards.push(["student acc", `${(extras.modelAccuracy * 100).toFixed(1)}%`]);
+  }
+  if (extras.engine) {
+    cards.push(["engine", extras.engine]);
+  }
 
   summaryEl.innerHTML = cards
     .map(
@@ -126,6 +132,14 @@ function startRun() {
       activeCurrency = data.invoice.currency;
       renderItems(data.invoice);
       renderProgram(data.program);
+      if (data.modelError) {
+        setStatus(
+          `Model unavailable, falling back to exact PSVM teacher. ${data.modelError}`,
+          "busy",
+        );
+      } else if (data.engine === "student+teacher") {
+        setStatus("Worker running invoice PSVM with local transformer next-op predictions...", "busy");
+      }
       return;
     }
 
@@ -148,9 +162,13 @@ function startRun() {
       renderSummary(data.result, {
         traceLength: data.traceLength,
         elapsedMs: data.elapsedMs,
+        modelAccuracy: data.modelAccuracy,
+        engine: data.engine,
       });
       setStatus(
-        `Invoice total ready in ${data.elapsedMs} ms across ${data.traceLength} trace events.`,
+        data.engine === "student+teacher"
+          ? `Invoice total ready in ${data.elapsedMs} ms across ${data.traceLength} trace events. Student next-op accuracy: ${(data.modelAccuracy * 100).toFixed(1)}%.`
+          : `Invoice total ready in ${data.elapsedMs} ms across ${data.traceLength} trace events.`,
         "success",
       );
       stopWorker();
@@ -166,6 +184,7 @@ function startRun() {
   worker.postMessage({
     type: "run",
     source,
+    engine: "student",
   });
 }
 

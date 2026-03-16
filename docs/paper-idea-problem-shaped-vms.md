@@ -15,6 +15,38 @@ The hypothesis is that this narrower execution surface makes exact local
 computation feasible in the browser for problems like Sudoku and small
 rule-based web applications.
 
+## Why problem-shaped VMs are needed
+
+Problem-shaped VMs are needed because the two default formulations for exact
+tasks both land at the wrong abstraction layer.
+
+One-shot prediction asks the model to jump from input to answer while hiding the
+intermediate state transitions that exact computation depends on.
+
+Full-machine execution asks the model to reproduce a great deal of machine
+behavior that is irrelevant to the task family at hand: generic memory
+mechanics, broad instruction surfaces, operand encoding overhead, and control
+flow that the domain never needs explicitly.
+
+For small browser-local systems, both choices are wasteful.
+
+What is needed instead is a substrate that is:
+
+- expressive enough to represent the task's real transitions
+- narrow enough to keep traces short and supervision clean
+- exact enough to admit deterministic verification
+- small enough to run inside browser latency and memory budgets
+
+That substrate is a **problem-shaped VM**.
+
+In short:
+
+`not one-shot answer`
+
+`not full machine simulation`
+
+`but task-shaped execution`
+
 ## Abstract
 
 Language models are often evaluated on exact tasks by asking for one-shot

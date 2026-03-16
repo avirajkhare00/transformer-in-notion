@@ -22,10 +22,6 @@ Because the UI contract is explicit, the execution layer can still be replaced w
 - a WASM runtime
 - or a hybrid model + executor path
 
-- `invoice/` - a small invoice-calculator PSVM with exact money arithmetic
-- `soduku/` - a 4x4 Sudoku PSVM with a streamed worker trace
-- `weiqi/` - a 5x5 Weiqi capture PSVM with exact local rules and a streamed worker trace
-
 ## Current emphasis
 
 The repo currently emphasizes the PSVM track:
@@ -37,6 +33,29 @@ The repo currently emphasizes the PSVM track:
 
 Other older pages still exist as separate routes, but they are no longer the
 main entry story.
+
+## Why problem-shaped VMs are needed
+
+The point of a PSVM is not novelty for its own sake. It is a response to a real
+mismatch in how exact tasks are usually framed for models.
+
+- one-shot answer prediction hides the intermediate state transitions that exact
+  computation actually needs
+- full general-purpose VMs expose too much irrelevant machine detail for a
+  single task family
+- browser-local systems need shorter traces, smaller action spaces, and tighter
+  verification boundaries than a general machine usually provides
+
+A problem-shaped VM fixes that by moving the abstraction layer to where the task
+actually lives:
+
+- rules stay in an exact runtime
+- ambiguity stays at the op-selection boundary
+- the model learns only the useful execution surface
+
+That is why the repository keeps pushing toward:
+
+`rules + ambiguity -> custom VM + custom ops + exact runtime`
 
 ## Why these demos
 

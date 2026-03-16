@@ -6,9 +6,10 @@ The current version deliberately keeps the stack simple, but it now adopts a
 Percepta-style surface:
 
 - Tic-tac-toe with a visible local transformer policy trace
-- Sudoku with an animated browser-side WASM trace
+- Sudoku with preset loading, custom puzzle input, and an animated browser-side WASM trace
 - Prompt -> pseudo-program -> execution trace panels for both demos
 - Static files only, so GitHub Pages can host it directly
+- Separate standalone HTML entry pages for direct Notion embeds
 
 The embed story now has both halves:
 
@@ -32,7 +33,12 @@ artifacts:
 
 - Tic-tac-toe now loads a shipped ONNX model bundle from `models/tictactoe-bert/`
   through Transformers.js.
+- The Tic-tac-toe bundle now ships both `onnx/model.onnx` and
+  `onnx/model_quantized.onnx` so browser runtimes that still request the
+  quantized filename do not 404 on Pages.
 - Sudoku now loads a shipped WebAssembly binary from `wasm/sudoku_solver.wasm`.
+- Sudoku now supports preset selection and bring-your-own 81-cell puzzle input
+  in the browser.
 - The existing prompt -> program -> trace UI stays the same, but the engines
   behind the two cards are now different and real:
   - local transformer weights for Tic-tac-toe
@@ -83,6 +89,8 @@ Then open `http://localhost:8000`.
 ## Files
 
 - `index.html` - page shell and demo layout
+- `tic-tac-toe.html` - standalone Tic-tac-toe embed page
+- `sudoku.html` - standalone Sudoku embed page
 - `styles.css` - visual system tuned for an iframe or Notion embed
 - `app.mjs` - UI wiring and animations
 - `logic/tictactoe.mjs` - minimax engine
@@ -100,7 +108,12 @@ Then open `http://localhost:8000`.
 ## GitHub Pages
 
 The workflow in `.github/workflows/pages.yml` publishes the repo root as a Pages site.
-Once Pages is enabled, the resulting URL can be pasted straight into a Notion embed block.
+Once Pages is enabled, any of these URLs can be pasted straight into a Notion
+embed block:
+
+- `/`
+- `/tic-tac-toe.html`
+- `/sudoku.html`
 
 ## Training the tic-tac-toe model
 
@@ -112,8 +125,10 @@ node scripts/export_tictactoe_dataset.mjs
 ```
 
 That writes an ONNX-ready Hugging Face model bundle to `models/tictactoe-bert/`,
-with the ONNX graph stored at `models/tictactoe-bert/onnx/model.onnx`, which the
-browser loads via Transformers.js.
+with the ONNX graph stored at `models/tictactoe-bert/onnx/model.onnx`. The
+training/export step also writes a compatibility copy to
+`models/tictactoe-bert/onnx/model_quantized.onnx` so browser runtimes that still
+probe for the quantized filename work without extra deploy logic.
 
 ## Building the Sudoku WASM executor
 
@@ -140,6 +155,6 @@ loads directly with `WebAssembly.instantiate`.
 
 ## Next steps
 
-- Add puzzle presets and difficulty levels
 - Add a true model + executor pair for a larger puzzle
+- Add a small chess legality or mate-in-one example before full chess
 - Add a tighter mobile/embed height mode for narrower Notion columns

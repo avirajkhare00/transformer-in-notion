@@ -212,6 +212,11 @@ def save_and_export(
     ]
     subprocess.run(command, check=True)
 
+    source_model = onnx_dir / "model.onnx"
+    if not source_model.exists():
+        raise FileNotFoundError(f"Expected ONNX export at {source_model}")
+    shutil.copy2(source_model, onnx_dir / "model_quantized.onnx")
+
     for filename in [
         "config.json",
         "special_tokens_map.json",
@@ -219,9 +224,9 @@ def save_and_export(
         "tokenizer_config.json",
         "metadata.json",
     ]:
-      source = raw_dir / filename
-      if source.exists():
-          shutil.copy2(source, export_dir / filename)
+        source = raw_dir / filename
+        if source.exists():
+            shutil.copy2(source, export_dir / filename)
 
 
 def parse_args() -> argparse.Namespace:

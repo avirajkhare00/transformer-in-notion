@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="color-scheme" content="light dark">
+    <title>Sudoku Benchmark | Pocket Solver Garden</title>
+    <meta
+      name="description"
+      content="Standalone WASM-only Sudoku benchmark page with 100-run reporting."
+    >
+    <link rel="stylesheet" href="styles.css">
+  </head>
+  <body class="notion-embed-page">
+    <main class="page-shell single-demo-shell">
+      <section class="single-demo-grid" aria-label="sudoku benchmark">
+        <article class="panel panel-mint">
+          <div class="panel-head">
+            <p class="kicker">Benchmark</p>
+            <h2>Sudoku WASM</h2>
+            <p class="panel-copy">
+              Measure a browser-side WebAssembly Sudoku executor over 100 solves
+              on the same puzzle. This page is WASM-only and does not use a model
+              in the hot path.
+            </p>
+          </div>
+
+          <div class="playground">
+            <div class="board-column">
+              <div id="benchmark-status" class="status-card"></div>
+              <div id="benchmark-board" class="sudoku-board" aria-label="Sudoku board"></div>
+              <div class="control-row">
+                <button id="benchmark-run" class="button button-primary" type="button">
+                  Run 100x WASM benchmark
+                </button>
+                <a class="button button-secondary button-link" href="sudoku.html">
+                  Back to solver
+                </a>
+                <a class="button button-secondary button-link" href="sudoku-model.html">
+                  Model next op
+                </a>
+              </div>
+              <section class="mini-card sudoku-source-card">
+                <p class="mini-label">Puzzle source</p>
+                <label class="field-label" for="benchmark-preset">Presets</label>
+                <select id="benchmark-preset" class="field-input field-select">
+                  <option value="custom">Bring your own</option>
+                </select>
+                <label class="field-label" for="benchmark-input">Bring your own</label>
+                <textarea
+                  id="benchmark-input"
+                  class="field-input field-textarea"
+                  spellcheck="false"
+                  rows="6"
+                ></textarea>
+                <div class="control-row control-row-compact">
+                  <button id="benchmark-load" class="button button-secondary" type="button">
+                    Load puzzle
+                  </button>
+                </div>
+                <p class="field-hint">
+                  Uses an isolated worker and a fresh WASM runtime per 100-run report.
+                </p>
+              </section>
+            </div>
+
+            <div class="inspector-column">
+              <section class="mini-card">
+                <p class="mini-label">100-run stats</p>
+                <div id="benchmark-stats" class="stats-grid"></div>
+              </section>
+
+              <section class="mini-card">
+                <p class="mini-label">All run timings</p>
+                <pre id="benchmark-samples" class="code-block code-block-trace"></pre>
+              </section>
+            </div>
+          </div>
+        </article>
+      </section>
+    </main>
+
+    <script type="module" src="sudoku-benchmark.mjs"></script>
+  </body>
+</html>

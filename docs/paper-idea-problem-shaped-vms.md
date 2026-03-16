@@ -149,6 +149,47 @@ If the target domain is Sudoku, most of the model budget should go to:
 
 not to unrelated arithmetic or memory patterns.
 
+## Why not compile C directly into weights first
+
+Compiling arbitrary programs or even arbitrary `C -> VM -> weights` is an
+inspiring long-term direction. It is also the wrong first efficiency target for
+small browser-local systems.
+
+The problem is not expressiveness. A general compiler-to-weights path is
+maximally expressive. The problem is that it preserves too much machine detail
+that a single task family does not need.
+
+For browser-local executors, a general compiled path usually carries:
+
+- a broad instruction surface
+- operand and addressing overhead
+- stack or memory mechanics unrelated to the task
+- calling-convention and control-flow detail that expands traces
+- more verifier and runtime machinery than the task actually needs
+
+That makes the learned surface inefficient. The model spends capacity on
+emulating the scaffolding of a general machine instead of the decisions that
+actually matter for the domain.
+
+The more efficient first path is:
+
+`rules + ambiguity -> custom VM + custom ops + exact local runtime`
+
+In this formulation:
+
+- **rules** stay in a deterministic interpreter or WASM kernel
+- **ambiguity** lives at the op-selection boundary
+- **custom ops** collapse many irrelevant low-level steps into a single
+  domain-meaningful transition
+- **the transformer** only needs to emit the next useful op, not reproduce a
+  whole generic machine trace
+
+So the claim is not that compiler-to-weights is uninteresting. It is that for
+task-shaped browser systems, **custom ops on a custom VM are the efficient
+intermediate layer**.
+
+That is the main systems bet of this repository.
+
 ## Problem-Shaped VMs
 
 A PSVM is a virtual machine whose instruction set is derived from the task

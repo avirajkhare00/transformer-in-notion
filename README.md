@@ -3,10 +3,12 @@
 This repo is a small embeddable demo site for browser-local problem-shaped VM
 prototypes.
 
-The default landing page now stays focused on two PSVM examples:
+The default landing page stays focused on the PSVM track, while the repo also
+keeps a few older standalone routes around for comparison.
 
 - `invoice/` for compact business-logic execution
 - `soduku/` for compact search execution
+- `weiqi/` for compact local-rules capture search
 - Static files only, so GitHub Pages can host it directly
 - Separate standalone HTML entry pages for direct embeds
 
@@ -22,6 +24,7 @@ Because the UI contract is explicit, the execution layer can still be replaced w
 
 - `invoice/` - a small invoice-calculator PSVM with exact money arithmetic
 - `soduku/` - a 4x4 Sudoku PSVM with a streamed worker trace
+- `weiqi/` - a 5x5 Weiqi capture PSVM with exact local rules and a streamed worker trace
 
 ## Current emphasis
 
@@ -91,10 +94,17 @@ Then open `http://localhost:8000`.
 - `invoice/train_transformer.py` - tiny invoice next-op transformer trainer/exporter
 - `invoice/models/invoice-op-bert/` - shipped ONNX bundle for the invoice next-op student
 - `invoice/README.md` - invoice-calculator PSVM note and op-set summary
+- `weiqi/index.html` - standalone 5x5 Weiqi PSVM prototype
+- `weiqi/app.mjs` - browser UI for the Weiqi PSVM
+- `weiqi/worker.mjs` - worker-side Weiqi search loop
+- `weiqi/psvm5x5.mjs` - 5x5 Weiqi rules engine and bounded capture solver
+- `weiqi/README.md` - Weiqi-specific workspace note and VM scope
 - `docs/executor-v1-spec.md` - v1 transformer-executor spec and training target
 - `docs/paper-idea-problem-shaped-vms.md` - paper note for custom task-shaped VMs in browser-local transformers
 - `docs/use-case-matrix.md` - architecture combinations and small real-world use cases
 - `soduku/README.md` - Sudoku-specific workspace note and the recommended first benchmark
+- `soduku/export_hard_dataset.mjs` - hard-puzzle next-op dataset exporter with puzzle-held-out splits
+- `soduku/train_transformer.py` - tiny hard-set Sudoku next-op trainer/exporter
 - `styles.css` - visual system tuned for an iframe or Notion embed
 - `app.mjs` - UI wiring and animations
 - `logic/tictactoe.mjs` - minimax engine
@@ -156,6 +166,7 @@ The current prototype split is:
 
 - `invoice/` - exact invoice calculation expressed as a compact PSVM and executed in a Web Worker
 - `soduku/` - 4x4 Sudoku search expressed as a compact PSVM and executed in a Web Worker
+- `weiqi/` - 5x5 Weiqi capture problems expressed as a compact PSVM and executed in a Web Worker
 
 Neither browser prototype is transformer-backed yet. They are the deterministic
 execution substrates that the local model will eventually learn to imitate or
@@ -169,6 +180,15 @@ The invoice directory now also contains the first student-model path:
 - `invoice/worker.mjs` now runs the invoice page in a strict student-driven loop,
   with the interpreter enforcing legal PSVM transitions
 
+For hard 9x9 Sudoku benchmarking and future training/eval work, the repo now
+also includes:
+
+- `logic/sudoku-hard.mjs` - curated hard-puzzle presets
+- `scripts/benchmark_sudoku_hard.mjs` - apples-to-apples policy benchmark of the same JS DFS solver
+- `scripts/export_sudoku_hard_traces.mjs` - trace export for the hard corpus
+- `soduku/export_hard_dataset.mjs` - held-out hard-set next-op dataset export
+- `soduku/train_transformer.py` - tiny hard-set next-op student training
+
 ## Verified
 
 - The exported Tic-tac-toe ONNX bundle reached `99.54%` accuracy on the full
@@ -178,6 +198,15 @@ The invoice directory now also contains the first student-model path:
   - `458` trace events
   - `173` placements
   - `117` backtracks
+- The hard 9x9 benchmark now compares the same JS DFS solver under two chooser
+  policies (`row-major` vs `mrv`) and validates every returned solution against
+  the original clues. On the current curated hard set, MRV cuts search work by
+  large margins on every puzzle, while still losing wall-clock time on `Arto
+  Inkala 2012` because chooser overhead increases candidate lookups.
+- The first hard-set Sudoku student path is now real:
+  - exported dataset size in the smoke run: `12,591` samples
+  - eval split: held-out `AI Escargot`
+  - tiny next-op classifier smoke accuracy: `96.79%`
 - `node --check` passes for the frontend modules, and `cargo check` passes for
   the Rust executor crate.
 
@@ -263,6 +292,7 @@ If you want the paper-shaped framing for the more specific direction of
 `transformer + custom VM + Sudoku/web apps + WASM + browser`, see:
 
 - `docs/paper-idea-problem-shaped-vms.md`
+- `docs/vm-design-space.md`
 - `soduku/README.md`
 - `soduku/`
 - `invoice/`

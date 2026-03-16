@@ -14,6 +14,7 @@ import {
   formatSudokuCell,
   parseSudoku,
 } from "./logic/sudoku.mjs";
+import { HARD_SUDOKU_PRESETS } from "./logic/sudoku-hard.mjs";
 import { solveSudokuWithWasm, warmSudokuExecutor } from "./logic/sudoku-wasm.mjs";
 import {
   buildSudokuExecutorArtifacts,
@@ -40,6 +41,11 @@ const SUDOKU_PRESETS = [
     puzzle:
       "800000000003600000070090200050007000000045700000100030001000068008500010090000400",
   },
+  ...HARD_SUDOKU_PRESETS.filter(
+    (preset) =>
+      preset.puzzle !==
+      "800000000003600000070090200050007000000045700000100030001000068008500010090000400",
+  ),
 ];
 
 const tttState = {

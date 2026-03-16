@@ -154,6 +154,34 @@ not to unrelated arithmetic or memory patterns.
 A PSVM is a virtual machine whose instruction set is derived from the task
 family instead of from general-purpose computing.
 
+### VM family choices
+
+Not every VM family is equally useful for local transformer execution.
+
+- **stack VMs** are the best first generic executor target because the opcode
+  surface stays small and operand movement is implicit
+- **register VMs** are better when explicit named data flow matters, but they
+  expand the token/action space
+- **object or state-transition VMs** fit web apps and ledger-like tasks well
+  because legal steps are phase-based and easy to verify
+- **graph or dataflow VMs** fit routing, matching, and dependency problems
+  where state is naturally node-edge based
+- **constraint or rule VMs** fit Sudoku, SAT, and CSP-style tasks where
+  candidate propagation and undo are first-class semantics
+- **full bytecode VMs** are attractive long-term, but they are usually the
+  wrong first target because they force the model to learn too much irrelevant
+  machine behavior
+
+The practical takeaway is:
+
+`pick the smallest VM family that matches the task's real state transitions`
+
+This repository now spans three of these families already:
+
+- generic stack VM in `docs/executor-v1-spec.md`
+- object/state-transition PSVM in `invoice/`
+- constraint/search PSVM in `soduku/`
+
 ### Sudoku PSVM
 
 Possible instruction set:
@@ -181,6 +209,10 @@ For a small browser-side invoice calculator, the instruction set can instead be:
 
 This lets the model execute a business-calculation trace, not merely classify
 the final answer.
+
+For a broader taxonomy of VM families and where each one fits, see:
+
+- `docs/vm-design-space.md`
 
 ## Current repository prototypes
 

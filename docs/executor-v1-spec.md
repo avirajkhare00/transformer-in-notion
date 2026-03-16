@@ -45,6 +45,25 @@ until `HALT`.**
 
 V1 uses a tiny stack machine with bounded state.
 
+This is a deliberate choice, not the only VM possibility.
+
+Why stack-based for V1:
+
+- it is the smallest useful generic executor surface
+- implicit operands keep token count down
+- it gives a reusable bridge toward DSL execution without jumping straight to a
+  broad bytecode target
+
+Why not make every future system stack-based:
+
+- business and workflow apps often fit object/state-transition VMs better
+- graph problems often fit dataflow VMs better
+- search problems like Sudoku fit constraint/rule VMs better
+
+For the broader VM taxonomy, see:
+
+- `docs/vm-design-space.md`
+
 ### State
 
 - instruction pointer: `ip`

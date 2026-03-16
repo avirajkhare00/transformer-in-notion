@@ -136,11 +136,28 @@
             <li>The repo can still keep experimental routes without promoting them.</li>
           </ul>
         </article>
+
+        <article class="mini-card rationale-card">
+          <p class="mini-label">New PSVM</p>
+          <p class="rationale-copy">
+            The new Weiqi prototype keeps the board small and the op set tight:
+            exact 5x5 capture problems with worker-side search and a visible
+            move/capture/undo trace.
+          </p>
+          <div class="control-row" style="margin-top: 14px;">
+            <a class="button button-secondary button-link" href="weiqi/">
+              Open Weiqi PSVM
+            </a>
+          </div>
+        </article>
       </section>
 
       <footer class="footer-note">
         <p>
-          Default landing routes: <code>/invoice/</code> and <code>/soduku/</code>.
+          Default PSVM routes: <code>/invoice/</code>, <code>/soduku/</code>,
+          and <code>/weiqi/</code>. Older transformer-policy and 9x9 WASM pages
+          still exist as separate routes, but the landing page now stays centered
+          on the task-shaped VM path.
         </p>
       </footer>
     </main>

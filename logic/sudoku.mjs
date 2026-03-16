@@ -22,6 +22,17 @@ export function cloneSudokuBoard(board) {
   return board.map((row) => [...row]);
 }
 
+export function serializeSudoku(board) {
+  return board
+    .flat()
+    .map((value) => (value === 0 ? "." : String(value)))
+    .join("");
+}
+
+export function countFilledSudokuCells(board) {
+  return board.flat().filter((value) => value !== 0).length;
+}
+
 export function buildGivenMask(board) {
   return board.map((row) => row.map((value) => value !== 0));
 }
@@ -30,7 +41,11 @@ export function formatSudokuCell(row, col) {
   return `r${row + 1}c${col + 1}`;
 }
 
-function getCandidates(board, row, col) {
+function getCandidates(board, row, col, stats = null) {
+  if (stats) {
+    stats.candidateQueries += 1;
+  }
+
   if (board[row][col] !== 0) {
     return [];
   }
@@ -65,16 +80,24 @@ function getCandidates(board, row, col) {
   return candidates;
 }
 
-function chooseNextCell(board) {
+function chooseNextCell(board, stats = null) {
+  if (stats) {
+    stats.chooserCalls += 1;
+  }
+
   let best = null;
 
   for (let row = 0; row < 9; row += 1) {
     for (let col = 0; col < 9; col += 1) {
+      if (stats) {
+        stats.chooserCellScans += 1;
+      }
+
       if (board[row][col] !== 0) {
         continue;
       }
 
-      const candidates = getCandidates(board, row, col);
+      const candidates = getCandidates(board, row, col, stats);
       if (!best || candidates.length < best.candidates.length) {
         best = { row, col, candidates };
       }
@@ -88,22 +111,64 @@ function chooseNextCell(board) {
   return best;
 }
 
-export function solveSudokuWithTrace(startBoard) {
+function chooseNextCellRowMajor(board, stats = null) {
+  if (stats) {
+    stats.chooserCalls += 1;
+  }
+
+  for (let row = 0; row < 9; row += 1) {
+    for (let col = 0; col < 9; col += 1) {
+      if (stats) {
+        stats.chooserCellScans += 1;
+      }
+
+      if (board[row][col] !== 0) {
+        continue;
+      }
+
+      return {
+        row,
+        col,
+        candidates: getCandidates(board, row, col, stats),
+      };
+    }
+  }
+
+  return null;
+}
+
+function getChooser(strategy) {
+  if (strategy === "row-major") {
+    return chooseNextCellRowMajor;
+  }
+  return chooseNextCell;
+}
+
+export function solveSudokuWithTrace(startBoard, options = {}) {
+  const strategy = options.strategy ?? "mrv";
+  const chooseCell = getChooser(strategy);
   const board = cloneSudokuBoard(startBoard);
   const trace = [];
   const stats = {
     placements: 0,
     backtracks: 0,
     focuses: 0,
+    deadEnds: 0,
+    candidateQueries: 0,
+    chooserCalls: 0,
+    chooserCellScans: 0,
+    maxDepth: 0,
   };
 
   function search(depth = 0) {
-    const next = chooseNextCell(board);
+    stats.maxDepth = Math.max(stats.maxDepth, depth);
+    const next = chooseCell(board, stats);
     if (!next) {
       return true;
     }
 
     if (next.candidates.length === 0) {
+      stats.deadEnds += 1;
       return false;
     }
 
@@ -151,5 +216,58 @@ export function solveSudokuWithTrace(startBoard) {
     solution: board,
     trace,
     stats,
+    strategy,
   };
+}
+
+export function solveSudokuNaively(startBoard) {
+  return solveSudokuWithTrace(startBoard, { strategy: "row-major" });
+}
+
+export function isValidSudokuSolution(board, clueBoard = null) {
+  for (let row = 0; row < 9; row += 1) {
+    const rowValues = new Set();
+    const colValues = new Set();
+    for (let col = 0; col < 9; col += 1) {
+      const rowValue = board[row][col];
+      const colValue = board[col][row];
+      if (!Number.isInteger(rowValue) || rowValue < 1 || rowValue > 9) {
+        return false;
+      }
+      if (!Number.isInteger(colValue) || colValue < 1 || colValue > 9) {
+        return false;
+      }
+      rowValues.add(rowValue);
+      colValues.add(colValue);
+    }
+    if (rowValues.size !== 9 || colValues.size !== 9) {
+      return false;
+    }
+  }
+
+  for (let boxRow = 0; boxRow < 9; boxRow += 3) {
+    for (let boxCol = 0; boxCol < 9; boxCol += 3) {
+      const values = new Set();
+      for (let row = boxRow; row < boxRow + 3; row += 1) {
+        for (let col = boxCol; col < boxCol + 3; col += 1) {
+          values.add(board[row][col]);
+        }
+      }
+      if (values.size !== 9) {
+        return false;
+      }
+    }
+  }
+
+  if (clueBoard) {
+    for (let row = 0; row < 9; row += 1) {
+      for (let col = 0; col < 9; col += 1) {
+        if (clueBoard[row][col] !== 0 && board[row][col] !== clueBoard[row][col]) {
+          return false;
+        }
+      }
+    }
+  }
+
+  return true;
 }

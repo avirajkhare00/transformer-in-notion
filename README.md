@@ -2,8 +2,8 @@
 
 This repo is a small embeddable demo site for Notion pages.
 
-The current version deliberately keeps the stack simple, but it now adopts a
-Percepta-style surface:
+The current version deliberately keeps the stack simple, but it now uses an
+explicit prompt -> program -> trace surface:
 
 - Tic-tac-toe with a visible local transformer policy trace
 - Sudoku with preset loading, custom puzzle input, and an animated browser-side WASM trace
@@ -115,6 +115,8 @@ Then open `http://localhost:8000`.
 - `docs/paper-idea-problem-shaped-vms.md` - paper note for custom task-shaped VMs in browser-local transformers
 - `docs/use-case-matrix.md` - architecture combinations and small real-world use cases
 - `soduku/README.md` - Sudoku-specific workspace note and the recommended first benchmark
+- `soduku/export_hard_dataset.mjs` - hard-puzzle next-op dataset exporter with puzzle-held-out splits
+- `soduku/train_transformer.py` - tiny hard-set Sudoku next-op trainer/exporter
 - `styles.css` - visual system tuned for an iframe or Notion embed
 - `app.mjs` - UI wiring and animations
 - `logic/tictactoe.mjs` - minimax engine
@@ -189,6 +191,15 @@ The invoice directory now also contains the first student-model path:
 - `invoice/worker.mjs` now runs the invoice page in a strict student-driven loop,
   with the interpreter enforcing legal PSVM transitions
 
+For hard 9x9 Sudoku benchmarking and future training/eval work, the repo now
+also includes:
+
+- `logic/sudoku-hard.mjs` - curated hard-puzzle presets
+- `scripts/benchmark_sudoku_hard.mjs` - apples-to-apples policy benchmark of the same JS DFS solver
+- `scripts/export_sudoku_hard_traces.mjs` - trace export for the hard corpus
+- `soduku/export_hard_dataset.mjs` - held-out hard-set next-op dataset export
+- `soduku/train_transformer.py` - tiny hard-set next-op student training
+
 ## Verified
 
 - The exported Tic-tac-toe ONNX bundle reached `99.54%` accuracy on the full
@@ -198,6 +209,15 @@ The invoice directory now also contains the first student-model path:
   - `458` trace events
   - `173` placements
   - `117` backtracks
+- The hard 9x9 benchmark now compares the same JS DFS solver under two chooser
+  policies (`row-major` vs `mrv`) and validates every returned solution against
+  the original clues. On the current curated hard set, MRV cuts search work by
+  large margins on every puzzle, while still losing wall-clock time on `Arto
+  Inkala 2012` because chooser overhead increases candidate lookups.
+- The first hard-set Sudoku student path is now real:
+  - exported dataset size in the smoke run: `12,591` samples
+  - eval split: held-out `AI Escargot`
+  - tiny next-op classifier smoke accuracy: `96.79%`
 - `node --check` passes for the frontend modules, and `cargo check` passes for
   the Rust executor crate.
 
@@ -283,6 +303,7 @@ If you want the paper-shaped framing for the more specific direction of
 `transformer + custom VM + Sudoku/web apps + WASM + browser`, see:
 
 - `docs/paper-idea-problem-shaped-vms.md`
+- `docs/vm-design-space.md`
 - `soduku/README.md`
 - `soduku/`
 - `invoice/`

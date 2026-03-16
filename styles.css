@@ -65,10 +65,13 @@ body::after {
   background: rgba(255, 140, 105, 0.2);
 }
 
+body.runtime-page,
 body.notion-embed-page {
   background: transparent;
 }
 
+body.runtime-page::before,
+body.runtime-page::after,
 body.notion-embed-page::before,
 body.notion-embed-page::after {
   display: none;
@@ -715,15 +718,18 @@ body.notion-embed-page::after {
   order: 2;
 }
 
+body.runtime-page .page-shell,
 body.notion-embed-page .page-shell {
   width: min(1100px, calc(100vw - 8px));
   padding: 8px 0 10px;
 }
 
+body.runtime-page .single-demo-grid,
 body.notion-embed-page .single-demo-grid {
   margin-top: 0;
 }
 
+body.runtime-page .panel,
 body.notion-embed-page .panel {
   background: transparent;
   border: 0;
@@ -733,21 +739,28 @@ body.notion-embed-page .panel {
   overflow: visible;
 }
 
+body.runtime-page .panel::before,
+body.runtime-page .hero,
+body.runtime-page .panel-head,
 body.notion-embed-page .panel::before,
 body.notion-embed-page .hero,
 body.notion-embed-page .panel-head {
   display: none;
 }
 
+body.runtime-page .playground,
 body.notion-embed-page .playground {
   margin-top: 0;
   gap: 14px;
 }
 
+body.runtime-page .single-demo-shell .playground,
 body.notion-embed-page .single-demo-shell .playground {
   grid-template-columns: minmax(320px, 0.95fr) minmax(0, 1.05fr);
 }
 
+body.runtime-page .status-card,
+body.runtime-page .mini-card,
 body.notion-embed-page .status-card,
 body.notion-embed-page .mini-card {
   background: rgba(255, 255, 255, 0.9);

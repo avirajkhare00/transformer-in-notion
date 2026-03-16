@@ -12,8 +12,8 @@ execute the trace of a **problem-shaped virtual machine (PSVM)** whose
 instruction set is trimmed to exactly the operations one task family needs.
 
 The hypothesis is that this narrower execution surface makes exact local
-computation feasible in the browser for problems like Sudoku and small
-rule-based web applications.
+computation feasible in the browser for problems like Sudoku and other small
+rule-based applications.
 
 ## Why problem-shaped VMs are needed
 
@@ -39,6 +39,28 @@ What is needed instead is a substrate that is:
 
 That substrate is a **problem-shaped VM**.
 
+## Code as source of truth
+
+The project treats code and runtime behavior as authoritative.
+
+The runtime defines:
+
+- what a legal step is
+- when a branch has failed
+- when rollback is required
+- what the correct output means
+
+The model is trained against the trace emitted by that runtime. So the learned
+layer lives on top of exact code instead of replacing it.
+
+The operative pattern is:
+
+`state -> model -> next VM token -> exact runtime -> new state`
+
+not:
+
+`state -> model -> unverifiable answer`
+
 In short:
 
 `not one-shot answer`
@@ -57,7 +79,7 @@ computation outside the model. We propose an intermediate path: compile a task
 into a **problem-shaped virtual machine (PSVM)** with a small, task-specific
 instruction set, generate canonical execution traces with a deterministic
 interpreter, and train a local transformer to autoregressively emit the next
-trace token. We instantiate this idea for Sudoku and small browser-native web
+trace token. We instantiate this idea for Sudoku and other small rule-based
 applications such as invoice calculators and rule checkers. The full stack is
 browser-local: the model runs in a Web Worker, the interpreter and verifier are
 compiled to WebAssembly or implemented as exact local runtimes, and the UI

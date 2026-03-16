@@ -1,6 +1,6 @@
 # Use-Case Matrix
 
-This project is not just "put a model in Notion." The more useful framing is:
+This project is not just "put a model in a page." The more useful framing is:
 
 `UI shell + reasoning layer + exact runtime + verifier`
 
@@ -23,13 +23,13 @@ The table below is meant to answer one practical question:
 | `LLM + tiny model` | Natural-language control over a small local policy | "Play the strongest reply from this board" | LLM handles framing, model handles fast choice | Split responsibility can feel arbitrary |
 | `LLM + tool + verifier` | High-trust workflows that must be checked | Draft a reimbursement claim and validate totals, dates, and limits | Good for paperwork-style tasks | More moving parts than a mini demo needs |
 | `LLM + model + WASM executor` | Reasoning, routing, and exact local execution in one loop | Tiny DSL authoring: describe a workflow, compile, run, trace | Closest to the "transformer as computer" story | Highest implementation complexity |
-| `LLM + model + tool + verifier` | Rich assistants that still need hard guardrails | Support copilot that drafts, classifies, calls APIs, and checks policy | Strong product path outside demos | Too large for a first Notion-native showcase |
+| `LLM + model + tool + verifier` | Rich assistants that still need hard guardrails | Support copilot that drafts, classifies, calls APIs, and checks policy | Strong product path outside demos | Too large for a first compact browser showcase |
 
 ## Small real-world use cases
 
-These are the best candidates if the goal is a **small, legible, embeddable** demo rather than a full product.
+These are the best candidates if the goal is a **small, legible, browser-local** demo rather than a full product.
 
-| Use case | Best stack | Input | Output | Why it is compelling in a Notion embed |
+| Use case | Best stack | Input | Output | Why it is compelling in a browser demo |
 | --- | --- | --- | --- | --- |
 | Expense split checker | `WASM executor only` | Names, amounts, who paid | Net balances + settlement plan | Everyone understands the result instantly |
 | Meeting slot finder | `LLM + WASM executor` | Natural-language constraints + calendars | Ranked feasible slots | Feels useful immediately and stays exact |
@@ -61,9 +61,9 @@ If the goal is to showcase the combinations, these are the strongest next demos 
 | Idea | Why not first |
 | --- | --- |
 | Full chess | Search, legality, and trust requirements jump too fast |
-| Open-ended coding assistant | Hard to verify in a tiny embed |
+| Open-ended coding assistant | Hard to verify in a compact browser demo |
 | Large RAG demo | Looks like everyone else's AI widget |
-| Generic chatbot | Weakest possible proof of "computation in Notion" |
+| Generic chatbot | Weakest possible proof of exact computation |
 | Hard 9x9 model-only Sudoku | Great headline, poor first reliability target |
 
 ## Simple rule of thumb

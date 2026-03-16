@@ -186,6 +186,8 @@ The invoice directory now also contains the first student-model path:
 - `invoice/export_dataset.mjs` generates synthetic `(context -> next op)` samples
 - `invoice/train_transformer.py` trains a tiny next-op classifier on that dataset
 - `invoice/models/invoice-op-bert/` contains the exported local model bundle
+- `invoice/worker.mjs` now runs the invoice page in a strict student-driven loop,
+  with the interpreter enforcing legal PSVM transitions
 
 ## Verified
 

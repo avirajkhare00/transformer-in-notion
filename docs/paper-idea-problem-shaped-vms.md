@@ -208,6 +208,14 @@ canonical trace from a Web Worker into a browser UI.
 The point is the same in both cases: expose only the exact operations the task
 needs, then generate and inspect a canonical execution trace in the browser.
 
+The repository also now includes the first student-model path for this domain:
+
+- `invoice/export_dataset.mjs` for synthetic next-op supervision
+- `invoice/train_transformer.py` for a tiny next-op classifier
+
+That is still narrower than full trace generation, but it is the first concrete
+learned executor step on top of the deterministic PSVM.
+
 ### Prototype B: Sudoku PSVM
 
 Implemented under `soduku/`:

@@ -106,6 +106,8 @@ Then open `http://localhost:8000`.
 - `invoice/app.mjs` - browser UI for the invoice PSVM
 - `invoice/worker.mjs` - worker-side invoice execution loop
 - `invoice/psvm.mjs` - invoice-calculator PSVM and canonical trace generator
+- `invoice/export_dataset.mjs` - synthetic dataset generator for invoice next-op supervision
+- `invoice/train_transformer.py` - tiny invoice next-op transformer trainer/exporter
 - `invoice/README.md` - invoice-calculator PSVM note and op-set summary
 - `docs/executor-v1-spec.md` - v1 transformer-executor spec and training target
 - `docs/paper-idea-problem-shaped-vms.md` - paper note for custom task-shaped VMs in browser-local transformers
@@ -173,8 +175,14 @@ The current prototype split is:
 - `invoice/` - exact invoice calculation expressed as a compact PSVM and executed in a Web Worker
 - `soduku/` - 4x4 Sudoku search expressed as a compact PSVM and executed in a Web Worker
 
-Neither path is transformer-backed yet. They are the deterministic execution
-substrates that the local model will eventually learn to imitate or drive.
+Neither browser prototype is transformer-backed yet. They are the deterministic
+execution substrates that the local model will eventually learn to imitate or
+drive.
+
+The invoice directory now also contains the first student-model path:
+
+- `invoice/export_dataset.mjs` generates synthetic `(context -> next op)` samples
+- `invoice/train_transformer.py` trains a tiny next-op classifier on that dataset
 
 ## Verified
 

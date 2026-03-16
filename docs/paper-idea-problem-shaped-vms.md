@@ -1,5 +1,9 @@
 # Problem-Shaped Virtual Machines for Exact Local Transformer Execution
 
+**Aviraj Khare**  
+Email: `avirajkhare00@gmail.com`  
+X: `@avirajkhare00` (`x.com/avirajkhare00`)
+
 ## Abstract
 
 Small local transformers are poorly matched to exact tasks when the only choices

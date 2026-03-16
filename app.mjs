@@ -27,6 +27,9 @@ import {
 
 const MAX_TTT_LOG_ITEMS = 24;
 const MAX_SUDOKU_LOG_ITEMS = 180;
+const LEGACY_SUDOKU_PRESET_ALIASES = Object.freeze({
+  "sparse-hard": "inkala-2012",
+});
 const SUDOKU_PRESETS = [
   {
     id: "browser-demo",
@@ -39,17 +42,7 @@ const SUDOKU_PRESETS = [
     puzzle:
       "530070000600195000098000060800060003400803001700020006060000280000419005000080079",
   },
-  {
-    id: "sparse-hard",
-    label: "Sparse hard",
-    puzzle:
-      "800000000003600000070090200050007000000045700000100030001000068008500010090000400",
-  },
-  ...HARD_SUDOKU_PRESETS.filter(
-    (preset) =>
-      preset.puzzle !==
-      "800000000003600000070090200050007000000045700000100030001000068008500010090000400",
-  ),
+  ...HARD_SUDOKU_PRESETS,
 ];
 
 const tttState = {
@@ -378,7 +371,8 @@ function selectSudokuPresetForPuzzle(puzzle) {
 }
 
 function findSudokuPreset(id) {
-  return SUDOKU_PRESETS.find((preset) => preset.id === id) ?? null;
+  const canonicalId = LEGACY_SUDOKU_PRESET_ALIASES[id] ?? id;
+  return SUDOKU_PRESETS.find((preset) => preset.id === canonicalId) ?? null;
 }
 
 function getSudokuPresetFromLocation() {

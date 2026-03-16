@@ -91,6 +91,8 @@ Then open `http://localhost:8000`.
 - `index.html` - page shell and demo layout
 - `tic-tac-toe.html` - standalone Tic-tac-toe embed page
 - `sudoku.html` - standalone Sudoku embed page
+- `docs/executor-v1-spec.md` - v1 transformer-executor spec and training target
+- `docs/paper-idea-problem-shaped-vms.md` - paper note for custom task-shaped VMs in browser-local transformers
 - `docs/use-case-matrix.md` - architecture combinations and small real-world use cases
 - `styles.css` - visual system tuned for an iframe or Notion embed
 - `app.mjs` - UI wiring and animations
@@ -168,3 +170,14 @@ If you are deciding what kind of demo to build next, see
 - `LLM / model / tool / executor / verifier` combinations
 - the small real-world use cases each combination fits best
 - which examples are worth building in this repo next
+
+If you want the concrete next build target for the "computer inside a
+transformer" direction, see:
+
+- `docs/executor-v1-spec.md`
+- `docs/examples/executor-v1-add-two.json`
+
+If you want the paper-shaped framing for the more specific direction of
+`transformer + custom VM + Sudoku/web apps + WASM + browser`, see:
+
+- `docs/paper-idea-problem-shaped-vms.md`

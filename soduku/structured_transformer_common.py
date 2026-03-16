@@ -10,7 +10,7 @@ from typing import Iterable
 
 import torch
 from torch import nn
-from torch.utils.data import DataLoader, IterableDataset, TensorDataset
+from torch.utils.data import DataLoader, IterableDataset, TensorDataset, get_worker_info
 
 BOARD_LENGTH = 81
 CANDIDATE_LENGTH = 9
@@ -125,13 +125,13 @@ def load_structured_dataset(
 
 def _feature_dict_to_sample(features: dict) -> tuple[torch.Tensor, ...]:
     return (
-        torch.tensor(features["board_tokens"], dtype=torch.int32),
-        torch.tensor(features["focus_row"], dtype=torch.int32),
-        torch.tensor(features["focus_col"], dtype=torch.int32),
-        torch.tensor(features["candidate_mask"], dtype=torch.int32),
-        torch.tensor(features["history_ops"], dtype=torch.int32),
-        torch.tensor(features["filled_count"], dtype=torch.int32),
-        torch.tensor(features["search_depth"], dtype=torch.int32),
+        torch.tensor(features["board_tokens"], dtype=torch.long),
+        torch.tensor(features["focus_row"], dtype=torch.long),
+        torch.tensor(features["focus_col"], dtype=torch.long),
+        torch.tensor(features["candidate_mask"], dtype=torch.long),
+        torch.tensor(features["history_ops"], dtype=torch.long),
+        torch.tensor(features["filled_count"], dtype=torch.long),
+        torch.tensor(features["search_depth"], dtype=torch.long),
         torch.tensor(features["label"], dtype=torch.long),
     )
 
@@ -142,9 +142,33 @@ class StructuredJsonlDataset(IterableDataset):
         self.jsonl_path = jsonl_path
 
     def __iter__(self):
-        with self.jsonl_path.open("r", encoding="utf-8") as handle:
-            for raw_line in handle:
-                line = raw_line.strip()
+        worker = get_worker_info()
+        worker_id = worker.id if worker is not None else 0
+        worker_count = worker.num_workers if worker is not None else 1
+        file_size = self.jsonl_path.stat().st_size
+
+        start = 0
+        end = None
+        if worker_count > 1 and file_size > 0:
+            shard_size = file_size // worker_count
+            start = shard_size * worker_id
+            end = file_size if worker_id == worker_count - 1 else shard_size * (worker_id + 1)
+
+        with self.jsonl_path.open("rb") as handle:
+            if start > 0:
+                handle.seek(start)
+                handle.readline()
+
+            while True:
+                current = handle.tell()
+                if end is not None and current >= end:
+                    break
+
+                raw_line = handle.readline()
+                if not raw_line:
+                    break
+
+                line = raw_line.decode("utf-8").strip()
                 if not line:
                     continue
                 sample = json.loads(line)
@@ -227,10 +251,10 @@ def to_structured_samples(samples: list[dict]) -> StructuredSampleSet:
             if len(row) != width:
                 raise ValueError(f"{key} width mismatch: expected {width}, got {len(row)}")
             values.append(row)
-        return torch.tensor(values, dtype=torch.int32)
+        return torch.tensor(values, dtype=torch.long)
 
     def tensor_1d(key: str) -> torch.Tensor:
-        return torch.tensor([sample[key] for sample in samples], dtype=torch.int32)
+        return torch.tensor([sample[key] for sample in samples], dtype=torch.long)
 
     return StructuredSampleSet(
         board_tokens=tensor_2d("board_tokens", BOARD_LENGTH),
@@ -370,13 +394,28 @@ class StructuredSudokuTransformer(nn.Module):
         filled_count: torch.Tensor,
         search_depth: torch.Tensor,
     ) -> torch.Tensor:
-        board_tokens = board_tokens.long().clamp_(0, BOARD_VOCAB - 1)
-        focus_row = focus_row.long().clamp_(0, FOCUS_VOCAB - 1)
-        focus_col = focus_col.long().clamp_(0, FOCUS_VOCAB - 1)
-        candidate_mask = candidate_mask.long().clamp_(0, BINARY_VOCAB - 1)
-        history_ops = history_ops.long().clamp_(0, HISTORY_VOCAB - 1)
-        filled_count = filled_count.long().clamp_(0, COUNT_VOCAB - 1)
-        search_depth = search_depth.long().clamp_(0, DEPTH_VOCAB - 1)
+        if board_tokens.dtype != torch.long:
+            board_tokens = board_tokens.long()
+        if focus_row.dtype != torch.long:
+            focus_row = focus_row.long()
+        if focus_col.dtype != torch.long:
+            focus_col = focus_col.long()
+        if candidate_mask.dtype != torch.long:
+            candidate_mask = candidate_mask.long()
+        if history_ops.dtype != torch.long:
+            history_ops = history_ops.long()
+        if filled_count.dtype != torch.long:
+            filled_count = filled_count.long()
+        if search_depth.dtype != torch.long:
+            search_depth = search_depth.long()
+
+        board_tokens = board_tokens.clamp_(0, BOARD_VOCAB - 1)
+        focus_row = focus_row.clamp_(0, FOCUS_VOCAB - 1)
+        focus_col = focus_col.clamp_(0, FOCUS_VOCAB - 1)
+        candidate_mask = candidate_mask.clamp_(0, BINARY_VOCAB - 1)
+        history_ops = history_ops.clamp_(0, HISTORY_VOCAB - 1)
+        filled_count = filled_count.clamp_(0, COUNT_VOCAB - 1)
+        search_depth = search_depth.clamp_(0, DEPTH_VOCAB - 1)
 
         sequence = [
             self.cls_token.expand(board_tokens.shape[0], -1, -1),

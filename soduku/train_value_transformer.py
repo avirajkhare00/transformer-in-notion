@@ -28,6 +28,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--lr", type=float, default=8e-4)
     parser.add_argument("--target-accuracy", type=float, default=0.70)
     parser.add_argument("--log-every", type=int, default=100)
+    parser.add_argument("--num-workers", type=int, default=0)
+    parser.add_argument("--prefetch-factor", type=int, default=4)
     parser.add_argument("--checkpoint-dir", type=Path)
     parser.add_argument("--checkpoint-every", type=int, default=1)
     parser.add_argument("--resume-from-checkpoint", type=Path)
@@ -56,13 +58,25 @@ def main() -> None:
             f"Dataset split is empty for {dataset_path}: train={bundle.train_count} eval={bundle.eval_count}."
         )
 
+    loader_kwargs = {}
+    if args.num_workers > 0:
+        loader_kwargs = {
+            "num_workers": args.num_workers,
+            "persistent_workers": True,
+            "prefetch_factor": args.prefetch_factor,
+        }
+
     train_loader = DataLoader(
         bundle.train_dataset,
         batch_size=args.batch_size,
         shuffle=not bundle.streaming,
+        **loader_kwargs,
     )
     eval_loader = DataLoader(
-        bundle.eval_dataset, batch_size=args.batch_size, shuffle=False
+        bundle.eval_dataset,
+        batch_size=args.batch_size,
+        shuffle=False,
+        **loader_kwargs,
     )
     device = default_device()
 
@@ -70,7 +84,7 @@ def main() -> None:
         "training structured value model on "
         f"{device} with train={bundle.train_count} eval={bundle.eval_count} "
         f"format={bundle.metadata['format']} batch_size={args.batch_size} "
-        f"log_every={args.log_every}",
+        f"log_every={args.log_every} num_workers={args.num_workers}",
         flush=True,
     )
 

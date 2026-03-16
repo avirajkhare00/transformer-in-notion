@@ -22,6 +22,8 @@ MIN_RATING=0
 EVAL_PERCENT=5
 STATUS_EVERY=100
 LOG_EVERY=100
+NUM_WORKERS=4
+PREFETCH_FACTOR=4
 CHECKPOINT_EVERY=1
 RESUME_LATEST=0
 
@@ -59,6 +61,8 @@ Options:
   --eval-percent N             Percent of puzzles held out for eval. Default: 5
   --status-every N             Progress logging frequency for exporter. Default: 100
   --log-every N                Batch logging frequency for both Python trainers. Default: 100
+  --num-workers N              DataLoader workers for both Python trainers. Default: 4
+  --prefetch-factor N          DataLoader prefetch factor when workers > 0. Default: 4
   --checkpoint-every N         Save latest checkpoint every N epochs. Default: 1
   --resume-latest              Reuse <checkpoint-dir>/latest.pt when present.
 
@@ -108,6 +112,8 @@ while [ $# -gt 0 ]; do
     --eval-percent) EVAL_PERCENT="$2"; shift 2 ;;
     --status-every) STATUS_EVERY="$2"; shift 2 ;;
     --log-every) LOG_EVERY="$2"; shift 2 ;;
+    --num-workers) NUM_WORKERS="$2"; shift 2 ;;
+    --prefetch-factor) PREFETCH_FACTOR="$2"; shift 2 ;;
     --checkpoint-every) CHECKPOINT_EVERY="$2"; shift 2 ;;
     --resume-latest) RESUME_LATEST=1; shift 1 ;;
     --op-raw-dir) OP_RAW_DIR="$2"; shift 2 ;;
@@ -172,6 +178,8 @@ printf 'Input CSV: %s\n' "$INPUT"
 printf 'Output dir: %s\n' "$OUTPUT_DIR"
 printf 'Limit puzzles: %s\n' "$LIMIT_PUZZLES"
 printf 'Trainer log every: %s\n' "$LOG_EVERY"
+printf 'DataLoader workers: %s\n' "$NUM_WORKERS"
+printf 'Prefetch factor: %s\n' "$PREFETCH_FACTOR"
 printf 'Checkpoint every: %s\n' "$CHECKPOINT_EVERY"
 printf 'Op resume checkpoint: %s\n' "${OP_RESUME_CHECKPOINT:-<none>}"
 printf 'Value resume checkpoint: %s\n' "${VALUE_RESUME_CHECKPOINT:-<none>}"
@@ -210,6 +218,8 @@ if [ "$SKIP_OP" -eq 0 ]; then
     --epochs "$OP_EPOCHS" \
     --batch-size "$OP_BATCH_SIZE" \
     --target-accuracy "$OP_TARGET_ACCURACY" \
+    --num-workers "$NUM_WORKERS" \
+    --prefetch-factor "$PREFETCH_FACTOR" \
     --log-every "$LOG_EVERY"
   if [ -n "$OP_RESUME_CHECKPOINT" ]; then
     set -- "$@" --resume-from-checkpoint "$OP_RESUME_CHECKPOINT"
@@ -233,6 +243,8 @@ if [ "$SKIP_VALUE" -eq 0 ]; then
     --epochs "$VALUE_EPOCHS" \
     --batch-size "$VALUE_BATCH_SIZE" \
     --target-accuracy "$VALUE_TARGET_ACCURACY" \
+    --num-workers "$NUM_WORKERS" \
+    --prefetch-factor "$PREFETCH_FACTOR" \
     --log-every "$LOG_EVERY"
   if [ -n "$VALUE_RESUME_CHECKPOINT" ]; then
     set -- "$@" --resume-from-checkpoint "$VALUE_RESUME_CHECKPOINT"

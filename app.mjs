@@ -1,17 +1,24 @@
 import {
-  analyzeTicTacToe,
   createTicTacToeBoard,
   formatMoveLabel,
   getTicTacToeOutcome,
 } from "./logic/tictactoe.mjs";
+import {
+  analyzeTicTacToeWithModel,
+  warmTicTacToeModel,
+} from "./logic/tictactoe-model.mjs";
 import {
   DEFAULT_PUZZLE,
   buildGivenMask,
   cloneSudokuBoard,
   formatSudokuCell,
   parseSudoku,
-  solveSudokuWithTrace,
 } from "./logic/sudoku.mjs";
+import { solveSudokuWithWasm, warmSudokuExecutor } from "./logic/sudoku-wasm.mjs";
+import {
+  buildSudokuExecutorArtifacts,
+  buildTicTacToeExecutorArtifacts,
+} from "./logic/executor.mjs";
 
 const MAX_LOG_ITEMS = 7;
 
@@ -20,10 +27,14 @@ const tttState = {
   analysis: null,
   log: [],
   locked: false,
+  modelReady: false,
+  modelError: "",
   timeoutId: 0,
+  requestId: 0,
 };
 
 const sudokuState = {
+  puzzle: DEFAULT_PUZZLE,
   initialBoard: parseSudoku(DEFAULT_PUZZLE),
   givenMask: [],
   board: [],
@@ -33,6 +44,10 @@ const sudokuState = {
   stepIndex: 0,
   timerId: 0,
   isAnimating: false,
+  isLoading: false,
+  executorReady: false,
+  executorError: "",
+  requestId: 0,
 };
 
 const refs = {
@@ -40,12 +55,18 @@ const refs = {
   tttStatus: document.querySelector("#ttt-status"),
   tttAnalysis: document.querySelector("#ttt-analysis"),
   tttLog: document.querySelector("#ttt-log"),
+  tttPrompt: document.querySelector("#ttt-prompt"),
+  tttProgram: document.querySelector("#ttt-program"),
+  tttTrace: document.querySelector("#ttt-trace"),
   tttReset: document.querySelector("#ttt-reset"),
   tttAiFirst: document.querySelector("#ttt-ai-first"),
   sudokuBoard: document.querySelector("#sudoku-board"),
   sudokuStatus: document.querySelector("#sudoku-status"),
   sudokuStats: document.querySelector("#sudoku-stats"),
   sudokuLog: document.querySelector("#sudoku-log"),
+  sudokuPrompt: document.querySelector("#sudoku-prompt"),
+  sudokuProgram: document.querySelector("#sudoku-program"),
+  sudokuTrace: document.querySelector("#sudoku-trace"),
   sudokuReset: document.querySelector("#sudoku-reset"),
   sudokuAnimate: document.querySelector("#sudoku-animate"),
   sudokuSolve: document.querySelector("#sudoku-solve"),
@@ -59,6 +80,7 @@ function init() {
   bindEvents();
   resetTicTacToe();
   resetSudoku();
+  primeTicTacToeModel();
 }
 
 function bindEvents() {
@@ -125,42 +147,75 @@ function onTicTacToeCellClick(event) {
 
 function resetTicTacToe() {
   window.clearTimeout(tttState.timeoutId);
+  tttState.requestId += 1;
   tttState.board = createTicTacToeBoard();
   tttState.analysis = null;
   tttState.locked = false;
   tttState.log = [];
-  pushTicTacToeLog("Fresh board loaded. You play X.");
+  pushTicTacToeLog(
+    tttState.modelReady
+      ? "Fresh board loaded. You play X against local weights."
+      : "Fresh board loaded. Loading local transformer weights."
+  );
   renderTicTacToe();
 }
 
-function queueSolverMove(isOpening) {
+async function queueSolverMove(isOpening) {
   const outcome = getTicTacToeOutcome(tttState.board);
   if (outcome.isDone) {
     return;
   }
 
   tttState.locked = true;
-  tttState.analysis = analyzeTicTacToe(tttState.board, "O");
+  tttState.analysis = null;
   renderTicTacToe();
 
-  const { bestMove, nodes, options } = tttState.analysis;
+  const requestId = ++tttState.requestId;
+
+  try {
+    if (!tttState.modelReady) {
+      await primeTicTacToeModel();
+    }
+  } catch (error) {
+    if (requestId !== tttState.requestId) {
+      return;
+    }
+    tttState.locked = false;
+    tttState.modelError = error instanceof Error ? error.message : "Model load failed.";
+    pushTicTacToeLog("Local transformer failed to load.");
+    renderTicTacToe();
+    return;
+  }
+
+  const analysis = await analyzeTicTacToeWithModel(tttState.board);
+  if (requestId !== tttState.requestId) {
+    return;
+  }
+
+  tttState.analysis = analysis;
+  renderTicTacToe();
+
+  const { bestMove, options } = tttState.analysis;
   if (bestMove == null) {
     tttState.locked = false;
     renderTicTacToe();
     return;
   }
 
-  const summary = options[0] ? options[0].label : "draw";
+  const summary = options[0] ? `${(options[0].score * 100).toFixed(1)}%` : "0.0%";
   pushTicTacToeLog(
-    `Solver searched ${nodes} positions and liked ${formatMoveLabel(bestMove)} (${summary}).`
+    `Transformer liked ${formatMoveLabel(bestMove)} at ${summary} confidence.`
   );
   renderTicTacToe();
 
   tttState.timeoutId = window.setTimeout(() => {
+    if (requestId !== tttState.requestId) {
+      return;
+    }
     tttState.board[bestMove] = "O";
     tttState.locked = false;
     pushTicTacToeLog(
-      `${isOpening ? "Solver opens" : "Solver replies"} with O on ${formatMoveLabel(bestMove)}.`
+      `${isOpening ? "Transformer opens" : "Transformer replies"} with O on ${formatMoveLabel(bestMove)}.`
     );
     renderTicTacToe();
   }, 420);
@@ -187,21 +242,30 @@ function renderTicTacToe() {
 
   refs.tttStatus.textContent = getTicTacToeStatus(outcome);
   renderTicTacToeAnalysis();
+  renderTicTacToeArtifacts();
   renderList(refs.tttLog, tttState.log);
 }
 
 function getTicTacToeStatus(outcome) {
+  if (tttState.modelError) {
+    return "Local transformer failed to load.";
+  }
   if (outcome.winner === "X") {
     return "You found the winning line.";
   }
   if (outcome.winner === "O") {
-    return "Solver found a forced win.";
+    return "Local transformer found a winning line.";
   }
   if (outcome.isDraw) {
-    return "Perfect play ends in a draw.";
+    return "The board ended in a draw.";
   }
   if (tttState.locked) {
-    return "Solver is evaluating the board.";
+    return tttState.modelReady
+      ? "Local transformer is evaluating the board."
+      : "Loading local transformer weights.";
+  }
+  if (!tttState.modelReady) {
+    return "Loading local transformer weights.";
   }
   return "Your turn. Aim for a fork.";
 }
@@ -212,7 +276,8 @@ function renderTicTacToeAnalysis() {
   if (!tttState.analysis || !tttState.analysis.options.length) {
     const placeholder = document.createElement("p");
     placeholder.className = "empty-state";
-    placeholder.textContent = "The solver fills this panel after it starts thinking.";
+    placeholder.textContent =
+      "The local transformer fills this panel after it starts thinking.";
     refs.tttAnalysis.append(placeholder);
     return;
   }
@@ -229,47 +294,99 @@ function renderTicTacToeAnalysis() {
     move.textContent = formatMoveLabel(option.move);
 
     const badge = document.createElement("span");
-    badge.className = `analysis-badge ${labelClass(option.label)}`;
+    badge.className = `analysis-badge ${labelClass(option.score)}`;
     badge.textContent = option.label;
 
     const score = document.createElement("span");
-    score.textContent = option.score > 0 ? `+${option.score}` : String(option.score);
+    score.textContent = `${(option.score * 100).toFixed(1)}%`;
 
     row.append(move, badge, score);
     refs.tttAnalysis.append(row);
   });
 }
 
-function labelClass(label) {
-  if (label.includes("win")) {
+function labelClass(score) {
+  if (score >= 0.75) {
     return "badge-win";
   }
-  if (label.includes("loss")) {
+  if (score <= 0.35) {
     return "badge-loss";
   }
   return "badge-draw";
 }
 
-function resetSudoku() {
+function renderTicTacToeArtifacts() {
+  const artifacts = buildTicTacToeExecutorArtifacts(
+    tttState.board,
+    tttState.analysis,
+    tttState.locked
+  );
+  refs.tttPrompt.textContent = artifacts.prompt;
+  refs.tttProgram.textContent = artifacts.program;
+  refs.tttTrace.textContent = artifacts.trace;
+}
+
+async function resetSudoku() {
+  const requestId = ++sudokuState.requestId;
   stopSudokuAnimation();
   sudokuState.givenMask = buildGivenMask(sudokuState.initialBoard);
   sudokuState.board = cloneSudokuBoard(sudokuState.initialBoard);
-  sudokuState.result = solveSudokuWithTrace(sudokuState.initialBoard);
+  sudokuState.result = null;
   sudokuState.log = [];
   sudokuState.emphasis = null;
   sudokuState.stepIndex = 0;
-  pushSudokuLog("Demo puzzle loaded. Animate the search or jump to the final grid.");
+  sudokuState.isLoading = true;
+  sudokuState.executorError = "";
+  pushSudokuLog(
+    sudokuState.executorReady
+      ? "Puzzle loaded. Running the browser-side WASM executor."
+      : "Puzzle loaded. Loading the browser-side WASM executor."
+  );
   renderSudoku();
+
+  try {
+    if (!sudokuState.executorReady) {
+      await warmSudokuExecutor();
+      if (requestId !== sudokuState.requestId) {
+        return;
+      }
+      sudokuState.executorReady = true;
+    }
+
+    const result = await solveSudokuWithWasm(sudokuState.puzzle);
+    if (requestId !== sudokuState.requestId) {
+      return;
+    }
+
+    sudokuState.result = result;
+    sudokuState.isLoading = false;
+    pushSudokuLog(
+      `WASM executor traced ${result.trace.length} events before reaching the solved grid.`
+    );
+    renderSudoku();
+  } catch (error) {
+    if (requestId !== sudokuState.requestId) {
+      return;
+    }
+    sudokuState.isLoading = false;
+    sudokuState.executorReady = false;
+    sudokuState.executorError = error instanceof Error ? error.message : "WASM executor failed.";
+    pushSudokuLog("Browser-side WASM executor failed to load.");
+    renderSudoku();
+  }
 }
 
 function animateSudoku() {
+  if (!sudokuState.result || sudokuState.isLoading) {
+    return;
+  }
   stopSudokuAnimation();
   sudokuState.board = cloneSudokuBoard(sudokuState.initialBoard);
   sudokuState.log = [];
   sudokuState.emphasis = null;
   sudokuState.stepIndex = 0;
   sudokuState.isAnimating = true;
-  pushSudokuLog("Tracing the solver from the first open cell.");
+  pushSudokuLog("Tracing the WASM executor from the first open cell.");
   renderSudoku();
 
   sudokuState.timerId = window.setInterval(() => {
@@ -294,17 +411,20 @@ function stopSudokuAnimation(markSolved = false) {
   sudokuState.timerId = 0;
   sudokuState.isAnimating = false;
 
-  if (markSolved) {
+  if (markSolved && sudokuState.result) {
     sudokuState.board = cloneSudokuBoard(sudokuState.result.solution);
     sudokuState.emphasis = null;
     pushSudokuLog(
-      `Solved after ${sudokuState.result.stats.placements} placements and ${sudokuState.result.stats.backtracks} backtracks.`
+      `Solved after ${sudokuState.result.stats.placements} placements and ${sudokuState.result.stats.backtracks} backtracks in WASM.`
     );
     renderSudoku();
   }
 }
 
 function solveSudokuInstantly() {
+  if (!sudokuState.result || sudokuState.isLoading) {
+    return;
+  }
   stopSudokuAnimation();
   sudokuState.board = cloneSudokuBoard(sudokuState.result.solution);
   sudokuState.emphasis = null;
@@ -370,25 +490,47 @@ function renderSudoku() {
   });
 
   refs.sudokuStatus.textContent = getSudokuStatus();
-  refs.sudokuAnimate.disabled = sudokuState.isAnimating;
-  refs.sudokuSolve.disabled = sudokuState.isAnimating;
+  refs.sudokuAnimate.disabled =
+    sudokuState.isAnimating || sudokuState.isLoading || !sudokuState.result;
+  refs.sudokuSolve.disabled =
+    sudokuState.isAnimating || sudokuState.isLoading || !sudokuState.result;
   renderSudokuStats();
+  renderSudokuArtifacts();
   renderList(refs.sudokuLog, sudokuState.log);
 }
 
 function getSudokuStatus() {
+  if (sudokuState.executorError) {
+    return "Browser-side WASM executor failed to load.";
+  }
+  if (sudokuState.isLoading) {
+    return sudokuState.executorReady
+      ? "Browser-side WASM executor is solving the puzzle."
+      : "Loading browser-side WASM executor.";
+  }
   if (sudokuState.isAnimating) {
-    return `Solver trace ${sudokuState.stepIndex + 1} / ${sudokuState.result.trace.length}`;
+    return `WASM trace ${sudokuState.stepIndex + 1} / ${sudokuState.result.trace.length}`;
   }
 
-  if (sudokuState.stepIndex >= sudokuState.result.trace.length) {
-    return "Puzzle solved. The whole trace stays browser-side.";
+  if (sudokuState.result && sudokuState.stepIndex >= sudokuState.result.trace.length) {
+    return "Puzzle solved. The whole WASM trace stays browser-side.";
   }
 
-  return "Ready to animate a full solve.";
+  return "Ready to animate a full WASM solve.";
 }
 
 function renderSudokuStats() {
+  if (!sudokuState.result) {
+    refs.sudokuStats.innerHTML = "";
+    const placeholder = document.createElement("p");
+    placeholder.className = "empty-state";
+    placeholder.textContent = sudokuState.isLoading
+      ? "The WASM executor is preparing the full search trace."
+      : "Sudoku stats appear after the WASM executor loads.";
+    refs.sudokuStats.append(placeholder);
+    return;
+  }
+
   const items = [
     {
       label: "Placements",
@@ -420,6 +562,17 @@ function renderSudokuStats() {
   });
 }
 
+function renderSudokuArtifacts() {
+  const artifacts = buildSudokuExecutorArtifacts(
+    sudokuState.initialBoard,
+    sudokuState.result,
+    sudokuState.stepIndex
+  );
+  refs.sudokuPrompt.textContent = artifacts.prompt;
+  refs.sudokuProgram.textContent = artifacts.program;
+  refs.sudokuTrace.textContent = artifacts.trace;
+}
+
 function renderList(node, items) {
   node.innerHTML = "";
   [...items].reverse().forEach((item) => {
@@ -427,6 +580,27 @@ function renderList(node, items) {
     entry.textContent = item;
     node.append(entry);
   });
+}
+
+async function primeTicTacToeModel() {
+  if (tttState.modelReady) {
+    return;
+  }
+
+  try {
+    await warmTicTacToeModel();
+    tttState.modelReady = true;
+    tttState.modelError = "";
+    if (!tttState.log.length) {
+      pushTicTacToeLog("Local transformer ready.");
+    }
+    renderTicTacToe();
+  } catch (error) {
+    tttState.modelReady = false;
+    tttState.modelError = error instanceof Error ? error.message : "Model load failed.";
+    renderTicTacToe();
+    throw error;
+  }
 }
 
 init();

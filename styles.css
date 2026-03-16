@@ -216,6 +216,45 @@ body::after {
   gap: 10px;
 }
 
+.code-stack {
+  margin-top: 12px;
+  display: grid;
+  gap: 12px;
+}
+
+.code-section {
+  display: grid;
+  gap: 8px;
+}
+
+.code-label {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.16em;
+}
+
+.code-block {
+  margin: 0;
+  padding: 12px 14px;
+  border-radius: 14px;
+  border: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.62);
+  line-height: 1.6;
+  font-size: 0.78rem;
+  white-space: pre-wrap;
+  overflow: auto;
+  max-height: 140px;
+}
+
+.code-block-trace {
+  background:
+    linear-gradient(180deg, rgba(255, 140, 105, 0.06), rgba(191, 233, 215, 0.1)),
+    rgba(255, 255, 255, 0.72);
+  max-height: 190px;
+}
+
 .button {
   appearance: none;
   border: 0;
@@ -440,6 +479,31 @@ body::after {
   line-height: 1.75;
 }
 
+.rationale-grid {
+  margin-top: 22px;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 22px;
+}
+
+.rationale-card {
+  background: rgba(255, 255, 255, 0.72);
+}
+
+.rationale-copy {
+  margin: 12px 0 0;
+  color: var(--muted);
+  line-height: 1.7;
+}
+
+.rationale-list {
+  margin: 14px 0 0;
+  padding-left: 18px;
+  display: grid;
+  gap: 10px;
+  line-height: 1.6;
+}
+
 .empty-state {
   color: var(--muted);
   line-height: 1.7;
@@ -447,6 +511,10 @@ body::after {
 
 @media (max-width: 1080px) {
   .demo-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .rationale-grid {
     grid-template-columns: 1fr;
   }
 }

@@ -17,11 +17,14 @@
         <h1>Pocket Solver Garden</h1>
         <p class="lede">
           Two small examples that fit naturally inside a Notion embed: a
-          perfect-play Tic-tac-toe board and a Sudoku solver with a visible
-          trace.
+          local transformer for Tic-tac-toe and a browser-side Sudoku WASM
+          executor with an explicit trace.
         </p>
         <div class="pill-row">
           <span class="pill">Static site</span>
+          <span class="pill">Local model weights</span>
+          <span class="pill">WASM executor</span>
+          <span class="pill">Planner -> program -> trace</span>
           <span class="pill">GitHub Pages friendly</span>
           <span class="pill">Easy to drop into Notion</span>
         </div>
@@ -33,8 +36,8 @@
             <p class="kicker">Demo 1</p>
             <h2>Tic-tac-toe</h2>
             <p class="panel-copy">
-              Play against a perfect solver and watch the top-level branches it
-              scores before every move.
+              Play against a tiny local transformer policy trained on optimal
+              boards and watch its move distribution before every reply.
             </p>
           </div>
 
@@ -47,19 +50,37 @@
                   New board
                 </button>
                 <button id="ttt-ai-first" class="button button-secondary" type="button">
-                  Solver starts
+                  Model starts
                 </button>
               </div>
             </div>
 
             <div class="inspector-column">
               <section class="mini-card">
-                <p class="mini-label">Top-level search</p>
+                <p class="mini-label">Model policy</p>
                 <div id="ttt-analysis" class="analysis-list"></div>
               </section>
 
               <section class="mini-card">
-                <p class="mini-label">Move log</p>
+                <p class="mini-label">Hybrid path</p>
+                <div class="code-stack">
+                  <div class="code-section">
+                    <p class="code-label">Prompt</p>
+                    <pre id="ttt-prompt" class="code-block"></pre>
+                  </div>
+                  <div class="code-section">
+                    <p class="code-label">Program</p>
+                    <pre id="ttt-program" class="code-block"></pre>
+                  </div>
+                  <div class="code-section">
+                    <p class="code-label">Execution trace</p>
+                    <pre id="ttt-trace" class="code-block code-block-trace"></pre>
+                  </div>
+                </div>
+              </section>
+
+              <section class="mini-card">
+                <p class="mini-label">Readable log</p>
                 <ol id="ttt-log" class="trace-list"></ol>
               </section>
             </div>
@@ -71,8 +92,8 @@
             <p class="kicker">Demo 2</p>
             <h2>Sudoku</h2>
             <p class="panel-copy">
-              Animate a complete solve on a 9x9 puzzle and keep the trace visible
-              while the board fills.
+              Animate a complete 9x9 solve from a browser-side WebAssembly
+              executor and keep the trace visible while the board fills.
             </p>
           </div>
 
@@ -95,12 +116,30 @@
 
             <div class="inspector-column">
               <section class="mini-card">
-                <p class="mini-label">Solver stats</p>
+                <p class="mini-label">Executor stats</p>
                 <div id="sudoku-stats" class="stats-grid"></div>
               </section>
 
               <section class="mini-card">
-                <p class="mini-label">Trace</p>
+                <p class="mini-label">Hybrid path</p>
+                <div class="code-stack">
+                  <div class="code-section">
+                    <p class="code-label">Prompt</p>
+                    <pre id="sudoku-prompt" class="code-block"></pre>
+                  </div>
+                  <div class="code-section">
+                    <p class="code-label">Program</p>
+                    <pre id="sudoku-program" class="code-block"></pre>
+                  </div>
+                  <div class="code-section">
+                    <p class="code-label">Execution trace</p>
+                    <pre id="sudoku-trace" class="code-block code-block-trace"></pre>
+                  </div>
+                </div>
+              </section>
+
+              <section class="mini-card">
+                <p class="mini-label">Readable log</p>
                 <ol id="sudoku-log" class="trace-list"></ol>
               </section>
             </div>
@@ -108,11 +147,40 @@
         </article>
       </section>
 
+      <section class="rationale-grid" aria-label="why these demos">
+        <article class="mini-card rationale-card">
+          <p class="mini-label">Why these demos</p>
+          <p class="rationale-copy">
+            The early gallery favors exact, visual problems with short state
+            representations. They are easy to verify, small enough for local
+            weights, and easy to explain as prompt, program, trace, and result.
+          </p>
+          <ul class="rationale-list">
+            <li>Tic-tac-toe gives instant interaction and obvious correctness.</li>
+            <li>Sudoku gives a longer, more mechanical WASM execution trace.</li>
+            <li>Next demos like 24 Game, sorting, or maze search keep the same shape.</li>
+          </ul>
+        </article>
+
+        <article class="mini-card rationale-card">
+          <p class="mini-label">Why not yet</p>
+          <p class="rationale-copy">
+            Bigger examples are deferred until the local model and executor path
+            is more mature.
+          </p>
+          <ul class="rationale-list">
+            <li>Full chess needs stricter move legality and much stronger search.</li>
+            <li>Large puzzles increase model size, cold start, and browser cost.</li>
+            <li>Weak results break trust faster on complex games than on exact mini demos.</li>
+          </ul>
+        </article>
+      </section>
+
       <footer class="footer-note">
         <p>
-          Version 1 uses deterministic browser-side solvers with visible traces.
-          The next step is swapping the engines for a tiny model or WASM runtime
-          without changing the embed story.
+          Tic-tac-toe now runs from local model weights in the embed. Sudoku now
+          runs from a browser-side WASM executor. Both demos share the same
+          prompt, program, trace, and result contract.
         </p>
       </footer>
     </main>

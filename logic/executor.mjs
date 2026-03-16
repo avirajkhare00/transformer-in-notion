@@ -56,6 +56,14 @@ export function buildTicTacToeExecutorArtifacts(board, analysis, locked) {
     analysis?.runtime ? `Runtime: ${analysis.runtime}` : "Runtime: local transformer policy.",
   ].join("\n");
 
+  const tool = {
+    name: "text-classification",
+    badge: "local model",
+    runtime: analysis?.runtime ?? "transformers.js + onnx wasm",
+    artifact: "models/tictactoe-bert/onnx/model.onnx",
+    call: "classify(board_tokens) -> legal move logits",
+  };
+
   const options = analysis?.options ?? [];
   const bestMove = analysis?.bestMove;
   const program = [
@@ -90,6 +98,7 @@ export function buildTicTacToeExecutorArtifacts(board, analysis, locked) {
 
   return {
     prompt,
+    tool,
     program,
     trace: traceLines.join("\n"),
   };
@@ -102,6 +111,14 @@ export function buildSudokuExecutorArtifacts(initialBoard, result, stepIndex) {
     "Strategy: choose the emptiest cell, try candidates, backtrack on contradiction.",
     `Preview row 1: ${renderSudokuRow(initialBoard[0])}`,
   ].join("\n");
+
+  const tool = {
+    name: "solve()",
+    badge: "wasm executor",
+    runtime: "browser-side WebAssembly.instantiate",
+    artifact: "wasm/sudoku_solver.wasm",
+    call: "solve(grid, trace_buffer) -> solution + trace",
+  };
 
   const program = [
     "{",
@@ -121,6 +138,7 @@ export function buildSudokuExecutorArtifacts(initialBoard, result, stepIndex) {
   if (!result) {
     return {
       prompt,
+      tool,
       program,
       trace: "waiting for wasm trace...",
     };
@@ -140,6 +158,7 @@ export function buildSudokuExecutorArtifacts(initialBoard, result, stepIndex) {
 
   return {
     prompt,
+    tool,
     program,
     trace,
   };

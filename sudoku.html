@@ -1,0 +1,118 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Sudoku | Pocket Solver Garden</title>
+    <meta
+      name="description"
+      content="Standalone Sudoku demo for Notion embeds with a browser-side WASM solver."
+    >
+    <link rel="stylesheet" href="styles.css">
+  </head>
+  <body>
+    <main class="page-shell single-demo-shell">
+      <section class="hero hero-compact">
+        <p class="eyebrow">Standalone embed</p>
+        <h1>Sudoku</h1>
+        <p class="lede">
+          A single-demo page built for Notion embeds: browser-side WASM solve,
+          custom puzzles, and a scrollable readable log.
+        </p>
+        <div class="pill-row">
+          <span class="pill">Browser-side WebAssembly</span>
+          <span class="pill">Bring your own puzzle</span>
+          <span class="pill">Trace stays local</span>
+          <a class="button button-secondary button-link" href="index.html">Back to gallery</a>
+        </div>
+      </section>
+
+      <section class="single-demo-grid" aria-label="sudoku demo">
+        <article class="panel panel-mint">
+          <div class="panel-head">
+            <p class="kicker">Demo 2</p>
+            <h2>Sudoku</h2>
+            <p class="panel-copy">
+              Animate a complete 9x9 solve from a browser-side WebAssembly
+              executor and keep the trace visible while the board fills.
+            </p>
+          </div>
+
+          <div class="playground">
+            <div class="board-column">
+              <div id="sudoku-status" class="status-card"></div>
+              <div id="sudoku-board" class="sudoku-board" aria-label="Sudoku board"></div>
+              <div class="control-row">
+                <button id="sudoku-reset" class="button button-primary" type="button">
+                  Reload puzzle
+                </button>
+                <button id="sudoku-animate" class="button button-secondary" type="button">
+                  Animate solve
+                </button>
+                <button id="sudoku-solve" class="button button-secondary" type="button">
+                  Solve instantly
+                </button>
+              </div>
+              <section class="mini-card sudoku-source-card">
+                <p class="mini-label">Puzzle source</p>
+                <label class="field-label" for="sudoku-preset">Presets</label>
+                <select id="sudoku-preset" class="field-input field-select">
+                  <option value="custom">Bring your own</option>
+                </select>
+                <label class="field-label" for="sudoku-input">Bring your own</label>
+                <textarea
+                  id="sudoku-input"
+                  class="field-input field-textarea"
+                  spellcheck="false"
+                  rows="6"
+                ></textarea>
+                <div class="control-row control-row-compact">
+                  <button id="sudoku-load" class="button button-secondary" type="button">
+                    Load puzzle
+                  </button>
+                </div>
+                <p class="field-hint">Use 81 digits. `0` or `.` means blank.</p>
+              </section>
+            </div>
+
+            <div class="inspector-column">
+              <section class="mini-card">
+                <p class="mini-label">Executor stats</p>
+                <div id="sudoku-stats" class="stats-grid"></div>
+              </section>
+
+              <section class="mini-card">
+                <p class="mini-label">Hybrid path</p>
+                <div class="code-stack">
+                  <div class="code-section">
+                    <p class="code-label">Prompt</p>
+                    <pre id="sudoku-prompt" class="code-block"></pre>
+                  </div>
+                  <div class="code-section">
+                    <p class="code-label">Tool call</p>
+                    <div id="sudoku-tool" class="tool-call-card"></div>
+                  </div>
+                  <div class="code-section">
+                    <p class="code-label">Program sketch</p>
+                    <pre id="sudoku-program" class="code-block"></pre>
+                  </div>
+                  <div class="code-section">
+                    <p class="code-label">Execution trace</p>
+                    <pre id="sudoku-trace" class="code-block code-block-trace"></pre>
+                  </div>
+                </div>
+              </section>
+
+              <section class="mini-card">
+                <p class="mini-label">Readable log</p>
+                <ol id="sudoku-log" class="trace-list trace-list-scroll"></ol>
+              </section>
+            </div>
+          </div>
+        </article>
+      </section>
+    </main>
+
+    <script type="module" src="app.mjs"></script>
+  </body>
+</html>

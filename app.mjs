@@ -20,7 +20,27 @@ import {
   buildTicTacToeExecutorArtifacts,
 } from "./logic/executor.mjs";
 
-const MAX_LOG_ITEMS = 7;
+const MAX_TTT_LOG_ITEMS = 24;
+const MAX_SUDOKU_LOG_ITEMS = 180;
+const SUDOKU_PRESETS = [
+  {
+    id: "browser-demo",
+    label: "Browser demo",
+    puzzle: DEFAULT_PUZZLE,
+  },
+  {
+    id: "classic-easy",
+    label: "Classic easy",
+    puzzle:
+      "530070000600195000098000060800060003400803001700020006060000280000419005000080079",
+  },
+  {
+    id: "sparse-hard",
+    label: "Sparse hard",
+    puzzle:
+      "800000000003600000070090200050007000000045700000100030001000068008500010090000400",
+  },
+];
 
 const tttState = {
   board: createTicTacToeBoard(),
@@ -40,6 +60,7 @@ const sudokuState = {
   board: [],
   result: null,
   log: [],
+  loadMessage: "",
   emphasis: null,
   stepIndex: 0,
   timerId: 0,
@@ -56,6 +77,7 @@ const refs = {
   tttAnalysis: document.querySelector("#ttt-analysis"),
   tttLog: document.querySelector("#ttt-log"),
   tttPrompt: document.querySelector("#ttt-prompt"),
+  tttTool: document.querySelector("#ttt-tool"),
   tttProgram: document.querySelector("#ttt-program"),
   tttTrace: document.querySelector("#ttt-trace"),
   tttReset: document.querySelector("#ttt-reset"),
@@ -65,33 +87,96 @@ const refs = {
   sudokuStats: document.querySelector("#sudoku-stats"),
   sudokuLog: document.querySelector("#sudoku-log"),
   sudokuPrompt: document.querySelector("#sudoku-prompt"),
+  sudokuTool: document.querySelector("#sudoku-tool"),
   sudokuProgram: document.querySelector("#sudoku-program"),
   sudokuTrace: document.querySelector("#sudoku-trace"),
   sudokuReset: document.querySelector("#sudoku-reset"),
   sudokuAnimate: document.querySelector("#sudoku-animate"),
   sudokuSolve: document.querySelector("#sudoku-solve"),
+  sudokuPreset: document.querySelector("#sudoku-preset"),
+  sudokuInput: document.querySelector("#sudoku-input"),
+  sudokuLoad: document.querySelector("#sudoku-load"),
   tttCells: [],
   sudokuCells: [],
 };
 
 function init() {
+  if (hasTicTacToeUI()) {
+    initTicTacToe();
+  }
+
+  if (hasSudokuUI()) {
+    initSudoku();
+  }
+}
+
+function hasTicTacToeUI() {
+  return Boolean(
+    refs.tttBoard &&
+      refs.tttStatus &&
+      refs.tttAnalysis &&
+      refs.tttLog &&
+      refs.tttPrompt &&
+      refs.tttTool &&
+      refs.tttProgram &&
+      refs.tttTrace &&
+      refs.tttReset &&
+      refs.tttAiFirst
+  );
+}
+
+function hasSudokuUI() {
+  return Boolean(
+    refs.sudokuBoard &&
+      refs.sudokuStatus &&
+      refs.sudokuStats &&
+      refs.sudokuLog &&
+      refs.sudokuPrompt &&
+      refs.sudokuTool &&
+      refs.sudokuProgram &&
+      refs.sudokuTrace &&
+      refs.sudokuReset &&
+      refs.sudokuAnimate &&
+      refs.sudokuSolve &&
+      refs.sudokuPreset &&
+      refs.sudokuInput &&
+      refs.sudokuLoad
+  );
+}
+
+function initTicTacToe() {
   buildTicTacToeBoard();
-  buildSudokuBoard();
-  bindEvents();
+  bindTicTacToeEvents();
   resetTicTacToe();
-  resetSudoku();
   primeTicTacToeModel();
 }
 
-function bindEvents() {
+function initSudoku() {
+  buildSudokuBoard();
+  buildSudokuPresetMenu();
+  syncSudokuInput(DEFAULT_PUZZLE);
+  selectSudokuPresetForPuzzle(DEFAULT_PUZZLE);
+  bindSudokuEvents();
+  resetSudoku();
+}
+
+function bindTicTacToeEvents() {
   refs.tttReset.addEventListener("click", () => resetTicTacToe());
   refs.tttAiFirst.addEventListener("click", () => {
     resetTicTacToe();
     queueSolverMove(true);
   });
+}
+
+function bindSudokuEvents() {
   refs.sudokuReset.addEventListener("click", () => resetSudoku());
   refs.sudokuAnimate.addEventListener("click", () => animateSudoku());
   refs.sudokuSolve.addEventListener("click", () => solveSudokuInstantly());
+  refs.sudokuPreset.addEventListener("change", onSudokuPresetChange);
+  refs.sudokuLoad.addEventListener("click", onSudokuLoadClick);
+  refs.sudokuInput.addEventListener("input", () => {
+    refs.sudokuPreset.value = "custom";
+  });
 }
 
 function buildTicTacToeBoard() {
@@ -125,6 +210,87 @@ function buildSudokuBoard() {
       refs.sudokuCells.push(cell);
     }
   }
+}
+
+function buildSudokuPresetMenu() {
+  refs.sudokuPreset.innerHTML = "";
+
+  const customOption = document.createElement("option");
+  customOption.value = "custom";
+  customOption.textContent = "Bring your own";
+  refs.sudokuPreset.append(customOption);
+
+  SUDOKU_PRESETS.forEach((preset) => {
+    const option = document.createElement("option");
+    option.value = preset.id;
+    option.textContent = preset.label;
+    refs.sudokuPreset.append(option);
+  });
+}
+
+function normalizeSudokuPuzzleText(text) {
+  return text.replace(/[^0-9.]/g, "").replace(/\./g, "0");
+}
+
+function formatSudokuPuzzleText(puzzle) {
+  const normalized = normalizeSudokuPuzzleText(puzzle).replace(/0/g, ".");
+  const rows = [];
+  for (let row = 0; row < 9; row += 1) {
+    rows.push(normalized.slice(row * 9, row * 9 + 9));
+  }
+  return rows.join("\n");
+}
+
+function syncSudokuInput(puzzle) {
+  refs.sudokuInput.value = formatSudokuPuzzleText(puzzle);
+}
+
+function selectSudokuPresetForPuzzle(puzzle) {
+  const normalized = normalizeSudokuPuzzleText(puzzle);
+  const match = SUDOKU_PRESETS.find((preset) => preset.puzzle === normalized);
+  refs.sudokuPreset.value = match ? match.id : "custom";
+}
+
+function findSudokuPreset(id) {
+  return SUDOKU_PRESETS.find((preset) => preset.id === id) ?? null;
+}
+
+function applySudokuPuzzle(rawPuzzle, loadMessage) {
+  try {
+    const normalized = normalizeSudokuPuzzleText(rawPuzzle);
+    const board = parseSudoku(normalized);
+    sudokuState.puzzle = normalized;
+    sudokuState.initialBoard = board;
+    sudokuState.loadMessage = loadMessage;
+    syncSudokuInput(normalized);
+    selectSudokuPresetForPuzzle(normalized);
+    resetSudoku();
+  } catch (error) {
+    sudokuState.executorError = "";
+    pushSudokuLog(
+      error instanceof Error ? error.message : "Sudoku input must contain exactly 81 cells."
+    );
+    renderSudoku();
+  }
+}
+
+function onSudokuPresetChange() {
+  if (refs.sudokuPreset.value === "custom") {
+    return;
+  }
+  const preset = findSudokuPreset(refs.sudokuPreset.value);
+  if (!preset) {
+    return;
+  }
+  applySudokuPuzzle(preset.puzzle, `Loaded preset: ${preset.label}.`);
+}
+
+function onSudokuLoadClick() {
+  const preset = findSudokuPreset(refs.sudokuPreset.value);
+  applySudokuPuzzle(
+    refs.sudokuInput.value,
+    preset ? `Loaded preset: ${preset.label}.` : "Loaded custom puzzle."
+  );
 }
 
 function onTicTacToeCellClick(event) {
@@ -223,7 +389,7 @@ async function queueSolverMove(isOpening) {
 
 function pushTicTacToeLog(message) {
   tttState.log.push(message);
-  if (tttState.log.length > MAX_LOG_ITEMS) {
+  if (tttState.log.length > MAX_TTT_LOG_ITEMS) {
     tttState.log.shift();
   }
 }
@@ -248,7 +414,7 @@ function renderTicTacToe() {
 
 function getTicTacToeStatus(outcome) {
   if (tttState.modelError) {
-    return "Local transformer failed to load.";
+    return tttState.modelError;
   }
   if (outcome.winner === "X") {
     return "You found the winning line.";
@@ -322,6 +488,7 @@ function renderTicTacToeArtifacts() {
     tttState.locked
   );
   refs.tttPrompt.textContent = artifacts.prompt;
+  renderToolCall(refs.tttTool, artifacts.tool);
   refs.tttProgram.textContent = artifacts.program;
   refs.tttTrace.textContent = artifacts.trace;
 }
@@ -333,6 +500,8 @@ async function resetSudoku() {
   sudokuState.board = cloneSudokuBoard(sudokuState.initialBoard);
   sudokuState.result = null;
   sudokuState.log = [];
+  const loadMessage = sudokuState.loadMessage;
+  sudokuState.loadMessage = "";
   sudokuState.emphasis = null;
   sudokuState.stepIndex = 0;
   sudokuState.isLoading = true;
@@ -342,6 +511,9 @@ async function resetSudoku() {
       ? "Puzzle loaded. Running the browser-side WASM executor."
       : "Puzzle loaded. Loading the browser-side WASM executor."
   );
+  if (loadMessage) {
+    pushSudokuLog(loadMessage);
+  }
   renderSudoku();
 
   try {
@@ -371,7 +543,7 @@ async function resetSudoku() {
     sudokuState.isLoading = false;
     sudokuState.executorReady = false;
     sudokuState.executorError = error instanceof Error ? error.message : "WASM executor failed.";
-    pushSudokuLog("Browser-side WASM executor failed to load.");
+    pushSudokuLog(sudokuState.executorError);
     renderSudoku();
   }
 }
@@ -439,7 +611,7 @@ function solveSudokuInstantly() {
 
 function pushSudokuLog(message) {
   sudokuState.log.push(message);
-  if (sudokuState.log.length > MAX_LOG_ITEMS) {
+  if (sudokuState.log.length > MAX_SUDOKU_LOG_ITEMS) {
     sudokuState.log.shift();
   }
 }
@@ -501,7 +673,7 @@ function renderSudoku() {
 
 function getSudokuStatus() {
   if (sudokuState.executorError) {
-    return "Browser-side WASM executor failed to load.";
+    return sudokuState.executorError;
   }
   if (sudokuState.isLoading) {
     return sudokuState.executorReady
@@ -569,17 +741,63 @@ function renderSudokuArtifacts() {
     sudokuState.stepIndex
   );
   refs.sudokuPrompt.textContent = artifacts.prompt;
+  renderToolCall(refs.sudokuTool, artifacts.tool);
   refs.sudokuProgram.textContent = artifacts.program;
   refs.sudokuTrace.textContent = artifacts.trace;
 }
 
+function renderToolCall(node, tool) {
+  node.innerHTML = "";
+
+  const head = document.createElement("div");
+  head.className = "tool-call-head";
+
+  const name = document.createElement("span");
+  name.className = "tool-call-name";
+  name.textContent = tool.name;
+
+  const badge = document.createElement("span");
+  badge.className = "tool-call-badge";
+  badge.textContent = tool.badge;
+
+  head.append(name, badge);
+
+  const grid = document.createElement("div");
+  grid.className = "tool-call-grid";
+
+  const rows = [
+    ["Runtime", tool.runtime],
+    ["Artifact", tool.artifact],
+    ["Call", tool.call],
+  ];
+
+  rows.forEach(([label, value]) => {
+    const row = document.createElement("div");
+    row.className = "tool-call-row";
+
+    const key = document.createElement("span");
+    key.className = "tool-call-key";
+    key.textContent = label;
+
+    const text = document.createElement("span");
+    text.className = "tool-call-value";
+    text.textContent = value;
+
+    row.append(key, text);
+    grid.append(row);
+  });
+
+  node.append(head, grid);
+}
+
 function renderList(node, items) {
   node.innerHTML = "";
-  [...items].reverse().forEach((item) => {
+  items.forEach((item) => {
     const entry = document.createElement("li");
     entry.textContent = item;
     node.append(entry);
   });
+  node.scrollTop = node.scrollHeight;
 }
 
 async function primeTicTacToeModel() {

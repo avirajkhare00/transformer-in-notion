@@ -35,6 +35,9 @@
                 <button id="sudoku-animate" class="button button-secondary" type="button">
                   Animate solve
                 </button>
+                <button id="sudoku-fast" class="button button-secondary" type="button">
+                  Fast replay
+                </button>
                 <button id="sudoku-solve" class="button button-secondary" type="button">
                   Solve instantly
                 </button>
@@ -65,6 +68,17 @@
               <section class="mini-card">
                 <p class="mini-label">Executor stats</p>
                 <div id="sudoku-stats" class="stats-grid"></div>
+              </section>
+
+              <section class="mini-card">
+                <p class="mini-label">Model stats</p>
+                <div class="control-row control-row-compact">
+                  <button id="sudoku-model-run" class="button button-secondary" type="button">
+                    Run model trace
+                  </button>
+                </div>
+                <p id="sudoku-model-status" class="field-hint"></p>
+                <div id="sudoku-model-stats" class="stats-grid"></div>
               </section>
 
               <section class="mini-card">

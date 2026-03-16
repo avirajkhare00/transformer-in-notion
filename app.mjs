@@ -44,6 +44,20 @@ const SUDOKU_PRESETS = [
   },
   ...HARD_SUDOKU_PRESETS,
 ];
+const SUDOKU_REPLAY_MODES = Object.freeze({
+  normal: {
+    chunkSize: 1,
+    intervalMs: 38,
+    intro: "Tracing the WASM executor from the first open cell.",
+    statusVerb: "Replaying",
+  },
+  fast: {
+    chunkSize: 64,
+    intervalMs: 4,
+    intro: "Fast replaying the WASM executor trace.",
+    statusVerb: "Fast replaying",
+  },
+});
 
 const tttState = {
   board: createTicTacToeBoard(),
@@ -77,7 +91,26 @@ const sudokuState = {
   baselineTiming: null,
   baselinePending: false,
   baselineError: "",
+  replayMode: "normal",
   requestId: 0,
+};
+const sudokuModelState = {
+  worker: null,
+  isRunning: false,
+  error: "",
+  status: "Model trace is idle.",
+  phase: "idle",
+  tokenCount: 0,
+  predictionCount: 0,
+  averageConfidence: null,
+  accuracy: null,
+  valuePredictionCount: 0,
+  valueAverageConfidence: null,
+  valueAccuracy: null,
+  tokensPerSecond: 0,
+  elapsedMs: 0,
+  traceLength: 0,
+  runId: 0,
 };
 
 const refs = {
@@ -101,10 +134,14 @@ const refs = {
   sudokuTrace: document.querySelector("#sudoku-trace"),
   sudokuReset: document.querySelector("#sudoku-reset"),
   sudokuAnimate: document.querySelector("#sudoku-animate"),
+  sudokuFast: document.querySelector("#sudoku-fast"),
   sudokuSolve: document.querySelector("#sudoku-solve"),
   sudokuPreset: document.querySelector("#sudoku-preset"),
   sudokuInput: document.querySelector("#sudoku-input"),
   sudokuLoad: document.querySelector("#sudoku-load"),
+  sudokuModelRun: document.querySelector("#sudoku-model-run"),
+  sudokuModelStatus: document.querySelector("#sudoku-model-status"),
+  sudokuModelStats: document.querySelector("#sudoku-model-stats"),
   tttCells: [],
   sudokuCells: [],
 };
@@ -146,10 +183,14 @@ function hasSudokuUI() {
       refs.sudokuTrace &&
       refs.sudokuReset &&
       refs.sudokuAnimate &&
+      refs.sudokuFast &&
       refs.sudokuSolve &&
       refs.sudokuPreset &&
       refs.sudokuInput &&
-      refs.sudokuLoad
+      refs.sudokuLoad &&
+      refs.sudokuModelRun &&
+      refs.sudokuModelStatus &&
+      refs.sudokuModelStats
   );
 }
 
@@ -187,7 +228,9 @@ function bindTicTacToeEvents() {
 function bindSudokuEvents() {
   refs.sudokuReset.addEventListener("click", () => resetSudoku());
   refs.sudokuAnimate.addEventListener("click", () => animateSudoku());
+  refs.sudokuFast.addEventListener("click", () => animateSudoku("fast"));
   refs.sudokuSolve.addEventListener("click", () => solveSudokuInstantly());
+  refs.sudokuModelRun.addEventListener("click", () => runSudokuModelTrace());
   refs.sudokuPreset.addEventListener("change", onSudokuPresetChange);
   refs.sudokuLoad.addEventListener("click", onSudokuLoadClick);
   refs.sudokuInput.addEventListener("input", () => {
@@ -290,6 +333,20 @@ function formatSudokuDuration(ms) {
   return `${(ms / 1000).toFixed(2)} s`;
 }
 
+function formatSudokuPercent(value) {
+  if (!Number.isFinite(value)) {
+    return "—";
+  }
+  return `${(value * 100).toFixed(1)}%`;
+}
+
+function formatSudokuTokenRate(value) {
+  if (!Number.isFinite(value) || value <= 0) {
+    return "—";
+  }
+  return `${Math.round(value)} tok/s`;
+}
+
 function formatSudokuSpeedComparison(wasmMs, baselineMs) {
   if (
     !Number.isFinite(wasmMs) ||
@@ -359,6 +416,31 @@ function stopSudokuSolveClock(finalElapsedMs = null) {
   }
 
   sudokuState.solveStartedAt = 0;
+}
+
+function terminateSudokuModelWorker() {
+  if (sudokuModelState.worker) {
+    sudokuModelState.worker.terminate();
+    sudokuModelState.worker = null;
+  }
+}
+
+function resetSudokuModelState(status = "Model trace is idle.") {
+  terminateSudokuModelWorker();
+  sudokuModelState.isRunning = false;
+  sudokuModelState.error = "";
+  sudokuModelState.status = status;
+  sudokuModelState.phase = "idle";
+  sudokuModelState.tokenCount = 0;
+  sudokuModelState.predictionCount = 0;
+  sudokuModelState.averageConfidence = null;
+  sudokuModelState.accuracy = null;
+  sudokuModelState.valuePredictionCount = 0;
+  sudokuModelState.valueAverageConfidence = null;
+  sudokuModelState.valueAccuracy = null;
+  sudokuModelState.tokensPerSecond = 0;
+  sudokuModelState.elapsedMs = 0;
+  sudokuModelState.traceLength = 0;
 }
 
 function syncSudokuInput(puzzle) {
@@ -641,6 +723,7 @@ async function resetSudoku() {
   const requestId = ++sudokuState.requestId;
   stopSudokuAnimation();
   stopSudokuSolveClock();
+  resetSudokuModelState("Model trace is idle.");
   sudokuState.givenMask = buildGivenMask(sudokuState.initialBoard);
   sudokuState.board = cloneSudokuBoard(sudokuState.initialBoard);
   sudokuState.result = null;
@@ -655,6 +738,7 @@ async function resetSudoku() {
   sudokuState.baselineTiming = null;
   sudokuState.baselinePending = false;
   sudokuState.baselineError = "";
+  sudokuState.replayMode = "normal";
   pushSudokuLog(
     sudokuState.executorReady
       ? "Puzzle loaded. Running the browser-side WASM executor."
@@ -731,34 +815,165 @@ async function queueSudokuDeterministicBaseline(requestId) {
   }
 }
 
-function animateSudoku() {
+function updateSudokuModelMetrics(payload) {
+  if (Number.isFinite(payload.tokenCount)) {
+    sudokuModelState.tokenCount = payload.tokenCount;
+  }
+  if (Number.isFinite(payload.predictionCount)) {
+    sudokuModelState.predictionCount = payload.predictionCount;
+  }
+  if (Number.isFinite(payload.averageConfidence)) {
+    sudokuModelState.averageConfidence = payload.averageConfidence;
+  }
+  if (Number.isFinite(payload.accuracy)) {
+    sudokuModelState.accuracy = payload.accuracy;
+  }
+  if (Number.isFinite(payload.valuePredictionCount)) {
+    sudokuModelState.valuePredictionCount = payload.valuePredictionCount;
+  }
+  if (Number.isFinite(payload.valueAverageConfidence)) {
+    sudokuModelState.valueAverageConfidence = payload.valueAverageConfidence;
+  }
+  if (Number.isFinite(payload.valueAccuracy)) {
+    sudokuModelState.valueAccuracy = payload.valueAccuracy;
+  }
+  if (Number.isFinite(payload.tokensPerSecond)) {
+    sudokuModelState.tokensPerSecond = payload.tokensPerSecond;
+  }
+  if (Number.isFinite(payload.elapsedMs)) {
+    sudokuModelState.elapsedMs = payload.elapsedMs;
+  }
+  if (Number.isFinite(payload.traceLength)) {
+    sudokuModelState.traceLength = payload.traceLength;
+  }
+}
+
+function handleSudokuModelMessage(runId, message) {
+  const { data } = message;
+  if (runId !== sudokuModelState.runId || !data) {
+    return;
+  }
+
+  if (data.type === "start") {
+    sudokuModelState.status = `Teacher trace ready. ${data.traceLength} op steps queued.`;
+    sudokuModelState.traceLength = data.traceLength ?? sudokuModelState.traceLength;
+    renderSudoku();
+    return;
+  }
+
+  if (data.type === "progress") {
+    sudokuModelState.phase = data.phase ?? sudokuModelState.phase;
+    sudokuModelState.status = data.message ?? "Running local transformer trace.";
+    renderSudoku();
+    return;
+  }
+
+  if (data.type === "event-batch") {
+    updateSudokuModelMetrics(data);
+    sudokuModelState.status =
+      data.traceLength && data.predictionCount
+        ? `Processed ${data.predictionCount} / ${data.traceLength} op steps.`
+        : sudokuModelState.status;
+    renderSudoku();
+    return;
+  }
+
+  if (data.type === "done") {
+    updateSudokuModelMetrics(data);
+    sudokuModelState.isRunning = false;
+    sudokuModelState.phase = "done";
+    sudokuModelState.status = `Finished ${sudokuModelState.tokenCount} model tokens at ${formatSudokuTokenRate(sudokuModelState.tokensPerSecond)}.`;
+    terminateSudokuModelWorker();
+    renderSudoku();
+    return;
+  }
+
+  if (data.type === "error") {
+    sudokuModelState.isRunning = false;
+    sudokuModelState.error = data.message ?? "Model trace failed.";
+    sudokuModelState.status = sudokuModelState.error;
+    sudokuModelState.phase = "error";
+    terminateSudokuModelWorker();
+    renderSudoku();
+  }
+}
+
+function runSudokuModelTrace() {
+  if (sudokuState.isLoading || !sudokuState.result || sudokuModelState.isRunning) {
+    return;
+  }
+
+  resetSudokuModelState("Warming local transformer models.");
+  sudokuModelState.isRunning = true;
+  sudokuModelState.phase = "warm-models";
+  sudokuModelState.runId += 1;
+  const runId = sudokuModelState.runId;
+  const worker = new Worker(new URL("./soduku/model-worker.mjs", import.meta.url), {
+    type: "module",
+  });
+  sudokuModelState.worker = worker;
+
+  worker.onmessage = (message) => {
+    handleSudokuModelMessage(runId, message);
+  };
+  worker.onerror = (error) => {
+    if (runId !== sudokuModelState.runId) {
+      return;
+    }
+    sudokuModelState.isRunning = false;
+    sudokuModelState.error = error.message || "Model worker failed.";
+    sudokuModelState.status = sudokuModelState.error;
+    sudokuModelState.phase = "error";
+    terminateSudokuModelWorker();
+    renderSudoku();
+  };
+  worker.postMessage({
+    type: "run",
+    puzzle: sudokuState.puzzle,
+  });
+  renderSudoku();
+}
+
+function animateSudoku(mode = "normal") {
   if (!sudokuState.result || sudokuState.isLoading) {
     return;
   }
+
+  const replayMode = SUDOKU_REPLAY_MODES[mode] ?? SUDOKU_REPLAY_MODES.normal;
   stopSudokuAnimation();
   sudokuState.board = cloneSudokuBoard(sudokuState.initialBoard);
   sudokuState.log = [];
   sudokuState.emphasis = null;
   sudokuState.stepIndex = 0;
   sudokuState.isAnimating = true;
-  pushSudokuLog("Tracing the WASM executor from the first open cell.");
+  sudokuState.replayMode = mode in SUDOKU_REPLAY_MODES ? mode : "normal";
+  pushSudokuLog(replayMode.intro);
   renderSudoku();
 
   sudokuState.timerId = window.setInterval(() => {
-    const event = sudokuState.result.trace[sudokuState.stepIndex];
-    if (!event) {
-      stopSudokuAnimation(true);
-      return;
+    let processed = 0;
+
+    while (
+      processed < replayMode.chunkSize &&
+      sudokuState.stepIndex < sudokuState.result.trace.length
+    ) {
+      const event = sudokuState.result.trace[sudokuState.stepIndex];
+      if (!event) {
+        stopSudokuAnimation(true);
+        return;
+      }
+
+      applySudokuTraceEvent(event);
+      sudokuState.stepIndex += 1;
+      processed += 1;
     }
 
-    applySudokuTraceEvent(event);
-    sudokuState.stepIndex += 1;
     renderSudoku();
 
     if (sudokuState.stepIndex >= sudokuState.result.trace.length) {
       stopSudokuAnimation(true);
     }
-  }, 38);
+  }, replayMode.intervalMs);
 }
 
 function stopSudokuAnimation(markSolved = false) {
@@ -774,6 +989,8 @@ function stopSudokuAnimation(markSolved = false) {
     );
     renderSudoku();
   }
+
+  sudokuState.replayMode = "normal";
 }
 
 function solveSudokuInstantly() {
@@ -847,15 +1064,24 @@ function renderSudoku() {
   refs.sudokuStatus.textContent = getSudokuStatus();
   refs.sudokuAnimate.disabled =
     sudokuState.isAnimating || sudokuState.isLoading || !sudokuState.result;
+  refs.sudokuFast.disabled =
+    sudokuState.isAnimating || sudokuState.isLoading || !sudokuState.result;
   refs.sudokuSolve.disabled =
     sudokuState.isAnimating || sudokuState.isLoading || !sudokuState.result;
+  refs.sudokuModelRun.disabled =
+    sudokuState.isLoading || !sudokuState.result || sudokuModelState.isRunning;
+  refs.sudokuModelRun.textContent = sudokuModelState.isRunning
+    ? "Running model trace…"
+    : "Run model trace";
   renderSudokuStats();
+  renderSudokuModelStats();
   renderSudokuArtifacts();
   renderList(refs.sudokuLog, sudokuState.log);
 }
 
 function getSudokuStatus() {
   const preset = describeSudokuPreset(sudokuState.puzzle).prefix;
+  const replayMode = SUDOKU_REPLAY_MODES[sudokuState.replayMode] ?? SUDOKU_REPLAY_MODES.normal;
   if (sudokuState.executorError) {
     return sudokuState.executorError;
   }
@@ -865,7 +1091,7 @@ function getSudokuStatus() {
       : `${preset}. Loading browser-side WASM executor.`;
   }
   if (sudokuState.isAnimating) {
-    return `Replaying WASM trace ${Math.min(sudokuState.stepIndex, sudokuState.result.trace.length)} / ${sudokuState.result.trace.length}.`;
+    return `${replayMode.statusVerb} WASM trace ${Math.min(sudokuState.stepIndex, sudokuState.result.trace.length)} / ${sudokuState.result.trace.length}.`;
   }
 
   if (sudokuState.result && sudokuState.stepIndex >= sudokuState.result.trace.length) {
@@ -950,6 +1176,72 @@ function renderSudokuStats() {
       <span class="stat-value">${item.value}</span>
     `;
     refs.sudokuStats.append(card);
+  });
+}
+
+function renderSudokuModelStats() {
+  refs.sudokuModelStatus.textContent = sudokuModelState.status;
+
+  const items = [
+    {
+      label: "Engine",
+      value: "local transformers",
+    },
+    {
+      label: "Output",
+      value: "op + PLACE value",
+    },
+    {
+      label: "Tokens",
+      value: sudokuModelState.tokenCount || "—",
+    },
+    {
+      label: "Op predictions",
+      value: sudokuModelState.predictionCount || "—",
+    },
+    {
+      label: "PLACE values",
+      value: sudokuModelState.valuePredictionCount || "—",
+    },
+    {
+      label: "tok/s",
+      value: formatSudokuTokenRate(sudokuModelState.tokensPerSecond),
+    },
+    {
+      label: "Op top-1",
+      value: formatSudokuPercent(sudokuModelState.accuracy),
+    },
+    {
+      label: "Op conf",
+      value: formatSudokuPercent(sudokuModelState.averageConfidence),
+    },
+    {
+      label: "PLACE top-1",
+      value: formatSudokuPercent(sudokuModelState.valueAccuracy),
+    },
+    {
+      label: "PLACE conf",
+      value: formatSudokuPercent(sudokuModelState.valueAverageConfidence),
+    },
+    {
+      label: "Elapsed",
+      value: formatSudokuDuration(sudokuModelState.elapsedMs),
+    },
+    {
+      label: "Teacher trace",
+      value: sudokuModelState.traceLength || "—",
+    },
+  ];
+
+  refs.sudokuModelStats.innerHTML = "";
+  items.forEach((item) => {
+    const card = document.createElement("div");
+    card.className = "stat-card";
+    card.innerHTML = `
+      <span class="stat-label">${item.label}</span>
+      <span class="stat-value">${item.value}</span>
+    `;
+    refs.sudokuModelStats.append(card);
   });
 }
 

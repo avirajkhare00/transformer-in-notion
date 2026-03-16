@@ -2,22 +2,55 @@
 
 This repo is a small embeddable demo site for Notion pages.
 
-Version 1 deliberately keeps the stack simple:
+The current version deliberately keeps the stack simple, but it now adopts a
+Percepta-style surface:
 
-- Tic-tac-toe with a visible perfect-play solver trace
+- Tic-tac-toe with a visible local transformer policy trace
 - Sudoku with an animated solving trace
+- Prompt -> pseudo-program -> execution trace panels for both demos
 - Static files only, so GitHub Pages can host it directly
 
-The current demos are deterministic browser-side solvers, not an ML runtime yet.
-That is intentional. The embed story is the point first:
+The embed story now has both halves:
+
+- Tic-tac-toe uses a tiny model bundle loaded locally in the browser
+- Sudoku remains a deterministic browser-side solver
+
+That keeps the deployment contract simple:
 
 `Notion page -> embed block -> hosted app -> browser runtime`
 
-Once this shape feels right, the solver logic can be replaced with:
+Because the UI contract is explicit, the remaining solver logic can still be replaced with:
 
 - a tiny in-browser model
 - a WASM runtime
 - or a hybrid model + executor path
+
+## Why these demos
+
+The first gallery should prove one thing clearly: a Notion embed can host
+local weights or an executor-style runtime and still make computation feel
+legible.
+
+That is why the early examples bias toward:
+
+- exact outcomes instead of subjective outputs
+- small state spaces instead of huge action spaces
+- visible traces instead of opaque results
+- short cold starts inside the browser
+
+This makes examples such as tic-tac-toe, 24 Game, sorting, maze search, and
+mini Sudoku stronger early showcases than larger games.
+
+## Why not bigger examples yet
+
+Some examples are intentionally deferred until the local model path is more
+mature.
+
+- Full chess needs strict legality, deeper search, and a much stronger model.
+- Large puzzles push model size, latency, and browser memory in the wrong direction.
+- Weak play is much more obvious and trust-breaking in chess than in exact mini tasks.
+- If we attach a heavy external engine too early, the story becomes "tool in
+  Notion" rather than "transformer or executor in Notion."
 
 ## Local development
 
@@ -35,16 +68,31 @@ Then open `http://localhost:8000`.
 - `styles.css` - visual system tuned for an iframe or Notion embed
 - `app.mjs` - UI wiring and animations
 - `logic/tictactoe.mjs` - minimax engine
+- `logic/tictactoe-model.mjs` - local Transformers.js runtime wrapper
 - `logic/sudoku.mjs` - traced backtracking solver
+- `logic/executor.mjs` - prompt/program/trace artifact builder
+- `scripts/export_tictactoe_dataset.mjs` - dataset export from the oracle solver
+- `scripts/train_tictactoe_transformer.py` - train + ONNX export for the browser model
 
 ## GitHub Pages
 
 The workflow in `.github/workflows/pages.yml` publishes the repo root as a Pages site.
 Once Pages is enabled, the resulting URL can be pasted straight into a Notion embed block.
 
+## Training the tic-tac-toe model
+
+The local model bundle is generated in two steps:
+
+```bash
+node scripts/export_tictactoe_dataset.mjs
+.venv/bin/python scripts/train_tictactoe_transformer.py
+```
+
+That writes an ONNX-ready Hugging Face model bundle to `models/tictactoe-bert/`,
+which the browser loads via Transformers.js.
+
 ## Next steps
 
-- Replace one or both solvers with a WASM runtime
-- Add a tiny transformer-backed demo with visible token or state traces
+- Replace Sudoku with a WASM runtime or a true model + executor pair
 - Add puzzle presets and difficulty levels
 - Add a tighter mobile/embed height mode for narrower Notion columns

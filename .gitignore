@@ -4,3 +4,5 @@ training/
 __pycache__/
 *.pyc
 wasm/sudoku-executor/target/
+*.csv
+soduku/train_data/

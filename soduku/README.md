@@ -118,6 +118,11 @@ This repository now has the beginnings of that path:
   JS DFS solver under row-major vs MRV chooser policies
 - `scripts/export_sudoku_hard_traces.mjs` - export canonical traces for the
   hard-set supervision/eval corpus
+- `soduku/train_data/train.csv` - large external extreme-Sudoku source file,
+  kept out of git and read line by line
+- `soduku/extreme-csv.mjs` - streaming CSV reader for the extreme source file
+- `soduku/export_extreme_dataset.mjs` - streamed exporter from `train.csv` to
+  structured JSONL manifests for next-op and `PLACE`-value training
 - `soduku/export_hard_dataset.mjs` - build a held-out hard-set next-op dataset
 - `soduku/train_transformer.py` - train a tiny next-op student on that dataset
 - `soduku/export_value_dataset.mjs` - build a held-out hard-set `PLACE`-value dataset
@@ -189,6 +194,36 @@ node soduku/export_value_dataset.mjs --eval-puzzles ai-escargot
 
 The current structured-state run reached `96.35%` eval accuracy on `54,029`
 held-out `PLACE`-value samples from the same hard-set curriculum.
+
+## Streaming the large CSV
+
+The external `soduku/train_data/train.csv` file is intentionally handled as a
+streaming source. We do **not** load the whole CSV into memory.
+
+Use this path:
+
+```bash
+node soduku/export_extreme_dataset.mjs \
+  --input soduku/train_data/train.csv \
+  --output-dir soduku/training/extreme
+
+.venv/bin/python soduku/train_transformer.py \
+  --dataset soduku/training/extreme/extreme-op-manifest.json
+
+.venv/bin/python soduku/train_value_transformer.py \
+  --dataset soduku/training/extreme/extreme-value-manifest.json
+```
+
+What happens:
+
+- Node reads the CSV line by line
+- each puzzle is solved once with the exact MRV reference runtime
+- the canonical PSVM trace is expanded into structured JSONL samples
+- PyTorch then trains from the JSONL manifest path instead of the original CSV
+
+This keeps the raw source file out of the memory hot path while still letting
+the repo train on a much broader Sudoku distribution than the tiny curated
+hard-set alone.
 
 ## Best action space
 

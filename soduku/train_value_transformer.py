@@ -8,10 +8,9 @@ from torch.utils.data import DataLoader
 
 from structured_transformer_common import (
     StructuredSudokuTransformer,
-    build_tensor_dataset,
     default_device,
     export_model,
-    load_structured_dataset,
+    load_structured_dataset_bundle,
     set_seed,
     train_model,
 )
@@ -43,25 +42,29 @@ def main() -> None:
     if not dataset_path.exists():
         raise FileNotFoundError(f"Dataset not found: {dataset_path}")
 
-    train_samples, eval_samples, label_names, metadata = load_structured_dataset(
-        dataset_path, "valueLabels"
-    )
+    bundle = load_structured_dataset_bundle(dataset_path, "valueLabels")
+    if bundle.train_count < 1 or bundle.eval_count < 1:
+        raise RuntimeError(
+            f"Dataset split is empty for {dataset_path}: train={bundle.train_count} eval={bundle.eval_count}."
+        )
 
     train_loader = DataLoader(
-        build_tensor_dataset(train_samples), batch_size=args.batch_size, shuffle=True
+        bundle.train_dataset,
+        batch_size=args.batch_size,
+        shuffle=not bundle.streaming,
     )
     eval_loader = DataLoader(
-        build_tensor_dataset(eval_samples), batch_size=args.batch_size, shuffle=False
+        bundle.eval_dataset, batch_size=args.batch_size, shuffle=False
     )
     device = default_device()
 
     print(
         "training structured value model on "
-        f"{device} with train={train_samples.count} eval={eval_samples.count} "
-        f"eval_puzzles={metadata['evalPuzzleIds']}"
+        f"{device} with train={bundle.train_count} eval={bundle.eval_count} "
+        f"format={bundle.metadata['format']}"
     )
 
-    model = StructuredSudokuTransformer(num_labels=len(label_names))
+    model = StructuredSudokuTransformer(num_labels=len(bundle.label_names))
     model, metrics = train_model(
         model=model,
         train_loader=train_loader,
@@ -82,10 +85,10 @@ def main() -> None:
         raw_dir=raw_dir,
         export_dir=export_dir,
         metrics=metrics,
-        metadata=metadata,
-        label_names=label_names,
-        train_count=train_samples.count,
-        eval_count=eval_samples.count,
+        metadata=bundle.metadata,
+        label_names=bundle.label_names,
+        train_count=bundle.train_count,
+        eval_count=bundle.eval_count,
     )
 
     print(

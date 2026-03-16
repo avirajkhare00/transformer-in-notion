@@ -1,10 +1,6 @@
 # Transformer in Notion
 
-This repo is a small embeddable demo site for browser-local problem-shaped VM
-prototypes.
-
-The default landing page stays focused on the PSVM track, while the repo keeps
-selected standalone routes around where they still help the systems story.
+This repo is a small embeddable demo site for Notion pages.
 
 ## Design principle
 
@@ -30,61 +26,64 @@ For small rule-heavy tasks, the practical path is:
 That is the reason this repo focuses on **problem-shaped VMs** instead of
 general-purpose bytecode execution first.
 
-- `invoice/` for compact business-logic execution
-- `soduku/` for compact search execution
-- `weiqi/` for compact local-rules capture search
+The current version deliberately keeps the stack simple, but it now uses an
+explicit prompt -> program -> trace surface:
+
+- Tic-tac-toe with a visible local transformer policy trace
+- Sudoku with preset loading, custom puzzle input, and an animated browser-side WASM trace
+- Prompt -> pseudo-program -> execution trace panels for both demos
 - Static files only, so GitHub Pages can host it directly
-- Separate standalone HTML entry pages for direct embeds
+- Separate standalone HTML entry pages for direct Notion embeds
+
+The embed story now has both halves:
+
+- Tic-tac-toe uses a tiny model bundle loaded locally in the browser
+- Sudoku uses a browser-side WebAssembly executor
 
 That keeps the deployment contract simple:
 
 `Notion page -> embed block -> hosted app -> browser runtime`
 
-Because the UI contract is explicit, the execution layer can still be replaced with:
+Because the UI contract is explicit, the remaining solver logic can still be replaced with:
 
 - a tiny in-browser model
 - a WASM runtime
 - or a hybrid model + executor path
 
-## Current emphasis
+The repo now also includes two problem-shaped VM prototypes outside the main
+gallery:
 
-The repo currently emphasizes the PSVM track:
+- `invoice/` - a small invoice-calculator PSVM with exact money arithmetic
+- `soduku/` - a 4x4 Sudoku PSVM with a streamed worker trace
+- `weiqi/` - a 5x5 Weiqi capture PSVM with exact local rules and a streamed worker trace
 
-- `invoice/` includes the deterministic runtime, worker UI, dataset export, and
-  a shipped local next-op model bundle
-- `soduku/` includes the deterministic runtime, worker UI, and canonical trace
-  surface for the first Sudoku-specific VM
+## What this branch adds
 
-Other older pages still exist as separate routes, but they are no longer the
-main entry story.
+This branch moves the repo from a mock executor surface to real browser-side
+artifacts:
 
-## Why problem-shaped VMs are needed
+- Tic-tac-toe now loads a shipped ONNX model bundle from `models/tictactoe-bert/`
+  through Transformers.js.
+- The Tic-tac-toe bundle now ships both `onnx/model.onnx` and
+  `onnx/model_quantized.onnx` so browser runtimes that still request the
+  quantized filename do not 404 on Pages.
+- Sudoku now loads a shipped WebAssembly binary from `wasm/sudoku_solver.wasm`.
+- Sudoku now supports preset selection and bring-your-own 81-cell puzzle input
+  in the browser.
+- The existing prompt -> program -> trace UI stays the same, but the engines
+  behind the two cards are now different and real:
+  - local transformer weights for Tic-tac-toe
+  - local Rust/WASM executor for Sudoku
 
-The point of a PSVM is not novelty for its own sake. It is a response to a real
-mismatch in how exact tasks are usually framed for models.
+This is the intended split for the project:
 
-- one-shot answer prediction hides the intermediate state transitions that exact
-  computation actually needs
-- full general-purpose VMs expose too much irrelevant machine detail for a
-  single task family
-- browser-local systems need shorter traces, smaller action spaces, and tighter
-  verification boundaries than a general machine usually provides
-
-A problem-shaped VM fixes that by moving the abstraction layer to where the task
-actually lives:
-
-- rules stay in an exact runtime
-- ambiguity stays at the op-selection boundary
-- the model learns only the useful execution surface
-
-That is why the repository keeps pushing toward:
-
-`rules + ambiguity -> custom VM + custom ops + exact runtime`
+- small policy-style examples can use local model weights
+- longer exact traces can use a browser-side executor
 
 ## Why these demos
 
-The first gallery should prove one thing clearly: a browser page can host
-task-shaped runtimes with explicit traces and still make computation feel
+The first gallery should prove one thing clearly: a Notion embed can host
+local weights or an executor-style runtime and still make computation feel
 legible.
 
 That is why the early examples bias toward:
@@ -94,8 +93,8 @@ That is why the early examples bias toward:
 - visible traces instead of opaque results
 - short cold starts inside the browser
 
-This makes examples such as invoice checking, 4x4 Sudoku, 24 Game, sorting,
-maze search, and mini schedulers stronger early showcases than larger games.
+This makes examples such as tic-tac-toe, 24 Game, sorting, maze search, and
+mini Sudoku stronger early showcases than larger games.
 
 ## Why not bigger examples yet
 
@@ -122,12 +121,8 @@ Then open `http://localhost:8000`.
 ## Files
 
 - `LICENSE` - Apache-2.0 license for the repository
-- `index.html` - PSVM-first landing page
-- `sudoku.html` - final Sudoku page with exact WASM solve, replay, and local model trace
-- `soduku/index.html` - standalone 4x4 Sudoku PSVM prototype
-- `soduku/app.mjs` - browser UI for the 4x4 Sudoku PSVM
-- `soduku/worker.mjs` - worker-side 4x4 Sudoku execution loop
-- `soduku/psvm4x4.mjs` - limited-op 4x4 Sudoku PSVM and canonical trace generator
+- `index.html` - page shell and demo layout
+- `sudoku.html` - standalone Sudoku embed page
 - `soduku/hard-op-context.mjs` - shared 9x9 hard-Sudoku next-op context builder
 - `soduku/model.mjs` - browser-side structured next-op model loader for hard 9x9 Sudoku
 - `soduku/value-model.mjs` - browser-side structured `PLACE`-value model loader for hard 9x9 Sudoku
@@ -154,6 +149,8 @@ Then open `http://localhost:8000`.
 - `docs/paper-idea-problem-shaped-vms.md` - paper note for custom task-shaped VMs in browser-local transformers
 - `docs/use-case-matrix.md` - architecture combinations and small real-world use cases
 - `soduku/README.md` - Sudoku-specific workspace note and the recommended first benchmark
+- `soduku/extreme-csv.mjs` - streaming reader for the large external extreme-Sudoku CSV
+- `soduku/export_extreme_dataset.mjs` - line-by-line exporter from `soduku/train_data/train.csv` into structured JSONL manifests
 - `soduku/export_hard_dataset.mjs` - hard-puzzle next-op dataset exporter with puzzle-held-out splits
 - `soduku/train_transformer.py` - structured hard-set Sudoku next-op trainer/exporter
 - `soduku/export_value_dataset.mjs` - structured hard-set `PLACE`-value dataset exporter
@@ -239,6 +236,7 @@ also includes:
 - `scripts/benchmark_sudoku_hard.mjs` - apples-to-apples policy benchmark of the same JS DFS solver
 - `scripts/export_sudoku_hard_traces.mjs` - trace export for the hard corpus
 - `soduku/export_hard_dataset.mjs` - held-out hard-set next-op dataset export
+- `soduku/export_extreme_dataset.mjs` - line-by-line export from the large `train.csv` source into structured JSONL manifests
 - `soduku/train_transformer.py` - structured hard-set next-op training/export
 - `soduku/export_value_dataset.mjs` - held-out hard-set structured `PLACE`-value dataset export
 - `soduku/train_value_transformer.py` - structured hard-set `PLACE`-value training/export
@@ -265,6 +263,12 @@ also includes:
   - structured next-op model accuracy: `97.12%`
   - structured `PLACE`-value model accuracy: `96.35%`
   - both ONNX bundles are quantized and loaded directly through ONNX Runtime in the browser
+- The large external `soduku/train_data/train.csv` path is now usable without
+  loading the whole source file into memory:
+  - CSV ingestion is line-by-line
+  - exported output is JSONL plus a manifest
+  - the structured trainers can consume that manifest directly
+  - smoke path verified on a 4-puzzle streamed subset end to end
 - `node --check` passes for the frontend modules, and `cargo check` passes for
   the Rust executor crate.
 
@@ -300,14 +304,6 @@ In practice that means:
 - keep the trace canonical and inspectable
 - push exact semantics into a deterministic interpreter or verifier
 - reserve model capacity for choosing and ordering operations
-
-For browser-local systems, this also creates an efficiency bias:
-
-- general `C -> weights` compilation is a compelling long-term idea, but it
-  preserves too much irrelevant machine detail for small task-specific apps
-- custom ops on a custom VM are usually the more efficient first target
-- the practical split is:
-  `rules + ambiguity -> custom VM + custom ops + exact runtime`
 
 For Sudoku, that points toward a task-shaped executor with ops like
 `FOCUS_NEXT`, `READ_CANDS`, `PLACE`, `UNDO`, `FAIL`, and `HALT`, not a full VM

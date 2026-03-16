@@ -9,7 +9,7 @@ from typing import Iterable
 
 import torch
 from torch import nn
-from torch.utils.data import DataLoader, TensorDataset
+from torch.utils.data import DataLoader, IterableDataset, TensorDataset
 
 BOARD_LENGTH = 81
 CANDIDATE_LENGTH = 9
@@ -46,6 +46,17 @@ class StructuredSampleSet:
     @property
     def count(self) -> int:
         return int(self.labels.shape[0])
+
+
+@dataclass
+class StructuredDatasetBundle:
+    train_dataset: TensorDataset | IterableDataset
+    eval_dataset: TensorDataset | IterableDataset
+    train_count: int
+    eval_count: int
+    label_names: list[str]
+    metadata: dict
+    streaming: bool
 
 
 def set_seed(seed: int) -> None:
@@ -108,6 +119,99 @@ def load_structured_dataset(
         to_structured_samples(eval_features),
         list(payload[label_key]),
         metadata,
+    )
+
+
+def _feature_dict_to_sample(features: dict) -> tuple[torch.Tensor, ...]:
+    return (
+        torch.tensor(features["board_tokens"], dtype=torch.int32),
+        torch.tensor(features["focus_row"], dtype=torch.int32),
+        torch.tensor(features["focus_col"], dtype=torch.int32),
+        torch.tensor(features["candidate_mask"], dtype=torch.int32),
+        torch.tensor(features["history_ops"], dtype=torch.int32),
+        torch.tensor(features["filled_count"], dtype=torch.int32),
+        torch.tensor(features["search_depth"], dtype=torch.int32),
+        torch.tensor(features["label"], dtype=torch.long),
+    )
+
+
+class StructuredJsonlDataset(IterableDataset):
+    def __init__(self, jsonl_path: Path) -> None:
+        super().__init__()
+        self.jsonl_path = jsonl_path
+
+    def __iter__(self):
+        with self.jsonl_path.open("r", encoding="utf-8") as handle:
+            for raw_line in handle:
+                line = raw_line.strip()
+                if not line:
+                    continue
+                sample = json.loads(line)
+                features, _ = _sample_to_features(sample)
+                yield _feature_dict_to_sample(features)
+
+
+def _resolve_manifest_path(manifest_path: Path, child: str) -> Path:
+    return (manifest_path.parent / child).resolve()
+
+
+def load_structured_dataset_bundle(dataset_path: Path, label_key: str) -> StructuredDatasetBundle:
+    payload = json.loads(dataset_path.read_text())
+
+    if "samples" in payload:
+        train_samples, eval_samples, label_names, metadata = load_structured_dataset(
+            dataset_path, label_key
+        )
+        return StructuredDatasetBundle(
+            train_dataset=build_tensor_dataset(train_samples),
+            eval_dataset=build_tensor_dataset(eval_samples),
+            train_count=train_samples.count,
+            eval_count=eval_samples.count,
+            label_names=label_names,
+            metadata=metadata,
+            streaming=False,
+        )
+
+    if payload.get("format") != "structured-state-v1-jsonl":
+        raise RuntimeError(f"Unsupported structured dataset format in {dataset_path}.")
+
+    train_path = _resolve_manifest_path(dataset_path, payload["trainPath"])
+    eval_path = _resolve_manifest_path(dataset_path, payload["evalPath"])
+    if not train_path.exists():
+        raise FileNotFoundError(f"Train JSONL not found: {train_path}")
+    if not eval_path.exists():
+        raise FileNotFoundError(f"Eval JSONL not found: {eval_path}")
+
+    label_names = payload.get(label_key) or payload.get("labels")
+    if not label_names:
+        raise RuntimeError(f"Missing label list for {label_key} in {dataset_path}.")
+
+    metadata = {
+        "sampleCount": int(sum(payload["sampleCounts"].values()))
+        if isinstance(payload.get("sampleCounts"), dict)
+        else None,
+        "trainPuzzleIds": [],
+        "evalPuzzleIds": [],
+        "limitPerPuzzle": int(payload.get("limitPuzzles", 0)),
+        "historyWindow": int(payload["historyWindow"]),
+        "format": payload.get("format", "structured-state-v1-jsonl"),
+        "sourceCsv": payload.get("sourceCsv"),
+        "evalPercent": payload.get("evalPercent"),
+        "minRating": payload.get("minRating"),
+    }
+
+    return StructuredDatasetBundle(
+        train_dataset=StructuredJsonlDataset(train_path),
+        eval_dataset=StructuredJsonlDataset(eval_path),
+        train_count=int(payload["sampleCounts"]["trainOpSamples"])
+        if label_key == "opLabels"
+        else int(payload["sampleCounts"]["trainValueSamples"]),
+        eval_count=int(payload["sampleCounts"]["evalOpSamples"])
+        if label_key == "opLabels"
+        else int(payload["sampleCounts"]["evalValueSamples"]),
+        label_names=list(label_names),
+        metadata=metadata,
+        streaming=True,
     )
 
 

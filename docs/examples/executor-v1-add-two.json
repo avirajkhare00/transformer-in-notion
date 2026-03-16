@@ -1,0 +1,23 @@
+{
+  "id": "add_000001",
+  "program": [
+    "PUSH v_3",
+    "PUSH v_5",
+    "ADD",
+    "OUT",
+    "HALT"
+  ],
+  "trace": [
+    "<STEP> ip a00 op PUSH arg v_3 sp v_1 top v_3 mem _ out _",
+    "<STEP> ip a01 op PUSH arg v_5 sp v_2 top v_5 mem _ out _",
+    "<STEP> ip a02 op ADD arg _ sp v_1 top v_8 mem _ out _",
+    "<STEP> ip a03 op OUT arg _ sp v_0 top _ mem _ out v_8",
+    "<STEP> ip a04 op HALT arg _ sp v_0 top _ mem _ out halted",
+    "<END>"
+  ],
+  "metadata": {
+    "family": "add_two",
+    "steps": 5,
+    "notes": "Canonical v1 executor example. One instruction maps to one trace line."
+  }
+}

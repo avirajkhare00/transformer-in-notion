@@ -297,6 +297,30 @@ def _save_training_checkpoint(
     torch.save(payload, checkpoint_path)
 
 
+def _optimizer_to_device(optimizer: torch.optim.Optimizer, device: torch.device) -> None:
+    for state in optimizer.state.values():
+        for key, value in state.items():
+            if torch.is_tensor(value):
+                state[key] = value.to(device)
+
+
+def load_training_checkpoint(
+    checkpoint_path: Path,
+    *,
+    model: nn.Module,
+    optimizer: torch.optim.Optimizer,
+    device: torch.device,
+) -> tuple[int, dict[str, torch.Tensor] | None, float]:
+    checkpoint = torch.load(checkpoint_path, map_location="cpu")
+    model.load_state_dict(checkpoint["model_state"])
+    optimizer.load_state_dict(checkpoint["optimizer_state"])
+    _optimizer_to_device(optimizer, device)
+    best_state = checkpoint.get("best_state")
+    best_accuracy = float(checkpoint.get("best_accuracy", 0.0))
+    start_epoch = int(checkpoint["epoch"]) + 1
+    return start_epoch, best_state, best_accuracy
+
+
 class StructuredSudokuTransformer(nn.Module):
     def __init__(
         self,
@@ -439,16 +463,38 @@ def train_model(
     batch_size: int | None = None,
     checkpoint_dir: Path | None = None,
     checkpoint_every: int = 1,
+    resume_from_checkpoint: Path | None = None,
 ) -> tuple[StructuredSudokuTransformer, dict[str, float]]:
     optimizer = torch.optim.AdamW(model.parameters(), lr=learning_rate, weight_decay=0.0)
     criterion = nn.CrossEntropyLoss()
     best_accuracy = 0.0
     best_state = None
     last_train_loss = 0.0
+    start_epoch = 1
 
     model.to(device)
 
-    for epoch in range(1, epochs + 1):
+    if resume_from_checkpoint is not None:
+        if not resume_from_checkpoint.exists():
+            raise FileNotFoundError(f"Resume checkpoint not found: {resume_from_checkpoint}")
+        start_epoch, best_state, best_accuracy = load_training_checkpoint(
+            resume_from_checkpoint,
+            model=model,
+            optimizer=optimizer,
+            device=device,
+        )
+        print(
+            f"resuming from {resume_from_checkpoint} at epoch={start_epoch:02d} "
+            f"best_accuracy={best_accuracy:.4f}",
+            flush=True,
+        )
+        if start_epoch > epochs:
+            raise RuntimeError(
+                f"Resume checkpoint is already at epoch {start_epoch - 1}, "
+                f"which is past requested epochs={epochs}."
+            )
+
+    for epoch in range(start_epoch, epochs + 1):
         model.train()
         running_loss = 0.0
         sample_count = 0

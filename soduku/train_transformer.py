@@ -30,6 +30,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--log-every", type=int, default=100)
     parser.add_argument("--checkpoint-dir", type=Path)
     parser.add_argument("--checkpoint-every", type=int, default=1)
+    parser.add_argument("--resume-from-checkpoint", type=Path)
     parser.add_argument("--seed", type=int, default=17)
     return parser.parse_args()
 
@@ -42,6 +43,9 @@ def main() -> None:
     raw_dir = args.raw_dir.resolve()
     export_dir = args.export_dir.resolve()
     checkpoint_dir = args.checkpoint_dir.resolve() if args.checkpoint_dir else None
+    resume_from_checkpoint = (
+        args.resume_from_checkpoint.resolve() if args.resume_from_checkpoint else None
+    )
 
     if not dataset_path.exists():
         raise FileNotFoundError(f"Dataset not found: {dataset_path}")
@@ -85,6 +89,7 @@ def main() -> None:
         batch_size=args.batch_size,
         checkpoint_dir=checkpoint_dir,
         checkpoint_every=args.checkpoint_every,
+        resume_from_checkpoint=resume_from_checkpoint,
     )
 
     if metrics["accuracy"] < args.target_accuracy:

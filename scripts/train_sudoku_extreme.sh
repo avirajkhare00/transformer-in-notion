@@ -23,10 +23,12 @@ EVAL_PERCENT=5
 STATUS_EVERY=100
 LOG_EVERY=100
 CHECKPOINT_EVERY=1
+RESUME_LATEST=0
 
 OP_RAW_DIR="$ROOT/soduku/training/extreme-op"
 OP_EXPORT_DIR="$ROOT/soduku/models/extreme-op"
 OP_CHECKPOINT_DIR="$ROOT/soduku/checkpoints/extreme-op"
+OP_RESUME_CHECKPOINT=""
 OP_EPOCHS=1
 OP_BATCH_SIZE=1024
 OP_TARGET_ACCURACY=0.0
@@ -34,6 +36,7 @@ OP_TARGET_ACCURACY=0.0
 VALUE_RAW_DIR="$ROOT/soduku/training/extreme-value"
 VALUE_EXPORT_DIR="$ROOT/soduku/models/extreme-value"
 VALUE_CHECKPOINT_DIR="$ROOT/soduku/checkpoints/extreme-value"
+VALUE_RESUME_CHECKPOINT=""
 VALUE_EPOCHS=1
 VALUE_BATCH_SIZE=1024
 VALUE_TARGET_ACCURACY=0.0
@@ -57,10 +60,12 @@ Options:
   --status-every N             Progress logging frequency for exporter. Default: 100
   --log-every N                Batch logging frequency for both Python trainers. Default: 100
   --checkpoint-every N         Save latest checkpoint every N epochs. Default: 1
+  --resume-latest              Reuse <checkpoint-dir>/latest.pt when present.
 
   --op-raw-dir DIR             Raw op-model training dir.
   --op-export-dir DIR          ONNX op-model export dir.
   --op-checkpoint-dir DIR      Op-model checkpoint dir. Default: soduku/checkpoints/extreme-op
+  --op-resume-checkpoint DIR   Explicit op-model checkpoint to resume from.
   --op-epochs N                Op-model epochs. Default: 1
   --op-batch-size N            Op-model batch size. Default: 1024
   --op-target-accuracy FLOAT   Early-stop threshold; 0 disables early stopping. Default: 0.0
@@ -68,6 +73,8 @@ Options:
   --value-raw-dir DIR          Raw value-model training dir.
   --value-export-dir DIR       ONNX value-model export dir.
   --value-checkpoint-dir DIR   Value-model checkpoint dir. Default: soduku/checkpoints/extreme-value
+  --value-resume-checkpoint DIR
+                               Explicit value-model checkpoint to resume from.
   --value-epochs N             Value-model epochs. Default: 1
   --value-batch-size N         Value-model batch size. Default: 1024
   --value-target-accuracy FLOAT
@@ -102,15 +109,18 @@ while [ $# -gt 0 ]; do
     --status-every) STATUS_EVERY="$2"; shift 2 ;;
     --log-every) LOG_EVERY="$2"; shift 2 ;;
     --checkpoint-every) CHECKPOINT_EVERY="$2"; shift 2 ;;
+    --resume-latest) RESUME_LATEST=1; shift 1 ;;
     --op-raw-dir) OP_RAW_DIR="$2"; shift 2 ;;
     --op-export-dir) OP_EXPORT_DIR="$2"; shift 2 ;;
     --op-checkpoint-dir) OP_CHECKPOINT_DIR="$2"; shift 2 ;;
+    --op-resume-checkpoint) OP_RESUME_CHECKPOINT="$2"; shift 2 ;;
     --op-epochs) OP_EPOCHS="$2"; shift 2 ;;
     --op-batch-size) OP_BATCH_SIZE="$2"; shift 2 ;;
     --op-target-accuracy) OP_TARGET_ACCURACY="$2"; shift 2 ;;
     --value-raw-dir) VALUE_RAW_DIR="$2"; shift 2 ;;
     --value-export-dir) VALUE_EXPORT_DIR="$2"; shift 2 ;;
     --value-checkpoint-dir) VALUE_CHECKPOINT_DIR="$2"; shift 2 ;;
+    --value-resume-checkpoint) VALUE_RESUME_CHECKPOINT="$2"; shift 2 ;;
     --value-epochs) VALUE_EPOCHS="$2"; shift 2 ;;
     --value-batch-size) VALUE_BATCH_SIZE="$2"; shift 2 ;;
     --value-target-accuracy) VALUE_TARGET_ACCURACY="$2"; shift 2 ;;
@@ -148,6 +158,14 @@ fi
 OP_MANIFEST="$OUTPUT_DIR/extreme-op-manifest.json"
 VALUE_MANIFEST="$OUTPUT_DIR/extreme-value-manifest.json"
 
+if [ "$RESUME_LATEST" -eq 1 ] && [ -z "$OP_RESUME_CHECKPOINT" ] && [ -f "$OP_CHECKPOINT_DIR/latest.pt" ]; then
+  OP_RESUME_CHECKPOINT="$OP_CHECKPOINT_DIR/latest.pt"
+fi
+
+if [ "$RESUME_LATEST" -eq 1 ] && [ -z "$VALUE_RESUME_CHECKPOINT" ] && [ -f "$VALUE_CHECKPOINT_DIR/latest.pt" ]; then
+  VALUE_RESUME_CHECKPOINT="$VALUE_CHECKPOINT_DIR/latest.pt"
+fi
+
 printf 'Repo root: %s\n' "$ROOT"
 printf 'Python: %s\n' "$PYTHON"
 printf 'Input CSV: %s\n' "$INPUT"
@@ -155,6 +173,8 @@ printf 'Output dir: %s\n' "$OUTPUT_DIR"
 printf 'Limit puzzles: %s\n' "$LIMIT_PUZZLES"
 printf 'Trainer log every: %s\n' "$LOG_EVERY"
 printf 'Checkpoint every: %s\n' "$CHECKPOINT_EVERY"
+printf 'Op resume checkpoint: %s\n' "${OP_RESUME_CHECKPOINT:-<none>}"
+printf 'Value resume checkpoint: %s\n' "${VALUE_RESUME_CHECKPOINT:-<none>}"
 
 MPS_STATUS="$("$PYTHON" - <<'PY'
 import torch
@@ -179,7 +199,7 @@ if [ "$SKIP_OP" -eq 0 ]; then
     printf 'Op manifest not found: %s\n' "$OP_MANIFEST" >&2
     exit 1
   fi
-  run_cmd \
+  set -- \
     env PYTORCH_ENABLE_MPS_FALLBACK=1 \
     "$PYTHON" "$ROOT/soduku/train_transformer.py" \
     --dataset "$OP_MANIFEST" \
@@ -191,6 +211,10 @@ if [ "$SKIP_OP" -eq 0 ]; then
     --batch-size "$OP_BATCH_SIZE" \
     --target-accuracy "$OP_TARGET_ACCURACY" \
     --log-every "$LOG_EVERY"
+  if [ -n "$OP_RESUME_CHECKPOINT" ]; then
+    set -- "$@" --resume-from-checkpoint "$OP_RESUME_CHECKPOINT"
+  fi
+  run_cmd "$@"
 fi
 
 if [ "$SKIP_VALUE" -eq 0 ]; then
@@ -198,7 +222,7 @@ if [ "$SKIP_VALUE" -eq 0 ]; then
     printf 'Value manifest not found: %s\n' "$VALUE_MANIFEST" >&2
     exit 1
   fi
-  run_cmd \
+  set -- \
     env PYTORCH_ENABLE_MPS_FALLBACK=1 \
     "$PYTHON" "$ROOT/soduku/train_value_transformer.py" \
     --dataset "$VALUE_MANIFEST" \
@@ -210,6 +234,10 @@ if [ "$SKIP_VALUE" -eq 0 ]; then
     --batch-size "$VALUE_BATCH_SIZE" \
     --target-accuracy "$VALUE_TARGET_ACCURACY" \
     --log-every "$LOG_EVERY"
+  if [ -n "$VALUE_RESUME_CHECKPOINT" ]; then
+    set -- "$@" --resume-from-checkpoint "$VALUE_RESUME_CHECKPOINT"
+  fi
+  run_cmd "$@"
 fi
 
 printf 'Done.\n'

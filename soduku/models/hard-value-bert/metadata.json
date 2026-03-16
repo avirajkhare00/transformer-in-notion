@@ -1,0 +1,17 @@
+{
+  "sampleCount": 54029,
+  "trainPuzzleIds": [
+    "inkala-2012",
+    "benchmark-28",
+    "benchmark-49"
+  ],
+  "evalPuzzleIds": [
+    "ai-escargot"
+  ],
+  "limitPerPuzzle": 20000,
+  "historyWindow": 8,
+  "trainCount": 53810,
+  "evalCount": 219,
+  "accuracy": 1.0,
+  "train_loss": 0.23920031093549737
+}

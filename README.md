@@ -99,7 +99,7 @@ Then open `http://localhost:8000`.
 - `index.html` - page shell and demo layout
 - `tic-tac-toe.html` - standalone Tic-tac-toe embed page
 - `sudoku.html` - standalone Sudoku embed page
-- `sudoku-model.html` - standalone 9x9 Sudoku next-op transformer probe
+- `sudoku-model.html` - standalone 9x9 Sudoku trace-token transformer probe
 - `sudoku-benchmark.html` - standalone 100-run WASM-only Sudoku benchmark page
 - `soduku/index.html` - standalone 4x4 Sudoku PSVM prototype
 - `soduku/app.mjs` - browser UI for the 4x4 Sudoku PSVM
@@ -107,8 +107,10 @@ Then open `http://localhost:8000`.
 - `soduku/psvm4x4.mjs` - limited-op 4x4 Sudoku PSVM and canonical trace generator
 - `soduku/hard-op-context.mjs` - shared 9x9 hard-Sudoku next-op context builder
 - `soduku/model.mjs` - browser-side local next-op model loader for hard 9x9 Sudoku
+- `soduku/value-model.mjs` - browser-side local `PLACE`-value model loader for hard 9x9 Sudoku
 - `soduku/model-worker.mjs` - worker-side 9x9 next-op probing loop against an exact teacher trace
 - `soduku/models/hard-op-bert/` - shipped ONNX bundle for the hard 9x9 next-op classifier
+- `soduku/models/hard-value-bert/` - shipped ONNX bundle for the hard 9x9 `PLACE`-value classifier
 - `invoice/index.html` - standalone invoice-calculator PSVM prototype
 - `invoice/app.mjs` - browser UI for the invoice PSVM
 - `invoice/worker.mjs` - worker-side invoice execution loop
@@ -214,8 +216,10 @@ also includes:
 - `scripts/export_sudoku_hard_traces.mjs` - trace export for the hard corpus
 - `soduku/export_hard_dataset.mjs` - held-out hard-set next-op dataset export
 - `soduku/train_transformer.py` - tiny hard-set next-op student training
+- `soduku/export_value_dataset.mjs` - held-out hard-set `PLACE`-value dataset export
+- `soduku/train_value_transformer.py` - tiny hard-set `PLACE`-value student training
 - `sudoku-benchmark.html` - browser page for 100 isolated WASM solves on one puzzle
-- `sudoku-model.html` - browser page where a local transformer emits the next PSVM op on the exact 9x9 trace
+- `sudoku-model.html` - browser page where local transformers emit the next op token and `PLACE` value token on the exact 9x9 trace
 
 ## Verified
 
@@ -235,6 +239,10 @@ also includes:
   - exported dataset size in the smoke run: `12,591` samples
   - eval split: held-out `AI Escargot`
   - tiny next-op classifier smoke accuracy: `96.79%`
+- The next trace-token step is now real too:
+  - exported `PLACE`-value dataset size: `54,029` samples
+  - eval split: held-out `AI Escargot`
+  - tiny `PLACE`-value classifier smoke accuracy: `100.00%`
 - `node --check` passes for the frontend modules, and `cargo check` passes for
   the Rust executor crate.
 

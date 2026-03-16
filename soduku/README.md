@@ -120,6 +120,8 @@ This repository now has the beginnings of that path:
   hard-set supervision/eval corpus
 - `soduku/export_hard_dataset.mjs` - build a held-out hard-set next-op dataset
 - `soduku/train_transformer.py` - train a tiny next-op student on that dataset
+- `soduku/export_value_dataset.mjs` - build a held-out hard-set `PLACE`-value dataset
+- `soduku/train_value_transformer.py` - train a tiny `PLACE`-value student on that dataset
 
 ## Apple-to-apple comparison
 
@@ -143,13 +145,13 @@ massively on every puzzle, but it is still slower on wall-clock time for
 row-major policy. That is the kind of tradeoff we want to see before making
 claims about "better" solving.
 
-## Hard-set student
+## Hard-set students
 
-There is now a first 9x9 hard-set student path.
+There are now two 9x9 hard-set student paths.
 
-It is still a **next-op student**, not a full learned Sudoku executor.
+They are still **trace-token students**, not a full learned Sudoku executor.
 
-What it does:
+What the first one does:
 
 - uses the deterministic MRV solver as teacher
 - exports `(context -> next op)` samples from hard traces
@@ -169,6 +171,23 @@ node soduku/export_hard_dataset.mjs --eval-puzzles ai-escargot
 In the smoke run used for this branch, the held-out `AI Escargot` split reached
 `96.79%` eval accuracy with a tiny op classifier after the board context was
 tokenized at the cell level rather than treated as one opaque string token.
+
+What the second one does:
+
+- uses the same deterministic MRV teacher trace
+- exports `(focused context -> next PLACE value)` samples
+- keeps the same puzzle-held-out eval split
+- trains a tiny local classifier that predicts the branch value token
+
+Example flow:
+
+```bash
+node soduku/export_value_dataset.mjs --eval-puzzles ai-escargot
+.venv/bin/python soduku/train_value_transformer.py
+```
+
+In the smoke run used for this branch, the held-out `AI Escargot` split reached
+`100.00%` eval accuracy on `54,029` supervised `PLACE`-value samples.
 
 ## Best action space
 

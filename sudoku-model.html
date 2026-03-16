@@ -4,7 +4,7 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="color-scheme" content="light dark">
-    <title>Sudoku Next Op Model | Pocket Solver Garden</title>
+    <title>Sudoku Trace Token Model | Pocket Solver Garden</title>
     <meta
       name="description"
       content="Standalone Sudoku next-op model page that measures browser-side PSVM op prediction."
@@ -17,11 +17,11 @@
         <article class="panel panel-coral">
           <div class="panel-head">
             <p class="kicker">Model probe</p>
-            <h2>Sudoku Next Op</h2>
+            <h2>Sudoku Trace Tokens</h2>
             <p class="panel-copy">
-              A local transformer predicts the next existing PSVM op on a 9x9
-              exact trace. The executor stays deterministic; the model only emits
-              the next op label.
+              A pair of local transformers predict the next existing PSVM op and,
+              on `PLACE` steps, the next value token on a 9x9 exact trace. The
+              executor stays deterministic; the models only emit trace tokens.
             </p>
           </div>
 
@@ -31,7 +31,7 @@
               <div id="model-board" class="sudoku-board" aria-label="Sudoku board"></div>
               <div class="control-row">
                 <button id="model-run" class="button button-primary" type="button">
-                  Run next-op model
+                  Run trace-token model
                 </button>
                 <a class="button button-secondary button-link" href="sudoku.html">
                   Back to solver
@@ -59,8 +59,9 @@
                   </button>
                 </div>
                 <p class="field-hint">
-                  The model predicts the next op token only. Cell/value arguments
-                  remain in the exact teacher trace.
+                  The exact teacher trace still drives the 9x9 solve. This page
+                  measures local token prediction over that trace: next op always,
+                  and next value on `PLACE` steps.
                 </p>
               </section>
             </div>

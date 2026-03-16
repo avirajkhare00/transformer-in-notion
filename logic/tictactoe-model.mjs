@@ -36,6 +36,7 @@ async function loadClassifier() {
       return pipeline("text-classification", MODEL_ID, {
         local_files_only: true,
         device: "wasm",
+        dtype: "fp32",
       });
     })();
   }

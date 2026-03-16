@@ -112,7 +112,8 @@ node scripts/export_tictactoe_dataset.mjs
 ```
 
 That writes an ONNX-ready Hugging Face model bundle to `models/tictactoe-bert/`,
-which the browser loads via Transformers.js.
+with the ONNX graph stored at `models/tictactoe-bert/onnx/model.onnx`, which the
+browser loads via Transformers.js.
 
 ## Building the Sudoku WASM executor
 

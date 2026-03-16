@@ -31,6 +31,8 @@ INPUT_NAMES = [
     "filled_count",
     "search_depth",
 ]
+STRUCTURED_TENSOR_NAMES = [*INPUT_NAMES, "labels"]
+PACKED_FORMAT = "structured-state-v1-ptshards"
 
 
 @dataclass
@@ -58,6 +60,7 @@ class StructuredDatasetBundle:
     label_names: list[str]
     metadata: dict
     streaming: bool
+    prebatched: bool = False
 
 
 def set_seed(seed: int) -> None:
@@ -176,12 +179,56 @@ class StructuredJsonlDataset(IterableDataset):
                 yield _feature_dict_to_sample(features)
 
 
+class StructuredPackedBatchDataset(IterableDataset):
+    def __init__(self, manifest_dir: Path, shards: list[dict], batch_size: int) -> None:
+        super().__init__()
+        self.manifest_dir = manifest_dir
+        self.shards = shards
+        self.batch_size = batch_size
+
+    def __iter__(self):
+        worker = get_worker_info()
+        worker_id = worker.id if worker is not None else 0
+        worker_count = worker.num_workers if worker is not None else 1
+        assigned_shards = self.shards[worker_id::worker_count]
+
+        for shard in assigned_shards:
+            shard_path = (self.manifest_dir / shard["path"]).resolve()
+            payload = torch.load(shard_path, map_location="cpu")
+            tensors = tuple(
+                payload[name].long() if payload[name].dtype != torch.long else payload[name]
+                for name in STRUCTURED_TENSOR_NAMES
+            )
+            shard_count = int(tensors[-1].shape[0])
+            for start in range(0, shard_count, self.batch_size):
+                end = min(start + self.batch_size, shard_count)
+                yield tuple(tensor[start:end] for tensor in tensors)
+
+
 def _resolve_manifest_path(manifest_path: Path, child: str) -> Path:
     return (manifest_path.parent / child).resolve()
 
 
-def load_structured_dataset_bundle(dataset_path: Path, label_key: str) -> StructuredDatasetBundle:
-    payload = json.loads(dataset_path.read_text())
+def _packed_manifest_candidate(dataset_path: Path) -> Path | None:
+    if not dataset_path.name.endswith("-manifest.json"):
+        return None
+    return dataset_path.with_name(dataset_path.name.replace("-manifest.json", "-packed-manifest.json"))
+
+
+def load_structured_dataset_bundle(
+    dataset_path: Path,
+    label_key: str,
+    *,
+    batch_size: int | None = None,
+    prefer_packed: bool = True,
+) -> StructuredDatasetBundle:
+    resolved_path = dataset_path.resolve()
+    if prefer_packed:
+        packed_candidate = _packed_manifest_candidate(resolved_path)
+        if packed_candidate is not None and packed_candidate.exists():
+            resolved_path = packed_candidate
+
+    payload = json.loads(resolved_path.read_text())
 
     if "samples" in payload:
         train_samples, eval_samples, label_names, metadata = load_structured_dataset(
@@ -195,13 +242,61 @@ def load_structured_dataset_bundle(dataset_path: Path, label_key: str) -> Struct
             label_names=label_names,
             metadata=metadata,
             streaming=False,
+            prebatched=False,
+        )
+
+    if payload.get("format") == PACKED_FORMAT:
+        if batch_size is None or batch_size < 1:
+            raise RuntimeError("Packed structured datasets require a positive batch_size.")
+
+        label_names = payload.get(label_key) or payload.get("labels")
+        if not label_names:
+            raise RuntimeError(f"Missing label list for {label_key} in {resolved_path}.")
+
+        metadata = {
+            "sampleCount": int(sum(payload["sampleCounts"].values()))
+            if isinstance(payload.get("sampleCounts"), dict)
+            else None,
+            "trainPuzzleIds": [],
+            "evalPuzzleIds": [],
+            "limitPerPuzzle": int(payload.get("limitPuzzles", 0)),
+            "historyWindow": int(payload["historyWindow"]),
+            "format": payload.get("format", PACKED_FORMAT),
+            "sourceCsv": payload.get("sourceCsv"),
+            "evalPercent": payload.get("evalPercent"),
+            "minRating": payload.get("minRating"),
+            "packedFrom": payload.get("packedFrom"),
+            "shardRows": payload.get("shardRows"),
+        }
+
+        return StructuredDatasetBundle(
+            train_dataset=StructuredPackedBatchDataset(
+                resolved_path.parent,
+                list(payload["trainShards"]),
+                batch_size=batch_size,
+            ),
+            eval_dataset=StructuredPackedBatchDataset(
+                resolved_path.parent,
+                list(payload["evalShards"]),
+                batch_size=batch_size,
+            ),
+            train_count=int(payload["sampleCounts"]["trainOpSamples"])
+            if label_key == "opLabels"
+            else int(payload["sampleCounts"]["trainValueSamples"]),
+            eval_count=int(payload["sampleCounts"]["evalOpSamples"])
+            if label_key == "opLabels"
+            else int(payload["sampleCounts"]["evalValueSamples"]),
+            label_names=list(label_names),
+            metadata=metadata,
+            streaming=True,
+            prebatched=True,
         )
 
     if payload.get("format") != "structured-state-v1-jsonl":
-        raise RuntimeError(f"Unsupported structured dataset format in {dataset_path}.")
+        raise RuntimeError(f"Unsupported structured dataset format in {resolved_path}.")
 
-    train_path = _resolve_manifest_path(dataset_path, payload["trainPath"])
-    eval_path = _resolve_manifest_path(dataset_path, payload["evalPath"])
+    train_path = _resolve_manifest_path(resolved_path, payload["trainPath"])
+    eval_path = _resolve_manifest_path(resolved_path, payload["evalPath"])
     if not train_path.exists():
         raise FileNotFoundError(f"Train JSONL not found: {train_path}")
     if not eval_path.exists():
@@ -209,7 +304,7 @@ def load_structured_dataset_bundle(dataset_path: Path, label_key: str) -> Struct
 
     label_names = payload.get(label_key) or payload.get("labels")
     if not label_names:
-        raise RuntimeError(f"Missing label list for {label_key} in {dataset_path}.")
+        raise RuntimeError(f"Missing label list for {label_key} in {resolved_path}.")
 
     metadata = {
         "sampleCount": int(sum(payload["sampleCounts"].values()))
@@ -237,6 +332,7 @@ def load_structured_dataset_bundle(dataset_path: Path, label_key: str) -> Struct
         label_names=list(label_names),
         metadata=metadata,
         streaming=True,
+        prebatched=False,
     )
 
 

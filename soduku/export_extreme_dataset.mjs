@@ -30,6 +30,7 @@ function parseArgs(argv) {
   let evalPercent = DEFAULT_EVAL_PERCENT;
   let historyWindow = HARD_OP_HISTORY_WINDOW;
   let limitPuzzles = 0;
+  let topPuzzlesByRating = 0;
   let minRating = DEFAULT_MIN_RATING;
   let statusEvery = DEFAULT_STATUS_EVERY;
 
@@ -60,6 +61,11 @@ function parseArgs(argv) {
       index += 1;
       continue;
     }
+    if (arg === "--top-puzzles-by-rating" && argv[index + 1]) {
+      topPuzzlesByRating = Number(argv[index + 1]);
+      index += 1;
+      continue;
+    }
     if (arg === "--min-rating" && argv[index + 1]) {
       minRating = Number(argv[index + 1]);
       index += 1;
@@ -77,6 +83,9 @@ function parseArgs(argv) {
   if (!Number.isInteger(limitPuzzles) || limitPuzzles < 0) {
     throw new Error("--limit-puzzles must be a non-negative integer.");
   }
+  if (!Number.isInteger(topPuzzlesByRating) || topPuzzlesByRating < 0) {
+    throw new Error("--top-puzzles-by-rating must be a non-negative integer.");
+  }
   if (!Number.isFinite(evalPercent) || evalPercent < 0 || evalPercent > 100) {
     throw new Error("--eval-percent must be between 0 and 100.");
   }
@@ -93,6 +102,7 @@ function parseArgs(argv) {
     evalPercent,
     historyWindow,
     limitPuzzles,
+    topPuzzlesByRating,
     minRating,
     statusEvery,
   };
@@ -139,6 +149,43 @@ function pruneFocusFrames(focusFrames, depth) {
   }
 }
 
+function compareRowsByHardness(left, right) {
+  if (left.rating !== right.rating) {
+    return left.rating - right.rating;
+  }
+  return right.rowIndex - left.rowIndex;
+}
+
+function sortHardestRows(rows) {
+  return [...rows].sort((left, right) => {
+    if (left.rating !== right.rating) {
+      return right.rating - left.rating;
+    }
+    return left.rowIndex - right.rowIndex;
+  });
+}
+
+function insertTopRatedRow(rows, row, limit) {
+  if (limit < 1) {
+    return;
+  }
+  if (rows.length < limit) {
+    rows.push(row);
+    return;
+  }
+
+  let weakestIndex = 0;
+  for (let index = 1; index < rows.length; index += 1) {
+    if (compareRowsByHardness(rows[index], rows[weakestIndex]) < 0) {
+      weakestIndex = index;
+    }
+  }
+
+  if (compareRowsByHardness(row, rows[weakestIndex]) > 0) {
+    rows[weakestIndex] = row;
+  }
+}
+
 function buildManifest({
   generator,
   input,
@@ -146,6 +193,7 @@ function buildManifest({
   evalPercent,
   minRating,
   limitPuzzles,
+  topPuzzlesByRating,
   splitCounts,
   sampleCounts,
   labels,
@@ -160,12 +208,59 @@ function buildManifest({
     evalPercent,
     minRating,
     limitPuzzles,
+    topPuzzlesByRating,
     puzzleCounts: splitCounts,
     sampleCounts,
     labels,
     trainPath,
     evalPath,
   };
+}
+
+async function collectSelectedRows(options, sampleCounts) {
+  if (options.topPuzzlesByRating > 0) {
+    const topRows = [];
+    const scanStatusEvery = Math.max(options.statusEvery, 10_000);
+    for await (const row of streamExtremeSudokuCsv(options.input)) {
+      sampleCounts.scannedRows += 1;
+      if (!Number.isFinite(row.rating) || row.rating < options.minRating) {
+        continue;
+      }
+      if (row.question.length !== 81 || row.answer.length !== 81) {
+        sampleCounts.invalidRows += 1;
+        continue;
+      }
+      insertTopRatedRow(topRows, row, options.topPuzzlesByRating);
+      if (sampleCounts.scannedRows % scanStatusEvery === 0) {
+        const weakest = topRows.length > 0 ? sortHardestRows(topRows).at(-1)?.rating ?? "n/a" : "n/a";
+        console.log(
+          `scanned ${sampleCounts.scannedRows} rows · kept ${topRows.length}/${options.topPuzzlesByRating} hardest · cutoff=${weakest}`,
+        );
+      }
+    }
+    const selectedRows = sortHardestRows(topRows);
+    console.log(
+      `Selected ${selectedRows.length} highest-rated puzzles from ${sampleCounts.scannedRows} scanned rows.`,
+    );
+    return selectedRows;
+  }
+
+  const selectedRows = [];
+  for await (const row of streamExtremeSudokuCsv(options.input)) {
+    if (options.limitPuzzles && selectedRows.length >= options.limitPuzzles) {
+      break;
+    }
+    sampleCounts.scannedRows += 1;
+    if (!Number.isFinite(row.rating) || row.rating < options.minRating) {
+      continue;
+    }
+    if (row.question.length !== 81 || row.answer.length !== 81) {
+      sampleCounts.invalidRows += 1;
+      continue;
+    }
+    selectedRows.push(row);
+  }
+  return selectedRows;
 }
 
 async function main() {
@@ -195,21 +290,12 @@ async function main() {
     solutionMismatches: 0,
     invalidRows: 0,
     processedRows: 0,
+    scannedRows: 0,
   };
 
   try {
-    for await (const row of streamExtremeSudokuCsv(options.input)) {
-      if (options.limitPuzzles && sampleCounts.processedRows >= options.limitPuzzles) {
-        break;
-      }
-      if (!Number.isFinite(row.rating) || row.rating < options.minRating) {
-        continue;
-      }
-      if (row.question.length !== 81 || row.answer.length !== 81) {
-        sampleCounts.invalidRows += 1;
-        continue;
-      }
-
+    const selectedRows = await collectSelectedRows(options, sampleCounts);
+    for (const row of selectedRows) {
       sampleCounts.processedRows += 1;
       const split = splitForPuzzle(row.question, options.evalPercent);
       if (split === "eval") {
@@ -368,6 +454,7 @@ async function main() {
     evalPercent: options.evalPercent,
     minRating: options.minRating,
     limitPuzzles: options.limitPuzzles,
+    topPuzzlesByRating: options.topPuzzlesByRating,
     splitCounts,
     sampleCounts,
     labels: HARD_OP_LABELS,
@@ -382,6 +469,7 @@ async function main() {
     evalPercent: options.evalPercent,
     minRating: options.minRating,
     limitPuzzles: options.limitPuzzles,
+    topPuzzlesByRating: options.topPuzzlesByRating,
     splitCounts,
     sampleCounts,
     labels: VALUE_LABELS,

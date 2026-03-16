@@ -18,6 +18,7 @@ fi
 INPUT="$ROOT/soduku/train_data/train.csv"
 OUTPUT_DIR="$ROOT/soduku/training/extreme"
 LIMIT_PUZZLES=250
+TOP_PUZZLES_BY_RATING=0
 MIN_RATING=0
 EVAL_PERCENT=5
 STATUS_EVERY=100
@@ -26,6 +27,8 @@ NUM_WORKERS=4
 PREFETCH_FACTOR=4
 CHECKPOINT_EVERY=1
 RESUME_LATEST=0
+PACK_DATASET=1
+SHARD_ROWS=65536
 
 OP_RAW_DIR="$ROOT/soduku/training/extreme-op"
 OP_EXPORT_DIR="$ROOT/soduku/models/extreme-op"
@@ -57,6 +60,7 @@ Options:
   --input PATH                 Source CSV. Default: soduku/train_data/train.csv
   --output-dir DIR             Export manifest/JSONL dir. Default: soduku/training/extreme
   --limit-puzzles N            Max puzzles to process. Default: 250
+  --top-puzzles-by-rating N    Keep only the highest-rated N puzzles from the full CSV scan.
   --min-rating N               Minimum CSV rating filter. Default: 0
   --eval-percent N             Percent of puzzles held out for eval. Default: 5
   --status-every N             Progress logging frequency for exporter. Default: 100
@@ -65,6 +69,8 @@ Options:
   --prefetch-factor N          DataLoader prefetch factor when workers > 0. Default: 4
   --checkpoint-every N         Save latest checkpoint every N epochs. Default: 1
   --resume-latest              Reuse <checkpoint-dir>/latest.pt when present.
+  --skip-pack                  Skip packing JSONL manifests into tensor shards.
+  --shard-rows N               Rows per packed tensor shard. Default: 65536
 
   --op-raw-dir DIR             Raw op-model training dir.
   --op-export-dir DIR          ONNX op-model export dir.
@@ -108,6 +114,7 @@ while [ $# -gt 0 ]; do
     --input) INPUT="$2"; shift 2 ;;
     --output-dir) OUTPUT_DIR="$2"; shift 2 ;;
     --limit-puzzles) LIMIT_PUZZLES="$2"; shift 2 ;;
+    --top-puzzles-by-rating) TOP_PUZZLES_BY_RATING="$2"; shift 2 ;;
     --min-rating) MIN_RATING="$2"; shift 2 ;;
     --eval-percent) EVAL_PERCENT="$2"; shift 2 ;;
     --status-every) STATUS_EVERY="$2"; shift 2 ;;
@@ -116,6 +123,8 @@ while [ $# -gt 0 ]; do
     --prefetch-factor) PREFETCH_FACTOR="$2"; shift 2 ;;
     --checkpoint-every) CHECKPOINT_EVERY="$2"; shift 2 ;;
     --resume-latest) RESUME_LATEST=1; shift 1 ;;
+    --skip-pack) PACK_DATASET=0; shift 1 ;;
+    --shard-rows) SHARD_ROWS="$2"; shift 2 ;;
     --op-raw-dir) OP_RAW_DIR="$2"; shift 2 ;;
     --op-export-dir) OP_EXPORT_DIR="$2"; shift 2 ;;
     --op-checkpoint-dir) OP_CHECKPOINT_DIR="$2"; shift 2 ;;
@@ -163,6 +172,8 @@ fi
 
 OP_MANIFEST="$OUTPUT_DIR/extreme-op-manifest.json"
 VALUE_MANIFEST="$OUTPUT_DIR/extreme-value-manifest.json"
+OP_PACKED_MANIFEST="$OUTPUT_DIR/extreme-op-packed-manifest.json"
+VALUE_PACKED_MANIFEST="$OUTPUT_DIR/extreme-value-packed-manifest.json"
 
 if [ "$RESUME_LATEST" -eq 1 ] && [ -z "$OP_RESUME_CHECKPOINT" ] && [ -f "$OP_CHECKPOINT_DIR/latest.pt" ]; then
   OP_RESUME_CHECKPOINT="$OP_CHECKPOINT_DIR/latest.pt"
@@ -177,10 +188,13 @@ printf 'Python: %s\n' "$PYTHON"
 printf 'Input CSV: %s\n' "$INPUT"
 printf 'Output dir: %s\n' "$OUTPUT_DIR"
 printf 'Limit puzzles: %s\n' "$LIMIT_PUZZLES"
+printf 'Top puzzles by rating: %s\n' "$TOP_PUZZLES_BY_RATING"
 printf 'Trainer log every: %s\n' "$LOG_EVERY"
 printf 'DataLoader workers: %s\n' "$NUM_WORKERS"
 printf 'Prefetch factor: %s\n' "$PREFETCH_FACTOR"
 printf 'Checkpoint every: %s\n' "$CHECKPOINT_EVERY"
+printf 'Pack dataset: %s\n' "$PACK_DATASET"
+printf 'Shard rows: %s\n' "$SHARD_ROWS"
 printf 'Op resume checkpoint: %s\n' "${OP_RESUME_CHECKPOINT:-<none>}"
 printf 'Value resume checkpoint: %s\n' "${VALUE_RESUME_CHECKPOINT:-<none>}"
 
@@ -197,20 +211,46 @@ if [ "$SKIP_EXPORT" -eq 0 ]; then
     --input "$INPUT" \
     --output-dir "$OUTPUT_DIR" \
     --limit-puzzles "$LIMIT_PUZZLES" \
+    --top-puzzles-by-rating "$TOP_PUZZLES_BY_RATING" \
     --min-rating "$MIN_RATING" \
     --eval-percent "$EVAL_PERCENT" \
     --status-every "$STATUS_EVERY"
 fi
 
-if [ "$SKIP_OP" -eq 0 ]; then
+if [ "$PACK_DATASET" -eq 1 ]; then
   if [ "$DRY_RUN" -eq 0 ] && [ ! -f "$OP_MANIFEST" ]; then
-    printf 'Op manifest not found: %s\n' "$OP_MANIFEST" >&2
+    printf 'Op manifest not found for packing: %s\n' "$OP_MANIFEST" >&2
+    exit 1
+  fi
+  if [ "$DRY_RUN" -eq 0 ] && [ ! -f "$VALUE_MANIFEST" ]; then
+    printf 'Value manifest not found for packing: %s\n' "$VALUE_MANIFEST" >&2
+    exit 1
+  fi
+  run_cmd \
+    "$PYTHON" "$ROOT/soduku/pack_structured_dataset.py" \
+    --dataset "$OP_MANIFEST" \
+    --shard-rows "$SHARD_ROWS"
+  run_cmd \
+    "$PYTHON" "$ROOT/soduku/pack_structured_dataset.py" \
+    --dataset "$VALUE_MANIFEST" \
+    --shard-rows "$SHARD_ROWS"
+fi
+
+if [ "$SKIP_OP" -eq 0 ]; then
+  OP_TRAIN_DATASET="$OP_MANIFEST"
+  if [ "$PACK_DATASET" -eq 1 ]; then
+    OP_TRAIN_DATASET="$OP_PACKED_MANIFEST"
+  elif [ -f "$OP_PACKED_MANIFEST" ]; then
+    OP_TRAIN_DATASET="$OP_PACKED_MANIFEST"
+  fi
+  if [ "$DRY_RUN" -eq 0 ] && [ ! -f "$OP_TRAIN_DATASET" ]; then
+    printf 'Op manifest not found: %s\n' "$OP_TRAIN_DATASET" >&2
     exit 1
   fi
   set -- \
     env PYTORCH_ENABLE_MPS_FALLBACK=1 \
     "$PYTHON" "$ROOT/soduku/train_transformer.py" \
-    --dataset "$OP_MANIFEST" \
+    --dataset "$OP_TRAIN_DATASET" \
     --raw-dir "$OP_RAW_DIR" \
     --export-dir "$OP_EXPORT_DIR" \
     --checkpoint-dir "$OP_CHECKPOINT_DIR" \
@@ -228,14 +268,20 @@ if [ "$SKIP_OP" -eq 0 ]; then
 fi
 
 if [ "$SKIP_VALUE" -eq 0 ]; then
-  if [ "$DRY_RUN" -eq 0 ] && [ ! -f "$VALUE_MANIFEST" ]; then
-    printf 'Value manifest not found: %s\n' "$VALUE_MANIFEST" >&2
+  VALUE_TRAIN_DATASET="$VALUE_MANIFEST"
+  if [ "$PACK_DATASET" -eq 1 ]; then
+    VALUE_TRAIN_DATASET="$VALUE_PACKED_MANIFEST"
+  elif [ -f "$VALUE_PACKED_MANIFEST" ]; then
+    VALUE_TRAIN_DATASET="$VALUE_PACKED_MANIFEST"
+  fi
+  if [ "$DRY_RUN" -eq 0 ] && [ ! -f "$VALUE_TRAIN_DATASET" ]; then
+    printf 'Value manifest not found: %s\n' "$VALUE_TRAIN_DATASET" >&2
     exit 1
   fi
   set -- \
     env PYTORCH_ENABLE_MPS_FALLBACK=1 \
     "$PYTHON" "$ROOT/soduku/train_value_transformer.py" \
-    --dataset "$VALUE_MANIFEST" \
+    --dataset "$VALUE_TRAIN_DATASET" \
     --raw-dir "$VALUE_RAW_DIR" \
     --export-dir "$VALUE_EXPORT_DIR" \
     --checkpoint-dir "$VALUE_CHECKPOINT_DIR" \

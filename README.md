@@ -151,11 +151,12 @@ Then open `http://localhost:8000`.
 - `soduku/README.md` - Sudoku-specific workspace note and the recommended first benchmark
 - `soduku/extreme-csv.mjs` - streaming reader for the large external extreme-Sudoku CSV
 - `soduku/export_extreme_dataset.mjs` - line-by-line exporter from `soduku/train_data/train.csv` into structured JSONL manifests
+- `soduku/pack_structured_dataset.py` - one-time packer from streamed JSONL manifests into compact tensor shard manifests
 - `soduku/export_hard_dataset.mjs` - hard-puzzle next-op dataset exporter with puzzle-held-out splits
 - `soduku/train_transformer.py` - structured hard-set Sudoku next-op trainer/exporter
 - `soduku/export_value_dataset.mjs` - structured hard-set `PLACE`-value dataset exporter
 - `soduku/train_value_transformer.py` - structured hard-set `PLACE`-value trainer/exporter
-- `scripts/train_sudoku_extreme.sh` - one-command wrapper for export + op-model training + value-model training
+- `scripts/train_sudoku_extreme.sh` - one-command wrapper for export + tensor-shard packing + op-model training + value-model training
 - `requirements.txt` - Python training/export dependencies for the local model path
 - `styles.css` - visual system tuned for an iframe or Notion embed
 - `app.mjs` - UI wiring and animations

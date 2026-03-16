@@ -52,7 +52,11 @@ def main() -> None:
     if not dataset_path.exists():
         raise FileNotFoundError(f"Dataset not found: {dataset_path}")
 
-    bundle = load_structured_dataset_bundle(dataset_path, "valueLabels")
+    bundle = load_structured_dataset_bundle(
+        dataset_path,
+        "valueLabels",
+        batch_size=args.batch_size,
+    )
     if bundle.train_count < 1 or bundle.eval_count < 1:
         raise RuntimeError(
             f"Dataset split is empty for {dataset_path}: train={bundle.train_count} eval={bundle.eval_count}."
@@ -66,25 +70,38 @@ def main() -> None:
             "prefetch_factor": args.prefetch_factor,
         }
 
-    train_loader = DataLoader(
-        bundle.train_dataset,
-        batch_size=args.batch_size,
-        shuffle=not bundle.streaming,
-        **loader_kwargs,
-    )
-    eval_loader = DataLoader(
-        bundle.eval_dataset,
-        batch_size=args.batch_size,
-        shuffle=False,
-        **loader_kwargs,
-    )
+    if bundle.prebatched:
+        train_loader = DataLoader(
+            bundle.train_dataset,
+            batch_size=None,
+            **loader_kwargs,
+        )
+        eval_loader = DataLoader(
+            bundle.eval_dataset,
+            batch_size=None,
+            **loader_kwargs,
+        )
+    else:
+        train_loader = DataLoader(
+            bundle.train_dataset,
+            batch_size=args.batch_size,
+            shuffle=not bundle.streaming,
+            **loader_kwargs,
+        )
+        eval_loader = DataLoader(
+            bundle.eval_dataset,
+            batch_size=args.batch_size,
+            shuffle=False,
+            **loader_kwargs,
+        )
     device = default_device()
 
     print(
         "training structured value model on "
         f"{device} with train={bundle.train_count} eval={bundle.eval_count} "
         f"format={bundle.metadata['format']} batch_size={args.batch_size} "
-        f"log_every={args.log_every} num_workers={args.num_workers}",
+        f"log_every={args.log_every} num_workers={args.num_workers} "
+        f"prebatched={bundle.prebatched}",
         flush=True,
     )
 

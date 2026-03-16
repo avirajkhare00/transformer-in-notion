@@ -123,6 +123,8 @@ This repository now has the beginnings of that path:
 - `soduku/extreme-csv.mjs` - streaming CSV reader for the extreme source file
 - `soduku/export_extreme_dataset.mjs` - streamed exporter from `train.csv` to
   structured JSONL manifests for next-op and `PLACE`-value training
+- `soduku/pack_structured_dataset.py` - pack the streamed JSONL manifests into
+  compact tensor shards so training does not pay per-sample JSON parse overhead
 - `soduku/export_hard_dataset.mjs` - build a held-out hard-set next-op dataset
 - `soduku/train_transformer.py` - train a tiny next-op student on that dataset
 - `soduku/export_value_dataset.mjs` - build a held-out hard-set `PLACE`-value dataset
@@ -218,7 +220,8 @@ What happens:
 - Node reads the CSV line by line
 - each puzzle is solved once with the exact MRV reference runtime
 - the canonical PSVM trace is expanded into structured JSONL samples
-- PyTorch then trains from the JSONL manifest path instead of the original CSV
+- the JSONL manifests are then packed into tensor shards once
+- PyTorch trains from the packed shard manifests instead of reparsing JSON for every sample
 
 This keeps the raw source file out of the memory hot path while still letting
 the repo train on a much broader Sudoku distribution than the tiny curated

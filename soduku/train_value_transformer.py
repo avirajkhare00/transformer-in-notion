@@ -27,6 +27,9 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--batch-size", type=int, default=128)
     parser.add_argument("--lr", type=float, default=8e-4)
     parser.add_argument("--target-accuracy", type=float, default=0.70)
+    parser.add_argument("--log-every", type=int, default=100)
+    parser.add_argument("--checkpoint-dir", type=Path)
+    parser.add_argument("--checkpoint-every", type=int, default=1)
     parser.add_argument("--seed", type=int, default=23)
     return parser.parse_args()
 
@@ -38,6 +41,7 @@ def main() -> None:
     dataset_path = args.dataset.resolve()
     raw_dir = args.raw_dir.resolve()
     export_dir = args.export_dir.resolve()
+    checkpoint_dir = args.checkpoint_dir.resolve() if args.checkpoint_dir else None
 
     if not dataset_path.exists():
         raise FileNotFoundError(f"Dataset not found: {dataset_path}")
@@ -61,7 +65,9 @@ def main() -> None:
     print(
         "training structured value model on "
         f"{device} with train={bundle.train_count} eval={bundle.eval_count} "
-        f"format={bundle.metadata['format']}"
+        f"format={bundle.metadata['format']} batch_size={args.batch_size} "
+        f"log_every={args.log_every}",
+        flush=True,
     )
 
     model = StructuredSudokuTransformer(num_labels=len(bundle.label_names))
@@ -73,6 +79,12 @@ def main() -> None:
         epochs=args.epochs,
         learning_rate=args.lr,
         target_accuracy=args.target_accuracy,
+        log_every=args.log_every,
+        train_count=bundle.train_count,
+        eval_count=bundle.eval_count,
+        batch_size=args.batch_size,
+        checkpoint_dir=checkpoint_dir,
+        checkpoint_every=args.checkpoint_every,
     )
 
     if metrics["accuracy"] < args.target_accuracy:
@@ -93,7 +105,8 @@ def main() -> None:
 
     print(
         f"exported structured value model to {export_dir} with accuracy={metrics['accuracy']:.4f} "
-        f"and train_loss={metrics['train_loss']:.4f}"
+        f"and train_loss={metrics['train_loss']:.4f}",
+        flush=True,
     )
 
 

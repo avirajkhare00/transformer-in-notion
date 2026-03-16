@@ -21,15 +21,19 @@ LIMIT_PUZZLES=250
 MIN_RATING=0
 EVAL_PERCENT=5
 STATUS_EVERY=100
+LOG_EVERY=100
+CHECKPOINT_EVERY=1
 
 OP_RAW_DIR="$ROOT/soduku/training/extreme-op"
 OP_EXPORT_DIR="$ROOT/soduku/models/extreme-op"
+OP_CHECKPOINT_DIR="$ROOT/soduku/checkpoints/extreme-op"
 OP_EPOCHS=1
 OP_BATCH_SIZE=1024
 OP_TARGET_ACCURACY=0.0
 
 VALUE_RAW_DIR="$ROOT/soduku/training/extreme-value"
 VALUE_EXPORT_DIR="$ROOT/soduku/models/extreme-value"
+VALUE_CHECKPOINT_DIR="$ROOT/soduku/checkpoints/extreme-value"
 VALUE_EPOCHS=1
 VALUE_BATCH_SIZE=1024
 VALUE_TARGET_ACCURACY=0.0
@@ -51,19 +55,23 @@ Options:
   --min-rating N               Minimum CSV rating filter. Default: 0
   --eval-percent N             Percent of puzzles held out for eval. Default: 5
   --status-every N             Progress logging frequency for exporter. Default: 100
+  --log-every N                Batch logging frequency for both Python trainers. Default: 100
+  --checkpoint-every N         Save latest checkpoint every N epochs. Default: 1
 
   --op-raw-dir DIR             Raw op-model training dir.
   --op-export-dir DIR          ONNX op-model export dir.
+  --op-checkpoint-dir DIR      Op-model checkpoint dir. Default: soduku/checkpoints/extreme-op
   --op-epochs N                Op-model epochs. Default: 1
   --op-batch-size N            Op-model batch size. Default: 1024
-  --op-target-accuracy FLOAT   Early-stop/export threshold. Default: 0.0
+  --op-target-accuracy FLOAT   Early-stop threshold; 0 disables early stopping. Default: 0.0
 
   --value-raw-dir DIR          Raw value-model training dir.
   --value-export-dir DIR       ONNX value-model export dir.
+  --value-checkpoint-dir DIR   Value-model checkpoint dir. Default: soduku/checkpoints/extreme-value
   --value-epochs N             Value-model epochs. Default: 1
   --value-batch-size N         Value-model batch size. Default: 1024
   --value-target-accuracy FLOAT
-                               Value-model threshold. Default: 0.0
+                               Value-model early-stop threshold; 0 disables early stopping. Default: 0.0
 
   --skip-export                Reuse existing manifests.
   --skip-op                    Skip next-op training.
@@ -92,13 +100,17 @@ while [ $# -gt 0 ]; do
     --min-rating) MIN_RATING="$2"; shift 2 ;;
     --eval-percent) EVAL_PERCENT="$2"; shift 2 ;;
     --status-every) STATUS_EVERY="$2"; shift 2 ;;
+    --log-every) LOG_EVERY="$2"; shift 2 ;;
+    --checkpoint-every) CHECKPOINT_EVERY="$2"; shift 2 ;;
     --op-raw-dir) OP_RAW_DIR="$2"; shift 2 ;;
     --op-export-dir) OP_EXPORT_DIR="$2"; shift 2 ;;
+    --op-checkpoint-dir) OP_CHECKPOINT_DIR="$2"; shift 2 ;;
     --op-epochs) OP_EPOCHS="$2"; shift 2 ;;
     --op-batch-size) OP_BATCH_SIZE="$2"; shift 2 ;;
     --op-target-accuracy) OP_TARGET_ACCURACY="$2"; shift 2 ;;
     --value-raw-dir) VALUE_RAW_DIR="$2"; shift 2 ;;
     --value-export-dir) VALUE_EXPORT_DIR="$2"; shift 2 ;;
+    --value-checkpoint-dir) VALUE_CHECKPOINT_DIR="$2"; shift 2 ;;
     --value-epochs) VALUE_EPOCHS="$2"; shift 2 ;;
     --value-batch-size) VALUE_BATCH_SIZE="$2"; shift 2 ;;
     --value-target-accuracy) VALUE_TARGET_ACCURACY="$2"; shift 2 ;;
@@ -141,6 +153,8 @@ printf 'Python: %s\n' "$PYTHON"
 printf 'Input CSV: %s\n' "$INPUT"
 printf 'Output dir: %s\n' "$OUTPUT_DIR"
 printf 'Limit puzzles: %s\n' "$LIMIT_PUZZLES"
+printf 'Trainer log every: %s\n' "$LOG_EVERY"
+printf 'Checkpoint every: %s\n' "$CHECKPOINT_EVERY"
 
 MPS_STATUS="$("$PYTHON" - <<'PY'
 import torch
@@ -171,9 +185,12 @@ if [ "$SKIP_OP" -eq 0 ]; then
     --dataset "$OP_MANIFEST" \
     --raw-dir "$OP_RAW_DIR" \
     --export-dir "$OP_EXPORT_DIR" \
+    --checkpoint-dir "$OP_CHECKPOINT_DIR" \
+    --checkpoint-every "$CHECKPOINT_EVERY" \
     --epochs "$OP_EPOCHS" \
     --batch-size "$OP_BATCH_SIZE" \
-    --target-accuracy "$OP_TARGET_ACCURACY"
+    --target-accuracy "$OP_TARGET_ACCURACY" \
+    --log-every "$LOG_EVERY"
 fi
 
 if [ "$SKIP_VALUE" -eq 0 ]; then
@@ -187,9 +204,12 @@ if [ "$SKIP_VALUE" -eq 0 ]; then
     --dataset "$VALUE_MANIFEST" \
     --raw-dir "$VALUE_RAW_DIR" \
     --export-dir "$VALUE_EXPORT_DIR" \
+    --checkpoint-dir "$VALUE_CHECKPOINT_DIR" \
+    --checkpoint-every "$CHECKPOINT_EVERY" \
     --epochs "$VALUE_EPOCHS" \
     --batch-size "$VALUE_BATCH_SIZE" \
-    --target-accuracy "$VALUE_TARGET_ACCURACY"
+    --target-accuracy "$VALUE_TARGET_ACCURACY" \
+    --log-every "$LOG_EVERY"
 fi
 
 printf 'Done.\n'

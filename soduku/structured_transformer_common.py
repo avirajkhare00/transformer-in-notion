@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import random
 import shutil
+import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterable
@@ -256,6 +257,46 @@ def build_tensor_dataset(samples: StructuredSampleSet) -> TensorDataset:
     )
 
 
+def _format_progress(current: int, total: int | None) -> str:
+    if total is None or total <= 0:
+        return str(current)
+    return f"{current}/{total}"
+
+
+def _estimated_batches(sample_count: int | None, batch_size: int | None) -> int | None:
+    if sample_count is None or sample_count <= 0 or batch_size is None or batch_size <= 0:
+        return None
+    return (sample_count + batch_size - 1) // batch_size
+
+
+def _clone_state_dict_to_cpu(model: nn.Module) -> dict[str, torch.Tensor]:
+    return {name: tensor.detach().cpu().clone() for name, tensor in model.state_dict().items()}
+
+
+def _save_training_checkpoint(
+    checkpoint_path: Path,
+    *,
+    epoch: int,
+    model: nn.Module,
+    optimizer: torch.optim.Optimizer,
+    best_state: dict[str, torch.Tensor] | None,
+    best_accuracy: float,
+    train_loss: float,
+    eval_loss: float,
+) -> None:
+    checkpoint_path.parent.mkdir(parents=True, exist_ok=True)
+    payload = {
+        "epoch": epoch,
+        "model_state": _clone_state_dict_to_cpu(model),
+        "optimizer_state": optimizer.state_dict(),
+        "best_state": best_state,
+        "best_accuracy": float(best_accuracy),
+        "train_loss": float(train_loss),
+        "eval_loss": float(eval_loss),
+    }
+    torch.save(payload, checkpoint_path)
+
+
 class StructuredSudokuTransformer(nn.Module):
     def __init__(
         self,
@@ -331,16 +372,25 @@ class StructuredSudokuTransformer(nn.Module):
 
 
 def evaluate(
-    model: StructuredSudokuTransformer, dataloader: DataLoader, device: torch.device
+    model: StructuredSudokuTransformer,
+    dataloader: DataLoader,
+    device: torch.device,
+    *,
+    log_every: int = 0,
+    sample_count: int | None = None,
+    batch_size: int | None = None,
+    split_name: str = "eval",
 ) -> tuple[float, float]:
     model.eval()
     total = 0
     correct = 0
     total_loss = 0.0
     criterion = nn.CrossEntropyLoss()
+    started_at = time.perf_counter()
+    estimated_batches = _estimated_batches(sample_count, batch_size)
 
     with torch.no_grad():
-        for batch in dataloader:
+        for step, batch in enumerate(dataloader, start=1):
             board_tokens, focus_row, focus_col, candidate_mask, history_ops, filled_count, search_depth, labels = (
                 tensor.to(device) for tensor in batch
             )
@@ -359,6 +409,18 @@ def evaluate(
             total += labels.size(0)
             total_loss += loss.item() * labels.size(0)
 
+            if log_every > 0 and step % log_every == 0:
+                elapsed = max(time.perf_counter() - started_at, 1e-6)
+                avg_loss = total_loss / total
+                accuracy = correct / total
+                print(
+                    f"{split_name} batch={_format_progress(step, estimated_batches)} "
+                    f"samples={_format_progress(total, sample_count)} "
+                    f"avg_loss={avg_loss:.4f} accuracy={accuracy:.4f} "
+                    f"samples_per_s={total / elapsed:.1f} elapsed={elapsed:.1f}s",
+                    flush=True,
+                )
+
     return correct / total, total_loss / total
 
 
@@ -370,6 +432,13 @@ def train_model(
     epochs: int,
     learning_rate: float,
     target_accuracy: float,
+    *,
+    log_every: int = 0,
+    train_count: int | None = None,
+    eval_count: int | None = None,
+    batch_size: int | None = None,
+    checkpoint_dir: Path | None = None,
+    checkpoint_every: int = 1,
 ) -> tuple[StructuredSudokuTransformer, dict[str, float]]:
     optimizer = torch.optim.AdamW(model.parameters(), lr=learning_rate, weight_decay=0.0)
     criterion = nn.CrossEntropyLoss()
@@ -383,8 +452,17 @@ def train_model(
         model.train()
         running_loss = 0.0
         sample_count = 0
+        epoch_started_at = time.perf_counter()
+        estimated_batches = _estimated_batches(train_count, batch_size)
 
-        for batch in train_loader:
+        print(
+            f"epoch={epoch:02d} start train_samples={train_count or '?'} "
+            f"eval_samples={eval_count or '?'} batch_size={batch_size or '?'} "
+            f"log_every={log_every or 'epoch-only'}",
+            flush=True,
+        )
+
+        for step, batch in enumerate(train_loader, start=1):
             board_tokens, focus_row, focus_col, candidate_mask, history_ops, filled_count, search_depth, labels = (
                 tensor.to(device) for tensor in batch
             )
@@ -402,24 +480,76 @@ def train_model(
             optimizer.step()
             optimizer.zero_grad(set_to_none=True)
 
-            batch_size = labels.size(0)
-            running_loss += loss.item() * batch_size
-            sample_count += batch_size
+            current_batch_size = labels.size(0)
+            running_loss += loss.item() * current_batch_size
+            sample_count += current_batch_size
+
+            if log_every > 0 and step % log_every == 0:
+                elapsed = max(time.perf_counter() - epoch_started_at, 1e-6)
+                avg_loss = running_loss / sample_count
+                print(
+                    f"epoch={epoch:02d} train batch={_format_progress(step, estimated_batches)} "
+                    f"samples={_format_progress(sample_count, train_count)} "
+                    f"avg_loss={avg_loss:.4f} samples_per_s={sample_count / elapsed:.1f} "
+                    f"elapsed={elapsed:.1f}s",
+                    flush=True,
+                )
 
         last_train_loss = running_loss / sample_count
-        accuracy, eval_loss = evaluate(model, eval_loader, device)
+        accuracy, eval_loss = evaluate(
+            model,
+            eval_loader,
+            device,
+            log_every=log_every,
+            sample_count=eval_count,
+            batch_size=batch_size,
+            split_name=f"epoch={epoch:02d} eval",
+        )
+        epoch_elapsed = time.perf_counter() - epoch_started_at
         print(
             f"epoch={epoch:02d} train_loss={last_train_loss:.4f} "
-            f"eval_loss={eval_loss:.4f} accuracy={accuracy:.4f}"
+            f"eval_loss={eval_loss:.4f} accuracy={accuracy:.4f} "
+            f"elapsed={epoch_elapsed:.1f}s",
+            flush=True,
         )
 
         if accuracy >= best_accuracy:
             best_accuracy = accuracy
-            best_state = {
-                name: tensor.detach().cpu().clone() for name, tensor in model.state_dict().items()
-            }
+            best_state = _clone_state_dict_to_cpu(model)
+            print(f"epoch={epoch:02d} new_best_accuracy={best_accuracy:.4f}", flush=True)
+            if checkpoint_dir is not None:
+                best_checkpoint = checkpoint_dir / "best.pt"
+                _save_training_checkpoint(
+                    best_checkpoint,
+                    epoch=epoch,
+                    model=model,
+                    optimizer=optimizer,
+                    best_state=best_state,
+                    best_accuracy=best_accuracy,
+                    train_loss=last_train_loss,
+                    eval_loss=eval_loss,
+                )
+                print(f"epoch={epoch:02d} saved checkpoint {best_checkpoint}", flush=True)
 
-        if accuracy >= target_accuracy:
+        if checkpoint_dir is not None and checkpoint_every > 0 and epoch % checkpoint_every == 0:
+            latest_checkpoint = checkpoint_dir / "latest.pt"
+            _save_training_checkpoint(
+                latest_checkpoint,
+                epoch=epoch,
+                model=model,
+                optimizer=optimizer,
+                best_state=best_state,
+                best_accuracy=best_accuracy,
+                train_loss=last_train_loss,
+                eval_loss=eval_loss,
+            )
+            print(f"epoch={epoch:02d} saved checkpoint {latest_checkpoint}", flush=True)
+
+        if target_accuracy > 0.0 and accuracy >= target_accuracy:
+            print(
+                f"epoch={epoch:02d} reached target_accuracy={target_accuracy:.4f}; stopping early",
+                flush=True,
+            )
             break
 
     if best_state is None:

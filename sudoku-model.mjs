@@ -20,6 +20,7 @@ const state = {
   givenMask: [],
   log: [],
   run: null,
+  progress: null,
   traceLength: null,
   isRunning: false,
 };
@@ -163,6 +164,37 @@ function formatDuration(ms) {
   return `${(ms / 1000).toFixed(2)} s`;
 }
 
+function formatCount(value) {
+  return Number.isFinite(value) ? String(value) : "—";
+}
+
+function normalizeRun(data) {
+  const predictionCount = Number.isFinite(data.predictionCount) ? data.predictionCount : null;
+  const valuePredictionCount = Number.isFinite(data.valuePredictionCount)
+    ? data.valuePredictionCount
+    : null;
+  const tokenCount = Number.isFinite(data.tokenCount)
+    ? data.tokenCount
+    : predictionCount !== null || valuePredictionCount !== null
+      ? (predictionCount ?? 0) + (valuePredictionCount ?? 0)
+      : null;
+
+  return {
+    tokenCount,
+    predictionCount,
+    averageConfidence: Number.isFinite(data.averageConfidence) ? data.averageConfidence : null,
+    accuracy: Number.isFinite(data.accuracy) ? data.accuracy : null,
+    valuePredictionCount,
+    valueAverageConfidence: Number.isFinite(data.valueAverageConfidence)
+      ? data.valueAverageConfidence
+      : null,
+    valueAccuracy: Number.isFinite(data.valueAccuracy) ? data.valueAccuracy : null,
+    tokensPerSecond: Number.isFinite(data.tokensPerSecond) ? data.tokensPerSecond : null,
+    elapsedMs: Number.isFinite(data.elapsedMs) ? data.elapsedMs : null,
+    traceLength: Number.isFinite(data.traceLength) ? data.traceLength : null,
+  };
+}
+
 function stopWorker() {
   if (!worker) {
     return;
@@ -189,6 +221,7 @@ function applyPuzzle(rawPuzzle) {
   state.givenMask = buildGivenMask(state.board);
   state.log = [];
   state.run = null;
+  state.progress = null;
   state.traceLength = null;
   refs.input.value = formatPuzzleText(normalized);
   refs.preset.value = findPresetByPuzzle(normalized)?.id ?? "custom";
@@ -221,6 +254,7 @@ function startRun() {
   stopWorker();
   state.isRunning = true;
   state.run = null;
+  state.progress = { message: "Preparing teacher trace.", completed: null, total: null };
   state.log = [];
   pushLog(
     `Running local transformer trace-token probe on ${describePreset(state.puzzle).value}.`
@@ -236,24 +270,41 @@ function startRun() {
       state.board = data.initialBoard;
       state.givenMask = buildGivenMask(data.initialBoard);
       state.traceLength = data.traceLength;
+      state.progress = {
+        phase: "teacher-trace",
+        completed: 0,
+        total: data.traceLength,
+        message: `Teacher trace ready. ${data.traceLength} steps.`,
+      };
       pushLog(`Teacher trace length ${data.traceLength}. Strategy ${data.strategy}.`);
+      render();
+      return;
+    }
+
+    if (data.type === "progress") {
+      state.progress = {
+        phase: data.phase ?? null,
+        completed: Number.isFinite(data.completed) ? data.completed : null,
+        total: Number.isFinite(data.total) ? data.total : null,
+        message: data.message ?? "Working through trace-token batches.",
+      };
       render();
       return;
     }
 
     if (data.type === "event-batch") {
       state.board = data.snapshot;
-      state.run = {
-        tokenCount: data.tokenCount,
-        predictionCount: data.predictionCount,
-        averageConfidence: data.averageConfidence,
-        accuracy: data.accuracy,
-        valuePredictionCount: data.valuePredictionCount,
-        valueAverageConfidence: data.valueAverageConfidence,
-        valueAccuracy: data.valueAccuracy,
-        tokensPerSecond: data.tokensPerSecond,
-        elapsedMs: data.elapsedMs,
+      state.run = normalizeRun({
+        ...data,
         traceLength: state.traceLength,
+      });
+      state.progress = {
+        phase: "replay",
+        completed: state.run.predictionCount,
+        total: state.traceLength,
+        message: `Replaying scored trace ${formatCount(state.run.predictionCount)} / ${formatCount(
+          state.traceLength
+        )}.`,
       };
       pushLogs(data.lines ?? []);
       render();
@@ -263,23 +314,15 @@ function startRun() {
     if (data.type === "done") {
       state.isRunning = false;
       state.board = data.solution;
-      state.run = {
-        tokenCount: data.tokenCount,
-        predictionCount: data.predictionCount,
-        averageConfidence: data.averageConfidence,
-        accuracy: data.accuracy,
-        valuePredictionCount: data.valuePredictionCount,
-        valueAverageConfidence: data.valueAverageConfidence,
-        valueAccuracy: data.valueAccuracy,
-        tokensPerSecond: data.tokensPerSecond,
-        elapsedMs: data.elapsedMs,
-        traceLength: data.traceLength,
-      };
+      state.run = normalizeRun(data);
+      state.progress = null;
       state.traceLength = data.traceLength;
       pushLog(
-        `Done. ${data.tokenCount} trace-token predictions in ${data.elapsedMs} ms. ` +
-          `Op accuracy ${formatPercent(data.accuracy)}. ` +
-          `PLACE value accuracy ${formatPercent(data.valueAccuracy)}.`
+        `Done. ${formatCount(state.run.tokenCount)} trace-token predictions in ${formatCount(
+          data.elapsedMs
+        )} ms. ` +
+          `Op accuracy ${formatPercent(state.run.accuracy)}. ` +
+          `PLACE value accuracy ${formatPercent(state.run.valueAccuracy)}.`
       );
       stopWorker();
       render();
@@ -288,6 +331,7 @@ function startRun() {
 
     if (data.type === "error") {
       state.isRunning = false;
+      state.progress = null;
       pushLog(data.message);
       stopWorker();
       render();
@@ -315,6 +359,11 @@ function renderBoard() {
 }
 
 function renderStatus() {
+  if (state.isRunning && state.progress?.message) {
+    refs.status.textContent = state.progress.message;
+    return;
+  }
+
   if (state.isRunning && state.run) {
     refs.status.textContent =
       `Model is replaying batched trace tokens at ${formatRate(state.run.tokensPerSecond)}. ` +
@@ -352,19 +401,30 @@ function renderStats() {
 
   if (state.run) {
     cards.push(
-      ["Tokens", state.run.tokenCount],
-      ["Op predictions", state.run.predictionCount],
+      ["Tokens", formatCount(state.run.tokenCount)],
+      ["Op predictions", formatCount(state.run.predictionCount)],
       ["Op top-1", formatPercent(state.run.accuracy)],
       ["Op confidence", formatPercent(state.run.averageConfidence)],
-      ["PLACE values", state.run.valuePredictionCount],
+      ["PLACE values", formatCount(state.run.valuePredictionCount)],
       ["PLACE top-1", formatPercent(state.run.valueAccuracy)],
       ["PLACE conf", formatPercent(state.run.valueAverageConfidence)],
       ["tok/s", formatRate(state.run.tokensPerSecond)],
       ["Elapsed", formatDuration(state.run.elapsedMs)],
-      ["Teacher trace", state.run.traceLength]
+      ["Teacher trace", formatCount(state.run.traceLength)]
     );
   } else if (state.traceLength) {
-    cards.push(["Teacher trace", state.traceLength]);
+    cards.push(["Teacher trace", formatCount(state.traceLength)]);
+  }
+
+  if (state.isRunning && state.progress?.phase) {
+    cards.push([
+      "Phase",
+      state.progress.total !== null
+        ? `${state.progress.phase} · ${formatCount(state.progress.completed)} / ${formatCount(
+            state.progress.total
+          )}`
+        : state.progress.phase,
+    ]);
   }
 
   cards.forEach(([label, value]) => {

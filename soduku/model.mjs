@@ -47,10 +47,19 @@ export async function warmHardSudokuModel() {
   await loadClassifier();
 }
 
-export async function predictHardSudokuNextOps(contexts, topK = 3, batchSize = 128) {
+export async function predictHardSudokuNextOps(
+  contexts,
+  topK = 3,
+  batchSize = 128,
+  onProgress = null
+) {
   const classifier = await loadClassifier();
   const inputs = Array.isArray(contexts) ? contexts : [contexts];
   const allPredictions = [];
+
+  if (inputs.length === 0) {
+    return allPredictions;
+  }
 
   for (let index = 0; index < inputs.length; index += batchSize) {
     const batch = inputs.slice(index, index + batchSize);
@@ -67,6 +76,13 @@ export async function predictHardSudokuNextOps(contexts, topK = 3, batchSize = 1
         }))
       )
     );
+
+    if (typeof onProgress === "function") {
+      onProgress({
+        completed: Math.min(index + batch.length, inputs.length),
+        total: inputs.length,
+      });
+    }
   }
 
   return allPredictions;

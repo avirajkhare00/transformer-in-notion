@@ -12,6 +12,9 @@ import {
 } from "./value-model.mjs";
 
 const EMIT_EVERY = 256;
+const BUILD_PROGRESS_EVERY = 512;
+const OP_BATCH_SIZE = 128;
+const VALUE_BATCH_SIZE = 128;
 
 function formatOpSummary(predictions, expectedOp) {
   const top = predictions[0];
@@ -68,6 +71,20 @@ function summarizeRate(totalTokens, elapsedMs) {
   return elapsedMs > 0 ? totalTokens / (elapsedMs / 1000) : 0;
 }
 
+async function yieldToBrowser() {
+  await new Promise((resolve) => setTimeout(resolve, 0));
+}
+
+function postProgress({ phase, completed = null, total = null, message }) {
+  self.postMessage({
+    type: "progress",
+    phase,
+    completed,
+    total,
+    message,
+  });
+}
+
 function pruneFocusFrames(focusFrames, depth) {
   for (const key of [...focusFrames.keys()]) {
     if (key > depth) {
@@ -85,7 +102,7 @@ function filterLegalValuePredictions(predictions, focus) {
   return legal.length > 0 ? legal : predictions;
 }
 
-function buildTeacherContexts(initialBoard, result) {
+async function buildTeacherContexts(initialBoard, result, onProgress = null) {
   let board = cloneSudokuBoard(initialBoard);
   let focus = null;
   const focusFrames = new Map();
@@ -93,8 +110,9 @@ function buildTeacherContexts(initialBoard, result) {
   const opContexts = [];
   const opExpected = [];
   const valueTasks = [];
+  const total = result.trace.length;
 
-  for (let traceIndex = 0; traceIndex < result.trace.length; traceIndex += 1) {
+  for (let traceIndex = 0; traceIndex < total; traceIndex += 1) {
     const event = result.trace[traceIndex];
     const expectedOp = eventToHardOp(event);
     const scopedFocus =
@@ -139,6 +157,19 @@ function buildTeacherContexts(initialBoard, result) {
       pruneFocusFrames(focusFrames, event.depth);
     }
     historyOps.push(expectedOp);
+
+    const completed = traceIndex + 1;
+    if (
+      typeof onProgress === "function" &&
+      (completed % BUILD_PROGRESS_EVERY === 0 || completed === total)
+    ) {
+      onProgress({
+        completed,
+        total,
+        valueTaskCount: valueTasks.length,
+      });
+      await yieldToBrowser();
+    }
   }
 
   return {
@@ -149,11 +180,61 @@ function buildTeacherContexts(initialBoard, result) {
 }
 
 async function scoreTeacherTrace(initialBoard, result) {
-  const { opContexts, valueTasks } = buildTeacherContexts(initialBoard, result);
-  const opPredictions = await predictHardSudokuNextOps(opContexts, 3);
+  postProgress({
+    phase: "build-contexts",
+    completed: 0,
+    total: result.trace.length,
+    message: `Building teacher contexts 0 / ${result.trace.length}.`,
+  });
+  const { opContexts, valueTasks } = await buildTeacherContexts(initialBoard, result, ({
+    completed,
+    total,
+  }) => {
+    postProgress({
+      phase: "build-contexts",
+      completed,
+      total,
+      message: `Building teacher contexts ${completed} / ${total}.`,
+    });
+  });
+
+  postProgress({
+    phase: "score-ops",
+    completed: 0,
+    total: opContexts.length,
+    message: `Scoring op tokens 0 / ${opContexts.length}.`,
+  });
+  const opPredictions = await predictHardSudokuNextOps(opContexts, 3, OP_BATCH_SIZE, ({
+    completed,
+    total,
+  }) => {
+    postProgress({
+      phase: "score-ops",
+      completed,
+      total,
+      message: `Scoring op tokens ${completed} / ${total}.`,
+    });
+  });
+
+  const valueContexts = valueTasks.map((task) => task.context);
+  postProgress({
+    phase: "score-values",
+    completed: 0,
+    total: valueContexts.length,
+    message: `Scoring PLACE values 0 / ${valueContexts.length}.`,
+  });
   const valuePredictions = await predictHardSudokuPlaceValues(
-    valueTasks.map((task) => task.context),
-    9
+    valueContexts,
+    9,
+    VALUE_BATCH_SIZE,
+    ({ completed, total }) => {
+      postProgress({
+        phase: "score-values",
+        completed,
+        total,
+        message: `Scoring PLACE values ${completed} / ${total}.`,
+      });
+    }
   );
 
   const valueProbesByIndex = new Map();
@@ -219,8 +300,33 @@ async function runModelTrace(puzzle) {
     traceLength: result.trace.length,
   });
 
-  await Promise.all([warmHardSudokuModel(), warmHardSudokuValueModel()]);
+  postProgress({
+    phase: "warm-models",
+    completed: 0,
+    total: 2,
+    message: "Loading local op model.",
+  });
+  await warmHardSudokuModel();
+  postProgress({
+    phase: "warm-models",
+    completed: 1,
+    total: 2,
+    message: "Loading local PLACE-value model.",
+  });
+  await warmHardSudokuValueModel();
+  postProgress({
+    phase: "warm-models",
+    completed: 2,
+    total: 2,
+    message: "Local transformer models are warm.",
+  });
   const scored = await scoreTeacherTrace(initialBoard, result);
+  postProgress({
+    phase: "replay",
+    completed: 0,
+    total: result.trace.length,
+    message: `Replaying scored trace 0 / ${result.trace.length}.`,
+  });
 
   let board = cloneSudokuBoard(initialBoard);
   let focus = null;
@@ -270,6 +376,12 @@ async function runModelTrace(puzzle) {
       pendingLines.length >= EMIT_EVERY || traceIndex === result.trace.length - 1;
     if (shouldEmit) {
       const elapsedMs = performance.now() - startedAt;
+      postProgress({
+        phase: "replay",
+        completed: traceIndex + 1,
+        total: result.trace.length,
+        message: `Replaying scored trace ${traceIndex + 1} / ${result.trace.length}.`,
+      });
       postReplayBatch({
         board,
         lines: pendingLines,

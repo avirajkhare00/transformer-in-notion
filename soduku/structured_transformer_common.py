@@ -797,6 +797,7 @@ def export_model(
         output_names=["logits"],
         dynamic_axes={name: {0: "batch"} for name in INPUT_NAMES} | {"logits": {0: "batch"}},
         opset_version=17,
+        external_data=False,
     )
     shutil.copy2(model_path, onnx_dir / "model_quantized.onnx")
     (export_dir / "metadata.json").write_text(json.dumps(export_metadata, indent=2))

@@ -88,12 +88,14 @@ Then open `http://localhost:8000`.
 
 ## Files
 
+- `LICENSE` - Apache-2.0 license for the repository
 - `index.html` - page shell and demo layout
 - `tic-tac-toe.html` - standalone Tic-tac-toe embed page
 - `sudoku.html` - standalone Sudoku embed page
 - `docs/executor-v1-spec.md` - v1 transformer-executor spec and training target
 - `docs/paper-idea-problem-shaped-vms.md` - paper note for custom task-shaped VMs in browser-local transformers
 - `docs/use-case-matrix.md` - architecture combinations and small real-world use cases
+- `soduku/README.md` - Sudoku-specific workspace note and the recommended first benchmark
 - `styles.css` - visual system tuned for an iframe or Notion embed
 - `app.mjs` - UI wiring and animations
 - `logic/tictactoe.mjs` - minimax engine
@@ -161,6 +163,27 @@ loads directly with `WebAssembly.instantiate`.
 - Add a true model + executor pair for a larger puzzle
 - Add a small chess legality or mate-in-one example before full chess
 - Add a tighter mobile/embed height mode for narrower Notion columns
+
+## License
+
+This repository is licensed under Apache-2.0. That gives downstream users broad
+reuse rights and includes the standard patent grant plus warranty/liability
+disclaimers.
+
+What it does **not** do is fully shield anyone from every copyright or other IP
+claim. No open-source license can honestly promise that. The practical boundary
+is:
+
+- the repo owner can license only the material they have rights to license
+- contributors should submit only code, weights, assets, and docs they are
+  allowed to contribute
+- third-party code, models, datasets, fonts, and media keep their own licenses
+  and restrictions
+
+If the goal is stronger protection in practice, the real controls are provenance
+and review: keep dependency and model sources documented, avoid copying
+unlicensed material, and require contributors to contribute only material they
+own or are allowed to relicense.
 
 ## Architecture ideas
 

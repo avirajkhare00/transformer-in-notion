@@ -91,6 +91,7 @@ Then open `http://localhost:8000`.
 - `index.html` - page shell and demo layout
 - `tic-tac-toe.html` - standalone Tic-tac-toe embed page
 - `sudoku.html` - standalone Sudoku embed page
+- `docs/use-case-matrix.md` - architecture combinations and small real-world use cases
 - `styles.css` - visual system tuned for an iframe or Notion embed
 - `app.mjs` - UI wiring and animations
 - `logic/tictactoe.mjs` - minimax engine
@@ -158,3 +159,12 @@ loads directly with `WebAssembly.instantiate`.
 - Add a true model + executor pair for a larger puzzle
 - Add a small chess legality or mate-in-one example before full chess
 - Add a tighter mobile/embed height mode for narrower Notion columns
+
+## Architecture ideas
+
+If you are deciding what kind of demo to build next, see
+`docs/use-case-matrix.md` for a table of:
+
+- `LLM / model / tool / executor / verifier` combinations
+- the small real-world use cases each combination fits best
+- which examples are worth building in this repo next

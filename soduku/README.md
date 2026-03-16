@@ -4,6 +4,23 @@ This directory is the dedicated workspace for the Sudoku-specific execution
 path. The directory name is intentionally kept as `soduku/` to match the
 requested repo layout.
 
+## Current prototype
+
+The first concrete implementation now lives in this directory:
+
+- `index.html` - standalone browser demo
+- `app.mjs` - UI wiring for the 4x4 solver page
+- `worker.mjs` - worker-side execution loop
+- `psvm4x4.mjs` - 4x4 Sudoku PSVM and canonical trace generator
+
+This is intentionally a **problem-shaped VM** prototype, not a full local
+transformer yet. It proves the execution surface first:
+
+- compact op set
+- canonical trace
+- browser worker execution
+- inspectable state transitions
+
 ## Best first example
 
 If the goal is **"solve Sudoku with a local transformer + custom VM"**, the best
@@ -121,4 +138,6 @@ If we build only one thing next in this directory, it should be:
 
 **`4x4 Sudoku + custom Sudoku VM + canonical trace dataset + worker-based local transformer executor`**
 
-That is the cleanest first example to solve.
+The current implementation completes the first half of that path: the custom VM
+plus streamed worker execution. The next step is replacing the symbolic policy
+with a transformer trained on the canonical PSVM trace.

@@ -26,6 +26,12 @@ Because the UI contract is explicit, the remaining solver logic can still be rep
 - a WASM runtime
 - or a hybrid model + executor path
 
+The repo now also includes two problem-shaped VM prototypes outside the main
+gallery:
+
+- `invoice/` - a small invoice-calculator PSVM with exact money arithmetic
+- `soduku/` - a 4x4 Sudoku PSVM with a streamed worker trace
+
 ## What this branch adds
 
 This branch moves the repo from a mock executor surface to real browser-side
@@ -92,6 +98,15 @@ Then open `http://localhost:8000`.
 - `index.html` - page shell and demo layout
 - `tic-tac-toe.html` - standalone Tic-tac-toe embed page
 - `sudoku.html` - standalone Sudoku embed page
+- `soduku/index.html` - standalone 4x4 Sudoku PSVM prototype
+- `soduku/app.mjs` - browser UI for the 4x4 Sudoku PSVM
+- `soduku/worker.mjs` - worker-side 4x4 Sudoku execution loop
+- `soduku/psvm4x4.mjs` - limited-op 4x4 Sudoku PSVM and canonical trace generator
+- `invoice/index.html` - standalone invoice-calculator PSVM prototype
+- `invoice/app.mjs` - browser UI for the invoice PSVM
+- `invoice/worker.mjs` - worker-side invoice execution loop
+- `invoice/psvm.mjs` - invoice-calculator PSVM and canonical trace generator
+- `invoice/README.md` - invoice-calculator PSVM note and op-set summary
 - `docs/executor-v1-spec.md` - v1 transformer-executor spec and training target
 - `docs/paper-idea-problem-shaped-vms.md` - paper note for custom task-shaped VMs in browser-local transformers
 - `docs/use-case-matrix.md` - architecture combinations and small real-world use cases
@@ -146,6 +161,21 @@ sh scripts/build_sudoku_wasm.sh
 That writes the runtime artifact to `wasm/sudoku_solver.wasm`, which the page
 loads directly with `WebAssembly.instantiate`.
 
+## Running the PSVM prototypes
+
+Serve the repo root, then open either of these standalone prototype pages:
+
+- `/soduku/`
+- `/invoice/`
+
+The current prototype split is:
+
+- `invoice/` - exact invoice calculation expressed as a compact PSVM and executed in a Web Worker
+- `soduku/` - 4x4 Sudoku search expressed as a compact PSVM and executed in a Web Worker
+
+Neither path is transformer-backed yet. They are the deterministic execution
+substrates that the local model will eventually learn to imitate or drive.
+
 ## Verified
 
 - The exported Tic-tac-toe ONNX bundle reached `99.54%` accuracy on the full
@@ -163,6 +193,42 @@ loads directly with `WebAssembly.instantiate`.
 - Add a true model + executor pair for a larger puzzle
 - Add a small chess legality or mate-in-one example before full chess
 - Add a tighter mobile/embed height mode for narrower Notion columns
+
+## Execution model
+
+The repo is moving toward a stricter systems view of transformer execution.
+
+For exact tasks, a transformer is often a better conceptual fit for an
+**append-only execution machine** than for a mutable RAM machine:
+
+- a normal computer mutates state in place
+- an autoregressive transformer extends a history of state records
+- attention reconstructs the current state by retrieving the right prior records
+
+That suggests a better formulation for local exact computation:
+
+- not `input -> final answer`
+- not `task -> full general-purpose VM trace`
+- instead `task -> problem-shaped VM program -> canonical execution trace`
+
+The core design goal is to make the model learn **composition of useful
+operations**, not simulation of irrelevant machine detail.
+
+In practice that means:
+
+- keep the execution vocabulary small
+- keep the trace canonical and inspectable
+- push exact semantics into a deterministic interpreter or verifier
+- reserve model capacity for choosing and ordering operations
+
+For Sudoku, that points toward a task-shaped executor with ops like
+`FOCUS_NEXT`, `READ_CANDS`, `TRY_VALUE`, `PLACE`, and `UNDO`, not a full VM on
+day one.
+
+The invoice prototype shows the same idea in a non-puzzle setting: a small web
+app can expose only the exact business operations it needs, such as
+`READ_ITEM`, `PARSE_QTY`, `PARSE_PRICE`, `MUL_LINE_TOTAL`, `ADD_SUBTOTAL`, and
+`APPLY_TAX`.
 
 ## License
 
@@ -204,3 +270,6 @@ If you want the paper-shaped framing for the more specific direction of
 `transformer + custom VM + Sudoku/web apps + WASM + browser`, see:
 
 - `docs/paper-idea-problem-shaped-vms.md`
+- `soduku/README.md`
+- `soduku/`
+- `invoice/`

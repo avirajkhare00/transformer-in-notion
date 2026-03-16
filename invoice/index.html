@@ -1,0 +1,322 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Invoice PSVM Prototype</title>
+    <style>
+      :root {
+        color-scheme: light;
+        --paper: #eef5ed;
+        --ink: #13221d;
+        --muted: #5e6f67;
+        --card: rgba(255, 255, 255, 0.84);
+        --line: rgba(19, 34, 29, 0.14);
+        --good: #1c7b47;
+        --bad: #c14b3f;
+        --busy: #7b5b17;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        min-height: 100vh;
+        background:
+          radial-gradient(circle at top left, rgba(67, 147, 108, 0.16), transparent 30%),
+          radial-gradient(circle at bottom right, rgba(234, 184, 74, 0.14), transparent 28%),
+          var(--paper);
+        color: var(--ink);
+        font-family: Menlo, Consolas, Monaco, "Courier New", monospace;
+      }
+
+      main {
+        width: min(1120px, calc(100vw - 32px));
+        margin: 0 auto;
+        padding: 32px 0 48px;
+      }
+
+      h1,
+      h2 {
+        margin: 0;
+        font-family: Georgia, "Times New Roman", serif;
+      }
+
+      .hero {
+        margin-bottom: 20px;
+      }
+
+      .eyebrow {
+        margin: 0 0 8px;
+        color: var(--muted);
+        font-size: 13px;
+        letter-spacing: 0.18em;
+        text-transform: uppercase;
+      }
+
+      h1 {
+        font-size: clamp(2.3rem, 5vw, 4rem);
+        line-height: 0.95;
+      }
+
+      .subtitle {
+        max-width: 64ch;
+        margin: 16px 0 0;
+        color: var(--muted);
+        line-height: 1.65;
+      }
+
+      .layout {
+        display: grid;
+        grid-template-columns: minmax(0, 1.2fr) minmax(320px, 0.8fr);
+        gap: 20px;
+      }
+
+      .card {
+        border: 1px solid var(--line);
+        border-radius: 24px;
+        background: var(--card);
+        backdrop-filter: blur(16px);
+        box-shadow: 0 22px 44px rgba(19, 34, 29, 0.08);
+      }
+
+      .controls {
+        padding: 20px;
+        margin-bottom: 20px;
+      }
+
+      label {
+        display: block;
+        color: var(--muted);
+        font-size: 13px;
+      }
+
+      textarea {
+        width: 100%;
+        min-height: 240px;
+        margin-top: 8px;
+        border: 1px solid var(--line);
+        border-radius: 18px;
+        padding: 16px;
+        background: rgba(255, 255, 255, 0.9);
+        color: var(--ink);
+        font: inherit;
+        resize: vertical;
+      }
+
+      .actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 12px;
+        margin: 14px 0;
+      }
+
+      button {
+        border: 0;
+        border-radius: 999px;
+        padding: 12px 18px;
+        cursor: pointer;
+        font: inherit;
+      }
+
+      .primary {
+        background: var(--ink);
+        color: white;
+      }
+
+      .secondary {
+        background: white;
+        color: var(--ink);
+        border: 1px solid var(--line);
+      }
+
+      #status {
+        margin: 0;
+        min-height: 1.5em;
+        color: var(--muted);
+      }
+
+      #status[data-tone="success"] {
+        color: var(--good);
+      }
+
+      #status[data-tone="error"] {
+        color: var(--bad);
+      }
+
+      #status[data-tone="busy"] {
+        color: var(--busy);
+      }
+
+      .panel {
+        padding: 20px;
+      }
+
+      .panel + .panel {
+        border-top: 1px solid var(--line);
+      }
+
+      .panel h2 {
+        margin-bottom: 12px;
+        font-size: 1.4rem;
+      }
+
+      pre {
+        margin: 0;
+        white-space: pre-wrap;
+        word-break: break-word;
+        line-height: 1.55;
+      }
+
+      .scroll {
+        max-height: 380px;
+        overflow: auto;
+        padding-right: 8px;
+      }
+
+      .stats {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 10px;
+        margin: 0;
+      }
+
+      .stat {
+        border: 1px solid var(--line);
+        border-radius: 14px;
+        padding: 12px 14px;
+        background: rgba(255, 255, 255, 0.72);
+      }
+
+      .stat dt {
+        margin-bottom: 4px;
+        color: var(--muted);
+        font-size: 12px;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+      }
+
+      .stat dd {
+        margin: 0;
+        font-size: 1.15rem;
+      }
+
+      table {
+        width: 100%;
+        border-collapse: collapse;
+      }
+
+      th,
+      td {
+        padding: 10px 0;
+        border-bottom: 1px solid var(--line);
+        text-align: left;
+      }
+
+      th {
+        color: var(--muted);
+        font-size: 12px;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+      }
+
+      #ops {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 10px;
+        padding: 0;
+        margin: 0;
+        list-style: none;
+      }
+
+      #ops li {
+        border: 1px solid var(--line);
+        border-radius: 999px;
+        padding: 10px 12px;
+        background: rgba(255, 255, 255, 0.76);
+      }
+
+      @media (max-width: 860px) {
+        .layout {
+          grid-template-columns: 1fr;
+        }
+
+        main {
+          width: min(100vw - 24px, 1120px);
+          padding-top: 24px;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <header class="hero">
+        <p class="eyebrow">Problem-shaped VM prototype</p>
+        <h1>Invoice calculator</h1>
+        <p class="subtitle">
+          A second PSVM example for a small web app task: parse a compact invoice,
+          compute exact line totals, accumulate subtotal, apply tax, and emit the
+          final amount through a streamed worker trace.
+        </p>
+      </header>
+
+      <section class="controls card">
+        <label for="source-input">
+          Invoice JSON
+          <textarea id="source-input" spellcheck="false"></textarea>
+        </label>
+        <div class="actions">
+          <button class="secondary" id="sample-button" type="button">
+            Load sample
+          </button>
+          <button class="primary" id="run-button" type="button">
+            Run in worker
+          </button>
+        </div>
+        <p id="status">Ready.</p>
+      </section>
+
+      <section class="layout">
+        <article class="card">
+          <section class="panel">
+            <h2>Program</h2>
+            <pre id="program"></pre>
+          </section>
+          <section class="panel">
+            <h2>Trace</h2>
+            <pre class="scroll" id="trace"></pre>
+          </section>
+        </article>
+
+        <article class="card">
+          <section class="panel">
+            <h2>Summary</h2>
+            <dl class="stats" id="summary"></dl>
+          </section>
+          <section class="panel">
+            <h2>Items</h2>
+            <table>
+              <thead>
+                <tr>
+                  <th>#</th>
+                  <th>Item</th>
+                  <th>Qty</th>
+                  <th>Unit</th>
+                </tr>
+              </thead>
+              <tbody id="items"></tbody>
+            </table>
+          </section>
+          <section class="panel">
+            <h2>Op set</h2>
+            <ul id="ops"></ul>
+          </section>
+        </article>
+      </section>
+    </main>
+
+    <script type="module" src="./app.mjs"></script>
+  </body>
+</html>

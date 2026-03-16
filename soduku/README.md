@@ -203,15 +203,14 @@ streaming source. We do **not** load the whole CSV into memory.
 Use this path:
 
 ```bash
-node soduku/export_extreme_dataset.mjs \
-  --input soduku/train_data/train.csv \
-  --output-dir soduku/training/extreme
+sh scripts/train_sudoku_extreme.sh --limit-puzzles 250
+```
 
-.venv/bin/python soduku/train_transformer.py \
-  --dataset soduku/training/extreme/extreme-op-manifest.json
+If your current checkout does not have its own `.venv`, you can point the
+script at an existing one:
 
-.venv/bin/python soduku/train_value_transformer.py \
-  --dataset soduku/training/extreme/extreme-value-manifest.json
+```bash
+PYTHON=/path/to/.venv/bin/python sh scripts/train_sudoku_extreme.sh --limit-puzzles 250
 ```
 
 What happens:
@@ -224,6 +223,12 @@ What happens:
 This keeps the raw source file out of the memory hot path while still letting
 the repo train on a much broader Sudoku distribution than the tiny curated
 hard-set alone.
+
+If you want to see the exact commands without running them:
+
+```bash
+sh scripts/train_sudoku_extreme.sh --limit-puzzles 250 --dry-run
+```
 
 ## Best action space
 

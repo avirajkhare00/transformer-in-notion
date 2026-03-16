@@ -155,6 +155,7 @@ Then open `http://localhost:8000`.
 - `soduku/train_transformer.py` - structured hard-set Sudoku next-op trainer/exporter
 - `soduku/export_value_dataset.mjs` - structured hard-set `PLACE`-value dataset exporter
 - `soduku/train_value_transformer.py` - structured hard-set `PLACE`-value trainer/exporter
+- `scripts/train_sudoku_extreme.sh` - one-command wrapper for export + op-model training + value-model training
 - `requirements.txt` - Python training/export dependencies for the local model path
 - `styles.css` - visual system tuned for an iframe or Notion embed
 - `app.mjs` - UI wiring and animations

@@ -39,6 +39,7 @@ function filterLegalValuePredictions(predictions, focus) {
 }
 
 function postGuidedMetrics({
+  events = [],
   tokenCount,
   branchCount,
   valueAverageConfidence,
@@ -51,6 +52,7 @@ function postGuidedMetrics({
 }) {
   self.postMessage({
     type: "event-batch",
+    events,
     tokenCount,
     branchCount,
     valuePredictionCount: branchCount,
@@ -97,6 +99,7 @@ async function runGuidedSolve(puzzle) {
   let tokenCount = 0;
   let branchCount = 0;
   let valueConfidenceSum = 0;
+  let pendingEvents = [];
 
   postProgress({
     phase: "guided-solve",
@@ -107,6 +110,24 @@ async function runGuidedSolve(puzzle) {
 
   const guided = await solveSudokuWithGuidance(initialBoard, {
     strategy: "mrv",
+    onEvent: async (event) => {
+      pendingEvents.push(event);
+      if (pendingEvents.length >= EMIT_EVERY) {
+        const elapsedMs = performance.now() - startedAt;
+        postGuidedMetrics({
+          events: pendingEvents,
+          tokenCount,
+          branchCount,
+          valueAverageConfidence: branchCount > 0 ? valueConfidenceSum / branchCount : null,
+          tokensPerSecond: summarizeRate(tokenCount, elapsedMs),
+          elapsedMs,
+          referenceStats: reference.stats,
+          referenceTraceLength: reference.trace.length,
+        });
+        pendingEvents = [];
+        await yieldToBrowser();
+      }
+    },
     rankCandidates: async ({ board, focus, historyOps }) => {
       const context = buildHardOpContext({
         board,
@@ -134,6 +155,7 @@ async function runGuidedSolve(puzzle) {
           message: `Ranking guided branches ${branchCount} / ~${reference.stats.focuses}.`,
         });
         postGuidedMetrics({
+          events: pendingEvents,
           tokenCount,
           branchCount,
           valueAverageConfidence: branchCount > 0 ? valueConfidenceSum / branchCount : null,
@@ -142,6 +164,7 @@ async function runGuidedSolve(puzzle) {
           referenceStats: reference.stats,
           referenceTraceLength: reference.trace.length,
         });
+        pendingEvents = [];
         await yieldToBrowser();
       }
 
@@ -163,6 +186,7 @@ async function runGuidedSolve(puzzle) {
     message: `Guided solve finished after ${branchCount} ranked branch decisions.`,
   });
   postGuidedMetrics({
+    events: pendingEvents,
     tokenCount,
     branchCount,
     valueAverageConfidence: branchCount > 0 ? valueConfidenceSum / branchCount : null,

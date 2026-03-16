@@ -904,6 +904,12 @@ function handleSudokuModelMessage(runId, message) {
     sudokuModelState.referenceTraceLength =
       data.referenceTraceLength ?? sudokuModelState.referenceTraceLength;
     sudokuModelState.referenceStats = data.referenceStats ?? sudokuModelState.referenceStats;
+    if (Array.isArray(data.initialBoard)) {
+      sudokuState.board = cloneSudokuBoard(data.initialBoard);
+      sudokuState.emphasis = null;
+      sudokuState.log = [];
+      pushSudokuLog("Guided solve started. Streaming model-ranked branch decisions.");
+    }
     renderSudoku();
     return;
   }
@@ -917,6 +923,9 @@ function handleSudokuModelMessage(runId, message) {
 
   if (data.type === "event-batch") {
     updateSudokuModelMetrics(data);
+    if (Array.isArray(data.events)) {
+      data.events.forEach((event) => applySudokuTraceEvent(event));
+    }
     sudokuModelState.status =
       data.branchCount
         ? `Ranked ${data.branchCount} guided branch decisions.`

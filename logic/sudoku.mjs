@@ -274,6 +274,8 @@ export async function solveSudokuWithGuidance(startBoard, options = {}) {
     maxDepth: 0,
   };
   const historyOps = [];
+  const onEvent =
+    typeof options.onEvent === "function" ? options.onEvent : null;
 
   async function search(depth = 0) {
     stats.maxDepth = Math.max(stats.maxDepth, depth);
@@ -295,13 +297,17 @@ export async function solveSudokuWithGuidance(startBoard, options = {}) {
     };
 
     stats.focuses += 1;
-    trace.push({
+    const focusEvent = {
       type: "focus",
       row: focus.row,
       col: focus.col,
       candidates: [...focus.candidates],
       depth,
-    });
+    };
+    trace.push(focusEvent);
+    if (onEvent) {
+      await onEvent(focusEvent, board);
+    }
     pushHistoryOp(historyOps, "FOCUS_NEXT");
 
     let candidateOrder = [...next.candidates];
@@ -327,13 +333,17 @@ export async function solveSudokuWithGuidance(startBoard, options = {}) {
     for (const value of candidateOrder) {
       board[next.row][next.col] = value;
       stats.placements += 1;
-      trace.push({
+      const placeEvent = {
         type: "place",
         row: next.row,
         col: next.col,
         value,
         depth,
-      });
+      };
+      trace.push(placeEvent);
+      if (onEvent) {
+        await onEvent(placeEvent, board);
+      }
       pushHistoryOp(historyOps, "PLACE");
 
       if (await search(depth + 1)) {
@@ -342,13 +352,17 @@ export async function solveSudokuWithGuidance(startBoard, options = {}) {
 
       board[next.row][next.col] = 0;
       stats.backtracks += 1;
-      trace.push({
+      const backtrackEvent = {
         type: "backtrack",
         row: next.row,
         col: next.col,
         value,
         depth,
-      });
+      };
+      trace.push(backtrackEvent);
+      if (onEvent) {
+        await onEvent(backtrackEvent, board);
+      }
       pushHistoryOp(historyOps, "UNDO");
     }
 

@@ -178,6 +178,10 @@ function pushLog(message) {
   }
 }
 
+function pushLogs(lines) {
+  lines.forEach((line) => pushLog(line));
+}
+
 function applyPuzzle(rawPuzzle) {
   const normalized = normalizePuzzleText(rawPuzzle);
   state.puzzle = normalized;
@@ -218,7 +222,9 @@ function startRun() {
   state.isRunning = true;
   state.run = null;
   state.log = [];
-  pushLog(`Running local transformer next-op probe on ${describePreset(state.puzzle).value}.`);
+  pushLog(
+    `Running local transformer trace-token probe on ${describePreset(state.puzzle).value}.`
+  );
   render();
 
   worker = new Worker(new URL("./soduku/model-worker.mjs", import.meta.url), {
@@ -235,17 +241,21 @@ function startRun() {
       return;
     }
 
-    if (data.type === "event") {
+    if (data.type === "event-batch") {
       state.board = data.snapshot;
       state.run = {
+        tokenCount: data.tokenCount,
         predictionCount: data.predictionCount,
         averageConfidence: data.averageConfidence,
         accuracy: data.accuracy,
+        valuePredictionCount: data.valuePredictionCount,
+        valueAverageConfidence: data.valueAverageConfidence,
+        valueAccuracy: data.valueAccuracy,
         tokensPerSecond: data.tokensPerSecond,
         elapsedMs: data.elapsedMs,
         traceLength: state.traceLength,
       };
-      pushLog(data.line);
+      pushLogs(data.lines ?? []);
       render();
       return;
     }
@@ -254,16 +264,22 @@ function startRun() {
       state.isRunning = false;
       state.board = data.solution;
       state.run = {
+        tokenCount: data.tokenCount,
         predictionCount: data.predictionCount,
         averageConfidence: data.averageConfidence,
         accuracy: data.accuracy,
+        valuePredictionCount: data.valuePredictionCount,
+        valueAverageConfidence: data.valueAverageConfidence,
+        valueAccuracy: data.valueAccuracy,
         tokensPerSecond: data.tokensPerSecond,
         elapsedMs: data.elapsedMs,
         traceLength: data.traceLength,
       };
       state.traceLength = data.traceLength;
       pushLog(
-        `Done. ${data.predictionCount} next-op predictions in ${data.elapsedMs} ms. Accuracy ${formatPercent(data.accuracy)}.`
+        `Done. ${data.tokenCount} trace-token predictions in ${data.elapsedMs} ms. ` +
+          `Op accuracy ${formatPercent(data.accuracy)}. ` +
+          `PLACE value accuracy ${formatPercent(data.valueAccuracy)}.`
       );
       stopWorker();
       render();
@@ -301,25 +317,27 @@ function renderBoard() {
 function renderStatus() {
   if (state.isRunning && state.run) {
     refs.status.textContent =
-      `Model is emitting next ops at ${formatRate(state.run.tokensPerSecond)}. ` +
-      `Top-1 accuracy ${formatPercent(state.run.accuracy)} so far.`;
+      `Model is replaying batched trace tokens at ${formatRate(state.run.tokensPerSecond)}. ` +
+      `Op accuracy ${formatPercent(state.run.accuracy)}. ` +
+      `PLACE value accuracy ${formatPercent(state.run.valueAccuracy)} so far.`;
     return;
   }
 
   if (state.isRunning) {
-    refs.status.textContent = "Loading local Sudoku next-op model.";
+    refs.status.textContent = "Loading local Sudoku trace-token models.";
     return;
   }
 
   if (state.run) {
     refs.status.textContent =
-      `Finished ${state.run.predictionCount} next-op predictions at ${formatRate(state.run.tokensPerSecond)}. ` +
-      `Top-1 accuracy ${formatPercent(state.run.accuracy)}.`;
+      `Finished ${state.run.tokenCount} trace-token predictions at ${formatRate(state.run.tokensPerSecond)}. ` +
+      `Op accuracy ${formatPercent(state.run.accuracy)}. ` +
+      `PLACE value accuracy ${formatPercent(state.run.valueAccuracy)}.`;
     return;
   }
 
   refs.status.textContent =
-    `Ready to run the next-op model on ${describePreset(state.puzzle).value}.`;
+    `Ready to run the trace-token models on ${describePreset(state.puzzle).value}.`;
 }
 
 function renderStats() {
@@ -328,15 +346,19 @@ function renderStats() {
   const preset = describePreset(state.puzzle);
   const cards = [
     [preset.label, preset.value],
-    ["Engine", "local transformer"],
-    ["Output", "next PSVM op"],
+    ["Engine", "local transformers"],
+    ["Output", "op + PLACE value"],
   ];
 
   if (state.run) {
     cards.push(
-      ["Predictions", state.run.predictionCount],
-      ["Top-1 accuracy", formatPercent(state.run.accuracy)],
-      ["Avg confidence", formatPercent(state.run.averageConfidence)],
+      ["Tokens", state.run.tokenCount],
+      ["Op predictions", state.run.predictionCount],
+      ["Op top-1", formatPercent(state.run.accuracy)],
+      ["Op confidence", formatPercent(state.run.averageConfidence)],
+      ["PLACE values", state.run.valuePredictionCount],
+      ["PLACE top-1", formatPercent(state.run.valueAccuracy)],
+      ["PLACE conf", formatPercent(state.run.valueAverageConfidence)],
       ["tok/s", formatRate(state.run.tokensPerSecond)],
       ["Elapsed", formatDuration(state.run.elapsedMs)],
       ["Teacher trace", state.run.traceLength]

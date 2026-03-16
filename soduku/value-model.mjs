@@ -1,6 +1,6 @@
 const TRANSFORMERS_CDN =
   "https://cdn.jsdelivr.net/npm/@huggingface/transformers@3.8.1/+esm";
-const MODEL_ID = "hard-op-bert";
+const MODEL_ID = "hard-value-bert";
 
 let runtimePromise = null;
 let classifierPromise = null;
@@ -43,11 +43,11 @@ async function loadClassifier() {
   return classifierPromise;
 }
 
-export async function warmHardSudokuModel() {
+export async function warmHardSudokuValueModel() {
   await loadClassifier();
 }
 
-export async function predictHardSudokuNextOps(contexts, topK = 3, batchSize = 128) {
+export async function predictHardSudokuPlaceValues(contexts, topK = 9, batchSize = 128) {
   const classifier = await loadClassifier();
   const inputs = Array.isArray(contexts) ? contexts : [contexts];
   const allPredictions = [];
@@ -62,7 +62,7 @@ export async function predictHardSudokuNextOps(contexts, topK = 3, batchSize = 1
     allPredictions.push(
       ...results.map((items) =>
         items.map((item) => ({
-          op: item.label,
+          value: Number(item.label),
           score: item.score,
         }))
       )
@@ -72,7 +72,7 @@ export async function predictHardSudokuNextOps(contexts, topK = 3, batchSize = 1
   return allPredictions;
 }
 
-export async function predictHardSudokuNextOp(context, topK = 3) {
-  const [predictions] = await predictHardSudokuNextOps([context], topK, 1);
+export async function predictHardSudokuPlaceValue(context, topK = 9) {
+  const [predictions] = await predictHardSudokuPlaceValues([context], topK, 1);
   return predictions;
 }

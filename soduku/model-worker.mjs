@@ -5,11 +5,13 @@ import {
   buildHardOpContext,
   eventToHardOp,
 } from "./hard-op-context.mjs";
-import { predictHardSudokuNextOp, warmHardSudokuModel } from "./model.mjs";
+import { predictHardSudokuNextOps, warmHardSudokuModel } from "./model.mjs";
 import {
-  predictHardSudokuPlaceValue,
+  predictHardSudokuPlaceValues,
   warmHardSudokuValueModel,
 } from "./value-model.mjs";
+
+const EMIT_EVERY = 256;
 
 function formatOpSummary(predictions, expectedOp) {
   const top = predictions[0];
@@ -83,87 +85,45 @@ function filterLegalValuePredictions(predictions, focus) {
   return legal.length > 0 ? legal : predictions;
 }
 
-async function runModelTrace(puzzle) {
-  const startedAt = performance.now();
-  await Promise.all([warmHardSudokuModel(), warmHardSudokuValueModel()]);
-
-  const initialBoard = parseSudoku(puzzle);
-  const result = solveSudokuWithTrace(initialBoard, { strategy: "mrv" });
-  if (!result.solved) {
-    throw new Error("Deterministic teacher trace failed to solve the puzzle.");
-  }
-
+function buildTeacherContexts(initialBoard, result) {
   let board = cloneSudokuBoard(initialBoard);
   let focus = null;
   const focusFrames = new Map();
   const historyOps = [];
-  let totalTokenCount = 0;
-  let opPredictionCount = 0;
-  let opConfidenceSum = 0;
-  let opCorrectCount = 0;
-  let valuePredictionCount = 0;
-  let valueConfidenceSum = 0;
-  let valueCorrectCount = 0;
+  const opContexts = [];
+  const opExpected = [];
+  const valueTasks = [];
 
-  self.postMessage({
-    type: "start",
-    initialBoard,
-    strategy: result.strategy,
-    traceLength: result.trace.length,
-  });
-
-  for (const event of result.trace) {
+  for (let traceIndex = 0; traceIndex < result.trace.length; traceIndex += 1) {
+    const event = result.trace[traceIndex];
     const expectedOp = eventToHardOp(event);
     const scopedFocus =
       typeof event.depth === "number" ? (focusFrames.get(event.depth) ?? null) : null;
-    const context = buildHardOpContext({
-      board,
-      focus,
-      historyOps,
-      historyWindow: HARD_OP_HISTORY_WINDOW,
-      strategy: result.strategy,
-    });
 
-    const opPredictions = await predictHardSudokuNextOp(context, 3);
-    const topOp = opPredictions[0] ?? null;
-    opPredictionCount += 1;
-    totalTokenCount += 1;
-    if (topOp) {
-      opConfidenceSum += topOp.score;
-      if (topOp.op === expectedOp) {
-        opCorrectCount += 1;
-      }
-    }
-
-    let valueProbe = null;
-    if (event.type === "place" && scopedFocus) {
-      const valueContext = buildHardOpContext({
+    opContexts.push(
+      buildHardOpContext({
         board,
-        focus: scopedFocus,
+        focus,
         historyOps,
         historyWindow: HARD_OP_HISTORY_WINDOW,
         strategy: result.strategy,
-      });
-      const rawValuePredictions = await predictHardSudokuPlaceValue(valueContext, 9);
-      const valuePredictions = filterLegalValuePredictions(rawValuePredictions, scopedFocus).slice(
-        0,
-        3
-      );
-      const topValue = valuePredictions[0] ?? null;
-      valuePredictionCount += 1;
-      totalTokenCount += 1;
-      if (topValue) {
-        valueConfidenceSum += topValue.score;
-        if (topValue.value === event.value) {
-          valueCorrectCount += 1;
-        }
-      }
+      })
+    );
+    opExpected.push(expectedOp);
 
-      valueProbe = {
+    if (event.type === "place" && scopedFocus) {
+      valueTasks.push({
+        traceIndex,
         expectedValue: event.value,
-        predictions: valuePredictions,
-        correct: topValue?.value === event.value,
-      };
+        focus: scopedFocus,
+        context: buildHardOpContext({
+          board,
+          focus: scopedFocus,
+          historyOps,
+          historyWindow: HARD_OP_HISTORY_WINDOW,
+          strategy: result.strategy,
+        }),
+      });
     }
 
     focus = applyHardTraceEvent(board, event, focus);
@@ -179,27 +139,154 @@ async function runModelTrace(puzzle) {
       pruneFocusFrames(focusFrames, event.depth);
     }
     historyOps.push(expectedOp);
+  }
 
-    const elapsedMs = performance.now() - startedAt;
-    self.postMessage({
-      type: "event",
-      snapshot: cloneSudokuBoard(board),
-      expectedOp,
-      opPredictions,
-      valueProbe,
-      line: formatPredictionLine(opPredictionCount, expectedOp, opPredictions, valueProbe),
-      tokenCount: totalTokenCount,
-      predictionCount: opPredictionCount,
-      averageConfidence: opPredictionCount > 0 ? opConfidenceSum / opPredictionCount : null,
-      accuracy: opPredictionCount > 0 ? opCorrectCount / opPredictionCount : 0,
-      valuePredictionCount,
-      valueAverageConfidence:
-        valuePredictionCount > 0 ? valueConfidenceSum / valuePredictionCount : null,
-      valueAccuracy: valuePredictionCount > 0 ? valueCorrectCount / valuePredictionCount : null,
-      tokensPerSecond: summarizeRate(totalTokenCount, elapsedMs),
-      elapsedMs,
-      traceLength: result.trace.length,
+  return {
+    opContexts,
+    opExpected,
+    valueTasks,
+  };
+}
+
+async function scoreTeacherTrace(initialBoard, result) {
+  const { opContexts, valueTasks } = buildTeacherContexts(initialBoard, result);
+  const opPredictions = await predictHardSudokuNextOps(opContexts, 3);
+  const valuePredictions = await predictHardSudokuPlaceValues(
+    valueTasks.map((task) => task.context),
+    9
+  );
+
+  const valueProbesByIndex = new Map();
+  valueTasks.forEach((task, index) => {
+    const filtered = filterLegalValuePredictions(valuePredictions[index] ?? [], task.focus).slice(0, 3);
+    const top = filtered[0] ?? null;
+    valueProbesByIndex.set(task.traceIndex, {
+      expectedValue: task.expectedValue,
+      predictions: filtered,
+      correct: top?.value === task.expectedValue,
     });
+  });
+
+  return {
+    opPredictions,
+    valueProbesByIndex,
+  };
+}
+
+function postReplayBatch({
+  board,
+  lines,
+  tokenCount,
+  predictionCount,
+  averageConfidence,
+  accuracy,
+  valuePredictionCount,
+  valueAverageConfidence,
+  valueAccuracy,
+  tokensPerSecond,
+  elapsedMs,
+  traceLength,
+}) {
+  self.postMessage({
+    type: "event-batch",
+    snapshot: cloneSudokuBoard(board),
+    lines,
+    tokenCount,
+    predictionCount,
+    averageConfidence,
+    accuracy,
+    valuePredictionCount,
+    valueAverageConfidence,
+    valueAccuracy,
+    tokensPerSecond,
+    elapsedMs,
+    traceLength,
+  });
+}
+
+async function runModelTrace(puzzle) {
+  const startedAt = performance.now();
+  const initialBoard = parseSudoku(puzzle);
+  const result = solveSudokuWithTrace(initialBoard, { strategy: "mrv" });
+  if (!result.solved) {
+    throw new Error("Deterministic teacher trace failed to solve the puzzle.");
+  }
+
+  self.postMessage({
+    type: "start",
+    initialBoard,
+    strategy: result.strategy,
+    traceLength: result.trace.length,
+  });
+
+  await Promise.all([warmHardSudokuModel(), warmHardSudokuValueModel()]);
+  const scored = await scoreTeacherTrace(initialBoard, result);
+
+  let board = cloneSudokuBoard(initialBoard);
+  let focus = null;
+  let totalTokenCount = 0;
+  let opPredictionCount = 0;
+  let opConfidenceSum = 0;
+  let opCorrectCount = 0;
+  let valuePredictionCount = 0;
+  let valueConfidenceSum = 0;
+  let valueCorrectCount = 0;
+  let pendingLines = [];
+
+  for (let traceIndex = 0; traceIndex < result.trace.length; traceIndex += 1) {
+    const event = result.trace[traceIndex];
+    const expectedOp = eventToHardOp(event);
+    const opPredictions = scored.opPredictions[traceIndex] ?? [];
+    const topOp = opPredictions[0] ?? null;
+    const valueProbe = scored.valueProbesByIndex.get(traceIndex) ?? null;
+
+    opPredictionCount += 1;
+    totalTokenCount += 1;
+    if (topOp) {
+      opConfidenceSum += topOp.score;
+      if (topOp.op === expectedOp) {
+        opCorrectCount += 1;
+      }
+    }
+
+    if (valueProbe) {
+      valuePredictionCount += 1;
+      totalTokenCount += 1;
+      const topValue = valueProbe.predictions[0] ?? null;
+      if (topValue) {
+        valueConfidenceSum += topValue.score;
+        if (topValue.value === valueProbe.expectedValue) {
+          valueCorrectCount += 1;
+        }
+      }
+    }
+
+    focus = applyHardTraceEvent(board, event, focus);
+    pendingLines.push(
+      formatPredictionLine(traceIndex + 1, expectedOp, opPredictions, valueProbe)
+    );
+
+    const shouldEmit =
+      pendingLines.length >= EMIT_EVERY || traceIndex === result.trace.length - 1;
+    if (shouldEmit) {
+      const elapsedMs = performance.now() - startedAt;
+      postReplayBatch({
+        board,
+        lines: pendingLines,
+        tokenCount: totalTokenCount,
+        predictionCount: opPredictionCount,
+        averageConfidence: opPredictionCount > 0 ? opConfidenceSum / opPredictionCount : null,
+        accuracy: opPredictionCount > 0 ? opCorrectCount / opPredictionCount : 0,
+        valuePredictionCount,
+        valueAverageConfidence:
+          valuePredictionCount > 0 ? valueConfidenceSum / valuePredictionCount : null,
+        valueAccuracy: valuePredictionCount > 0 ? valueCorrectCount / valuePredictionCount : null,
+        tokensPerSecond: summarizeRate(totalTokenCount, elapsedMs),
+        elapsedMs,
+        traceLength: result.trace.length,
+      });
+      pendingLines = [];
+    }
   }
 
   const elapsedMs = performance.now() - startedAt;

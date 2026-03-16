@@ -5,11 +5,17 @@ const MODEL_ID = "hard-value-bert";
 let runtimePromise = null;
 let classifierPromise = null;
 
-function normalizeClassifierOutput(result) {
-  if (Array.isArray(result) && Array.isArray(result[0])) {
-    return result[0];
+function normalizeClassifierBatchOutput(result) {
+  if (!Array.isArray(result)) {
+    return [];
   }
-  return result;
+  if (result.length === 0) {
+    return [];
+  }
+  if (Array.isArray(result[0])) {
+    return result;
+  }
+  return [result];
 }
 
 async function getRuntime() {
@@ -41,16 +47,32 @@ export async function warmHardSudokuValueModel() {
   await loadClassifier();
 }
 
-export async function predictHardSudokuPlaceValue(context, topK = 9) {
+export async function predictHardSudokuPlaceValues(contexts, topK = 9, batchSize = 128) {
   const classifier = await loadClassifier();
-  const results = normalizeClassifierOutput(
-    await classifier(context, {
-      top_k: topK,
-    })
-  );
+  const inputs = Array.isArray(contexts) ? contexts : [contexts];
+  const allPredictions = [];
 
-  return results.map((item) => ({
-    value: Number(item.label),
-    score: item.score,
-  }));
+  for (let index = 0; index < inputs.length; index += batchSize) {
+    const batch = inputs.slice(index, index + batchSize);
+    const results = normalizeClassifierBatchOutput(
+      await classifier(batch, {
+        top_k: topK,
+      })
+    );
+    allPredictions.push(
+      ...results.map((items) =>
+        items.map((item) => ({
+          value: Number(item.label),
+          score: item.score,
+        }))
+      )
+    );
+  }
+
+  return allPredictions;
+}
+
+export async function predictHardSudokuPlaceValue(context, topK = 9) {
+  const [predictions] = await predictHardSudokuPlaceValues([context], topK, 1);
+  return predictions;
 }

@@ -178,6 +178,10 @@ function pushLog(message) {
   }
 }
 
+function pushLogs(lines) {
+  lines.forEach((line) => pushLog(line));
+}
+
 function applyPuzzle(rawPuzzle) {
   const normalized = normalizePuzzleText(rawPuzzle);
   state.puzzle = normalized;
@@ -237,7 +241,7 @@ function startRun() {
       return;
     }
 
-    if (data.type === "event") {
+    if (data.type === "event-batch") {
       state.board = data.snapshot;
       state.run = {
         tokenCount: data.tokenCount,
@@ -251,7 +255,7 @@ function startRun() {
         elapsedMs: data.elapsedMs,
         traceLength: state.traceLength,
       };
-      pushLog(data.line);
+      pushLogs(data.lines ?? []);
       render();
       return;
     }
@@ -313,7 +317,7 @@ function renderBoard() {
 function renderStatus() {
   if (state.isRunning && state.run) {
     refs.status.textContent =
-      `Model is emitting trace tokens at ${formatRate(state.run.tokensPerSecond)}. ` +
+      `Model is replaying batched trace tokens at ${formatRate(state.run.tokensPerSecond)}. ` +
       `Op accuracy ${formatPercent(state.run.accuracy)}. ` +
       `PLACE value accuracy ${formatPercent(state.run.valueAccuracy)} so far.`;
     return;

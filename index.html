@@ -1,0 +1,122 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Pocket Solver Garden</title>
+    <meta
+      name="description"
+      content="Embeddable Tic-tac-toe and Sudoku demos built for a clean Notion embed."
+    >
+    <link rel="stylesheet" href="styles.css">
+  </head>
+  <body>
+    <main class="page-shell">
+      <section class="hero">
+        <p class="eyebrow">Embeddable computation demos</p>
+        <h1>Pocket Solver Garden</h1>
+        <p class="lede">
+          Two small examples that fit naturally inside a Notion embed: a
+          perfect-play Tic-tac-toe board and a Sudoku solver with a visible
+          trace.
+        </p>
+        <div class="pill-row">
+          <span class="pill">Static site</span>
+          <span class="pill">GitHub Pages friendly</span>
+          <span class="pill">Easy to drop into Notion</span>
+        </div>
+      </section>
+
+      <section class="demo-grid" aria-label="solver demos">
+        <article class="panel panel-coral">
+          <div class="panel-head">
+            <p class="kicker">Demo 1</p>
+            <h2>Tic-tac-toe</h2>
+            <p class="panel-copy">
+              Play against a perfect solver and watch the top-level branches it
+              scores before every move.
+            </p>
+          </div>
+
+          <div class="playground">
+            <div class="board-column">
+              <div id="ttt-status" class="status-card"></div>
+              <div id="ttt-board" class="ttt-board" aria-label="Tic-tac-toe board"></div>
+              <div class="control-row">
+                <button id="ttt-reset" class="button button-primary" type="button">
+                  New board
+                </button>
+                <button id="ttt-ai-first" class="button button-secondary" type="button">
+                  Solver starts
+                </button>
+              </div>
+            </div>
+
+            <div class="inspector-column">
+              <section class="mini-card">
+                <p class="mini-label">Top-level search</p>
+                <div id="ttt-analysis" class="analysis-list"></div>
+              </section>
+
+              <section class="mini-card">
+                <p class="mini-label">Move log</p>
+                <ol id="ttt-log" class="trace-list"></ol>
+              </section>
+            </div>
+          </div>
+        </article>
+
+        <article class="panel panel-mint">
+          <div class="panel-head">
+            <p class="kicker">Demo 2</p>
+            <h2>Sudoku</h2>
+            <p class="panel-copy">
+              Animate a complete solve on a 9x9 puzzle and keep the trace visible
+              while the board fills.
+            </p>
+          </div>
+
+          <div class="playground">
+            <div class="board-column">
+              <div id="sudoku-status" class="status-card"></div>
+              <div id="sudoku-board" class="sudoku-board" aria-label="Sudoku board"></div>
+              <div class="control-row">
+                <button id="sudoku-reset" class="button button-primary" type="button">
+                  Reload puzzle
+                </button>
+                <button id="sudoku-animate" class="button button-secondary" type="button">
+                  Animate solve
+                </button>
+                <button id="sudoku-solve" class="button button-secondary" type="button">
+                  Solve instantly
+                </button>
+              </div>
+            </div>
+
+            <div class="inspector-column">
+              <section class="mini-card">
+                <p class="mini-label">Solver stats</p>
+                <div id="sudoku-stats" class="stats-grid"></div>
+              </section>
+
+              <section class="mini-card">
+                <p class="mini-label">Trace</p>
+                <ol id="sudoku-log" class="trace-list"></ol>
+              </section>
+            </div>
+          </div>
+        </article>
+      </section>
+
+      <footer class="footer-note">
+        <p>
+          Version 1 uses deterministic browser-side solvers with visible traces.
+          The next step is swapping the engines for a tiny model or WASM runtime
+          without changing the embed story.
+        </p>
+      </footer>
+    </main>
+
+    <script type="module" src="app.mjs"></script>
+  </body>
+</html>

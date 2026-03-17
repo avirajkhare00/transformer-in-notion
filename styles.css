@@ -497,6 +497,11 @@ body.notion-embed-page::after {
   gap: 10px;
 }
 
+.tally-source-card {
+  display: grid;
+  gap: 10px;
+}
+
 .field-label {
   color: var(--muted);
   font-size: 0.72rem;
@@ -533,6 +538,10 @@ body.notion-embed-page::after {
 
 .receipt-input {
   min-height: 260px;
+}
+
+.tally-input {
+  min-height: 280px;
 }
 
 .receipt-file-input {
@@ -607,6 +616,62 @@ body.notion-embed-page::after {
   display: grid;
   gap: 6px;
   justify-items: end;
+}
+
+.tally-family-row {
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: start;
+}
+
+.tally-family-main {
+  display: grid;
+  gap: 8px;
+}
+
+.tally-field-list {
+  max-height: 360px;
+}
+
+.tally-field-row {
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start;
+}
+
+.tally-field-main {
+  display: grid;
+  gap: 8px;
+}
+
+.tally-field-head {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.tally-candidate-pill-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.tally-candidate-pill {
+  padding: 4px 8px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.82);
+  border: 1px solid var(--line);
+  color: var(--muted);
+  font-size: 0.7rem;
+  line-height: 1.4;
+}
+
+.tally-inline-meta {
+  color: var(--muted);
+  font-size: 0.72rem;
+}
+
+.tally-json {
+  min-height: 220px;
 }
 
 .sudoku-board {

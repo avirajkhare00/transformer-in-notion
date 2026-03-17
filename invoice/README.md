@@ -19,6 +19,8 @@ Both follow the same repo rule:
 - `ocr_layout.mjs` - plain-text and `pdftotext -tsv` row/layout normalization
 - `tally_schema.mjs` - Tally-style voucher families, shared fields, and industry extensions
 - `tally_psvm.mjs` - voucher-family classifier and schema-aligned field candidate extractor
+- `tally-worker.mjs` - browser worker for the Tally extraction demo
+- `tally-demo-samples.mjs` - sample OCR presets for the Tally extraction demo
 - `total_psvm.mjs` - exact OCR receipt total PSVM
 - `export_total_dataset.mjs` - synthetic OCR-style receipt dataset generator for total selection
 - `train_total_selector.py` - binary `TOTAL` vs `NOT_TOTAL` selector trainer
@@ -29,6 +31,8 @@ Both follow the same repo rule:
 - `../scripts/extract_receipt_total_candidates.mjs` - CLI candidate extractor for OCR text or PDFs
 - `../scripts/predict_receipt_total.py` - local model inference over extracted candidates
 - `../scripts/verify_receipt_pdf.mjs` - deterministic PDF parser/verifier CLI
+- `../tally.html` - browser demo for voucher-family classification and Tally-shaped output
+- `../tally-app.mjs` - UI wiring for the Tally extraction demo
 
 ## OCR Receipt Total PSVM
 
@@ -72,6 +76,14 @@ This path is still deterministic-first. It uses:
 - schema-targeted field candidate extraction
 - opportunistic reuse of the known receipt parser when a document matches the existing invoice layouts
 - explicit reject behavior for unsupported families such as account statements
+
+The browser test surface for that path now lives at `tally.html`. It accepts pasted OCR text or pasted `pdftotext -tsv`, lets you override voucher family or industry extension, and shows:
+
+- ranked voucher families
+- selected scalar fields
+- emitted Tally-shaped record JSON
+- grouped field candidates
+- PSVM trace and readable log
 
 ## How It Works In AI/ML Terms
 
@@ -213,6 +225,7 @@ python3 -m http.server 8000
 Then visit:
 
 - `http://localhost:8000/receipt.html`
+- `http://localhost:8000/tally.html`
 
 The page accepts pasted OCR text or pasted `pdftotext -tsv` output, and supports both:
 
@@ -220,3 +233,5 @@ The page accepts pasted OCR text or pasted `pdftotext -tsv` output, and supports
 - `Local model` - browser-local ONNX selector under `invoice/models/invoice-total-selector/`
 
 Account statements are not supported in this demo because they usually contain many balances rather than one payable total.
+
+The Tally extraction demo is deterministic-only for now. It shows voucher-family classification and schema-aligned field extraction, not a trained field-ranking model yet.

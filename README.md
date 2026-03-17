@@ -72,6 +72,7 @@ The repo currently centers on two browser-local tasks and one CLI invoice task:
   - a local transformer that scores `TOTAL` vs `NOT_TOTAL` candidates
   - explicit rejection of account-statement style documents with running balances
   - a browser demo at [receipt.html](/Users/avirajkhare/hack2/transformers/transformer-in-notion/receipt.html)
+  - a broader voucher extraction demo at [tally.html](/Users/avirajkhare/hack2/transformers/transformer-in-notion/tally.html)
 
 The main Sudoku page is the current source of truth for the end-to-end architecture.
 
@@ -163,6 +164,7 @@ The first broader Tally-style extraction layer is now also in the repo:
 
 - `invoice/tally_schema.mjs` defines voucher families, shared fields, and industry extensions
 - `invoice/tally_psvm.mjs` classifies voucher family and builds schema-aligned field candidates from noisy OCR/layout
+- `tally.html` provides a browser surface for testing voucher-family classification and emitted Tally-shaped records
 
 ## Local development
 

@@ -1,0 +1,182 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="color-scheme" content="light dark">
+    <title>Tally Extraction Demo | Pocket Solver Garden</title>
+    <meta
+      name="description"
+      content="Voucher-family classification and Tally-shaped field extraction from noisy OCR with a deterministic PSVM runtime."
+    >
+    <link rel="stylesheet" href="styles.css">
+  </head>
+  <body class="runtime-page">
+    <main class="page-shell single-demo-shell">
+      <section class="single-demo-grid" aria-label="tally extraction demo">
+        <article class="panel panel-coral">
+          <div class="playground">
+            <div class="board-column">
+              <div id="tally-status" class="status-card"></div>
+
+              <section class="mini-card tally-source-card">
+                <p class="mini-label">OCR Source</p>
+                <label class="field-label" for="tally-preset">Samples</label>
+                <select id="tally-preset" class="field-input field-select">
+                  <option value="custom">Bring your own</option>
+                </select>
+                <p id="tally-preset-description" class="field-hint"></p>
+
+                <label class="field-label" for="tally-format">Input format</label>
+                <select id="tally-format" class="field-input field-select">
+                  <option value="auto">Auto detect</option>
+                  <option value="text">OCR text</option>
+                  <option value="tsv">pdftotext TSV</option>
+                </select>
+
+                <label class="field-label" for="tally-family">Voucher family</label>
+                <select id="tally-family" class="field-input field-select">
+                  <option value="auto">Auto detect</option>
+                </select>
+
+                <label class="field-label" for="tally-industry">Industry extension</label>
+                <select id="tally-industry" class="field-input field-select">
+                  <option value="auto">Auto detect</option>
+                </select>
+
+                <label class="field-label" for="tally-input">Paste OCR text or TSV</label>
+                <textarea
+                  id="tally-input"
+                  class="field-input field-textarea tally-input"
+                  spellcheck="false"
+                  rows="18"
+                ></textarea>
+
+                <label class="field-label" for="tally-file">Load text file</label>
+                <input
+                  id="tally-file"
+                  class="field-input receipt-file-input"
+                  type="file"
+                  accept=".txt,.tsv,.log,.json"
+                >
+
+                <div class="control-row">
+                  <button id="tally-run" class="button button-primary" type="button">
+                    Run Tally PSVM
+                  </button>
+                  <button id="tally-clear" class="button button-secondary" type="button">
+                    Clear
+                  </button>
+                </div>
+                <p class="field-hint">
+                  PDF files are not parsed in-browser. Paste OCR text or `pdftotext -tsv` output instead.
+                </p>
+                <p class="field-hint">
+                  The current path is deterministic-first: classify voucher family, extract legal field candidates, emit a Tally-shaped record, and reject unsupported statements.
+                </p>
+              </section>
+
+              <section class="mini-card">
+                <p class="mini-label">Voucher Ranking</p>
+                <ol id="tally-family-ranking" class="analysis-list trace-list trace-list-scroll"></ol>
+              </section>
+
+              <section class="mini-card">
+                <p class="mini-label">Selected Fields</p>
+                <ol id="tally-selected-fields" class="trace-list trace-list-scroll"></ol>
+              </section>
+            </div>
+
+            <div class="inspector-column">
+              <section class="mini-card">
+                <p class="mini-label">Run stats</p>
+                <div id="tally-stats" class="stats-grid"></div>
+              </section>
+
+              <section class="mini-card">
+                <p class="mini-label">Schema stats</p>
+                <div id="tally-schema-stats" class="stats-grid"></div>
+              </section>
+
+              <section class="mini-card">
+                <p class="mini-label">PSVM flow</p>
+                <div id="tally-flow" class="flow-strip">
+                  <div id="tally-flow-source" class="flow-node">
+                    <div class="flow-node-head">
+                      <span class="flow-node-title">OCR rows</span>
+                      <span class="flow-badge">input</span>
+                    </div>
+                    <p class="flow-node-body">Paste flattened OCR text or structured `pdftotext -tsv` rows.</p>
+                  </div>
+                  <span class="flow-arrow">→</span>
+                  <div id="tally-flow-family" class="flow-node">
+                    <div class="flow-node-head">
+                      <span class="flow-node-title">Voucher family</span>
+                      <span class="flow-badge">classify</span>
+                    </div>
+                    <p class="flow-node-body">The runtime scores known voucher families and can abstain on unsupported statement-like layouts.</p>
+                  </div>
+                  <span class="flow-arrow">→</span>
+                  <div id="tally-flow-candidates" class="flow-node">
+                    <div class="flow-node-head">
+                      <span class="flow-node-title">Field candidates</span>
+                      <span class="flow-badge">extract</span>
+                    </div>
+                    <p class="flow-node-body">Each schema field receives legal candidates from labels, layout cues, totals, tax cues, and parser-assisted invoice paths.</p>
+                  </div>
+                  <span class="flow-arrow">→</span>
+                  <div id="tally-flow-emit" class="flow-node">
+                    <div class="flow-node-head">
+                      <span class="flow-node-title">Tally record</span>
+                      <span class="flow-badge">exact</span>
+                    </div>
+                    <p class="flow-node-body">The PSVM emits a structured voucher-shaped record or an explicit rejection for unsupported families.</p>
+                  </div>
+                </div>
+              </section>
+
+              <section class="mini-card">
+                <p class="mini-label">Emitted Record</p>
+                <pre id="tally-record" class="code-block code-block-trace tally-json"></pre>
+              </section>
+
+              <section class="mini-card">
+                <p class="mini-label">Field candidates</p>
+                <ol id="tally-field-candidates" class="analysis-list trace-list trace-list-scroll tally-field-list"></ol>
+              </section>
+
+              <section class="mini-card">
+                <p class="mini-label">Hybrid path</p>
+                <div class="code-stack">
+                  <div class="code-section">
+                    <p class="code-label">Prompt</p>
+                    <pre id="tally-prompt" class="code-block"></pre>
+                  </div>
+                  <div class="code-section">
+                    <p class="code-label">Tool call</p>
+                    <div id="tally-tool" class="tool-call-card"></div>
+                  </div>
+                  <div class="code-section">
+                    <p class="code-label">Program sketch</p>
+                    <pre id="tally-program" class="code-block"></pre>
+                  </div>
+                  <div class="code-section">
+                    <p class="code-label">Execution trace</p>
+                    <pre id="tally-trace" class="code-block code-block-trace"></pre>
+                  </div>
+                </div>
+              </section>
+
+              <section class="mini-card">
+                <p class="mini-label">Readable log</p>
+                <ol id="tally-log" class="trace-list trace-list-scroll"></ol>
+              </section>
+            </div>
+          </div>
+        </article>
+      </section>
+    </main>
+
+    <script type="module" src="tally-app.mjs"></script>
+  </body>
+</html>

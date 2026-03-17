@@ -1265,8 +1265,7 @@ export function extractTallyFieldCandidates(source, options = {}) {
   return buildTallyExtractionState(source, options).fieldCandidates;
 }
 
-export function buildTallyExtractionProgram(source, options = {}) {
-  const state = buildTallyExtractionState(source, options);
+function buildTallyExtractionProgramFromState(state) {
   return [
     `OCR_VOUCHER pages=${state.pageCount} lines=${state.lines.length} family=${state.voucherFamily} industry=${state.industry}`,
     "CLASSIFY_VOUCHER_FAMILY",
@@ -1275,6 +1274,11 @@ export function buildTallyExtractionProgram(source, options = {}) {
     "EMIT_TALLY_RECORD",
     "HALT",
   ];
+}
+
+export function buildTallyExtractionProgram(source, options = {}) {
+  const state = buildTallyExtractionState(source, options);
+  return buildTallyExtractionProgramFromState(state);
 }
 
 export function runTallyExtractionPsvm(source, options = {}) {
@@ -1288,10 +1292,7 @@ export function runTallyExtractionPsvm(source, options = {}) {
 
   return {
     source: state.source,
-    program: buildTallyExtractionProgram(state.source, {
-      voucherFamily: state.voucherFamily,
-      industry: state.industry,
-    }),
+    program: buildTallyExtractionProgramFromState(state),
     state,
     trace: [
       {

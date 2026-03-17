@@ -30,7 +30,11 @@ function parseMoneyToCents(value) {
     throw new Error("Invoice prices must be numbers or decimal strings.");
   }
 
-  const normalized = value.trim();
+  const normalized = value
+    .trim()
+    .replace(/^Rs\.?\s*/i, "")
+    .replace(/₹/g, "")
+    .replace(/[,\s]/g, "");
   if (!/^\d+(\.\d{1,2})?$/.test(normalized)) {
     throw new Error(`Invalid money value: ${value}`);
   }
@@ -38,6 +42,28 @@ function parseMoneyToCents(value) {
   const [whole, fraction = ""] = normalized.split(".");
   const cents = Number(whole) * 100 + Number(fraction.padEnd(2, "0"));
   return cents;
+}
+
+function parseQuantity(value) {
+  if (typeof value !== "number" && typeof value !== "string") {
+    throw new Error("Invoice quantities must be numbers or decimal strings.");
+  }
+
+  const normalized = String(value).trim().replace(/,/g, "");
+  if (!/^\d+(\.\d{1,3})?$/.test(normalized)) {
+    throw new Error(`Invalid quantity value: ${value}`);
+  }
+
+  const [whole, fraction = ""] = normalized.split(".");
+  const thousandths = Number(whole) * 1000 + Number(fraction.padEnd(3, "0"));
+  if (!(thousandths > 0)) {
+    throw new Error("Invoice quantity must be a positive number.");
+  }
+
+  return {
+    value: thousandths / 1000,
+    thousandths,
+  };
 }
 
 function parseTaxRate(rate) {
@@ -66,10 +92,7 @@ export function parseInvoice(source) {
       throw new Error(`Line item ${index + 1} must be an object.`);
     }
 
-    const quantity = Number(item.quantity);
-    if (!Number.isInteger(quantity) || quantity <= 0) {
-      throw new Error(`Line item ${index + 1} quantity must be a positive integer.`);
-    }
+    const quantity = parseQuantity(item.quantity);
 
     const unitCents = parseMoneyToCents(item.unitPrice);
     if (unitCents < 0) {
@@ -78,8 +101,10 @@ export function parseInvoice(source) {
 
     return {
       label: typeof item.label === "string" && item.label.trim() ? item.label : `Item ${index + 1}`,
-      quantity,
+      quantity: quantity.value,
+      quantityThousandths: quantity.thousandths,
       unitCents,
+      unit: typeof item.unit === "string" && item.unit.trim() ? item.unit.trim() : null,
     };
   });
 
@@ -213,6 +238,7 @@ export function executeInvoiceOp(invoice, previousState, op) {
             index: state.currentItemIndex,
             label: item.label,
             quantity: item.quantity,
+            unit: item.unit,
             unitCents: item.unitCents,
           }),
           state,
@@ -221,7 +247,9 @@ export function executeInvoiceOp(invoice, previousState, op) {
     }
     case "LINE_TOTAL": {
       const item = invoice.items[state.currentItemIndex];
-      state.currentLineCents = item.quantity * item.unitCents;
+      state.currentLineCents = Math.round(
+        (item.quantityThousandths * item.unitCents) / 1000,
+      );
       state.phase = "ADD_SUBTOTAL";
       return {
         state,
@@ -229,6 +257,7 @@ export function executeInvoiceOp(invoice, previousState, op) {
           createEvent("LINE_TOTAL", {
             index: state.currentItemIndex,
             quantity: item.quantity,
+            unit: item.unit,
             unitCents: item.unitCents,
             lineCents: state.currentLineCents,
           }),
@@ -301,7 +330,8 @@ export function executeInvoiceOp(invoice, previousState, op) {
 }
 
 export function formatCents(cents, currency = "USD") {
-  return new Intl.NumberFormat("en-US", {
+  const locale = currency === "INR" ? "en-IN" : "en-US";
+  return new Intl.NumberFormat(locale, {
     style: "currency",
     currency,
     minimumFractionDigits: 2,
@@ -309,12 +339,20 @@ export function formatCents(cents, currency = "USD") {
   }).format(cents / 100);
 }
 
+function formatQuantity(quantity) {
+  if (Number.isInteger(quantity)) {
+    return String(quantity);
+  }
+
+  return quantity.toFixed(3).replace(/\.?0+$/, "");
+}
+
 export function formatInvoiceEvent(event, currency = "USD") {
   switch (event.op) {
     case "READ_ITEM":
       return `READ_ITEM #${event.index + 1} ${event.label}`;
     case "LINE_TOTAL":
-      return `LINE_TOTAL #${event.index + 1} ${event.quantity} x ${formatCents(event.unitCents, currency)} -> ${formatCents(event.lineCents, currency)}`;
+      return `LINE_TOTAL #${event.index + 1} ${formatQuantity(event.quantity)}${event.unit ? ` ${event.unit}` : ""} x ${formatCents(event.unitCents, currency)} -> ${formatCents(event.lineCents, currency)}`;
     case "ADD_SUBTOTAL":
       return `ADD_SUBTOTAL -> ${formatCents(event.subtotalCents, currency)}`;
     case "APPLY_TAX":

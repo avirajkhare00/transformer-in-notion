@@ -52,7 +52,7 @@ A PSVM keeps only the transitions that carry semantic weight for the task. That 
 
 ## Current focus
 
-The repo currently centers on two browser-local tasks:
+The repo currently centers on two browser-local tasks and one CLI invoice task:
 
 - [sudoku.html](/Users/avirajkhare/hack2/transformers/transformer-in-notion/sudoku.html)
   Exact 9x9 Sudoku solve with:
@@ -63,6 +63,15 @@ The repo currently centers on two browser-local tasks:
 
 - [weiqi/index.html](/Users/avirajkhare/hack2/transformers/transformer-in-notion/weiqi/index.html)
   5x5 Weiqi capture PSVM with exact local rules.
+
+- [invoice/README.md](/Users/avirajkhare/hack2/transformers/transformer-in-notion/invoice/README.md)
+  OCR receipt total extraction with:
+  - exact money-candidate extraction from structured `pdftotext -tsv` rows
+  - layout-aware cues such as right-edge alignment and cue-before-amount position
+  - deterministic teacher ranking over legal total branches
+  - a local transformer that scores `TOTAL` vs `NOT_TOTAL` candidates
+  - explicit rejection of account-statement style documents with running balances
+  - a browser demo at [receipt.html](/Users/avirajkhare/hack2/transformers/transformer-in-notion/receipt.html)
 
 The main Sudoku page is the current source of truth for the end-to-end architecture.
 
@@ -127,12 +136,22 @@ What is working now:
 - exact backtracking and verifier-backed execution
 - structured ONNX models running locally in the browser
 - packed tensor-shard training path for structured Sudoku models
+- PSVM-style OCR receipt total extraction and candidate ranking under `invoice/`
+- synthetic OCR receipt dataset export and local total-selector training
 
 What is not claimed yet:
 
 - pure free-running model-only 9x9 Sudoku solving
 - model outperforming the deterministic reference policy
 - a general-purpose compiled-code-to-weights system
+
+## Invoice / OCR Receipts
+
+The invoice lane now follows the same repo thesis as Sudoku:
+
+`OCR text -> legal money candidates -> model ranks branches -> exact runtime emits total`
+
+That means the model is not asked to invent the receipt total end-to-end. It only scores legal candidates extracted by the runtime. See [invoice/README.md](/Users/avirajkhare/hack2/transformers/transformer-in-notion/invoice/README.md) for the dataset, trainer, and CLI flow.
 
 ## Local development
 
@@ -188,6 +207,11 @@ This pipeline does:
 - [soduku/model.mjs](/Users/avirajkhare/hack2/transformers/transformer-in-notion/soduku/model.mjs) - structured op/value model loading
 - [soduku/value-model.mjs](/Users/avirajkhare/hack2/transformers/transformer-in-notion/soduku/value-model.mjs) - structured value-model loading and `Auto / Transformer / GNN` routing
 - [soduku/structured-onnx.mjs](/Users/avirajkhare/hack2/transformers/transformer-in-notion/soduku/structured-onnx.mjs) - ONNX Runtime setup for structured state tensors
+- [invoice/psvm.mjs](/Users/avirajkhare/hack2/transformers/transformer-in-notion/invoice/psvm.mjs) - exact invoice arithmetic PSVM
+- [invoice/total_psvm.mjs](/Users/avirajkhare/hack2/transformers/transformer-in-notion/invoice/total_psvm.mjs) - exact OCR receipt total candidate extractor and teacher ranker
+- [invoice/export_total_dataset.mjs](/Users/avirajkhare/hack2/transformers/transformer-in-notion/invoice/export_total_dataset.mjs) - synthetic OCR receipt dataset generator
+- [invoice/train_total_selector.py](/Users/avirajkhare/hack2/transformers/transformer-in-notion/invoice/train_total_selector.py) - local transformer trainer for `TOTAL` vs `NOT_TOTAL`
+- [scripts/predict_receipt_total.py](/Users/avirajkhare/hack2/transformers/transformer-in-notion/scripts/predict_receipt_total.py) - local inference over extracted receipt candidates
 - [soduku/structured_transformer_common.py](/Users/avirajkhare/hack2/transformers/transformer-in-notion/soduku/structured_transformer_common.py) - shared structured transformer/GNN training/export utilities
 - [soduku/meta.md](/Users/avirajkhare/hack2/transformers/transformer-in-notion/soduku/meta.md) - meta pattern and runtime philosophy
 - [docs/paper-idea-problem-shaped-vms.md](/Users/avirajkhare/hack2/transformers/transformer-in-notion/docs/paper-idea-problem-shaped-vms.md) - paper note for PSVMs

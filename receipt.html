@@ -1,0 +1,166 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="color-scheme" content="light dark">
+    <title>Receipt Total Demo | Pocket Solver Garden</title>
+    <meta
+      name="description"
+      content="Layout-aware receipt total selection with a PSVM runtime and an optional local browser model."
+    >
+    <link rel="stylesheet" href="styles.css">
+  </head>
+  <body class="runtime-page">
+    <main class="page-shell single-demo-shell">
+      <section class="single-demo-grid" aria-label="receipt total demo">
+        <article class="panel panel-coral">
+          <div class="playground">
+            <div class="board-column">
+              <div id="receipt-status" class="status-card"></div>
+
+              <section class="mini-card receipt-source-card">
+                <p class="mini-label">OCR Source</p>
+                <label class="field-label" for="receipt-preset">Samples</label>
+                <select id="receipt-preset" class="field-input field-select">
+                  <option value="custom">Bring your own</option>
+                </select>
+                <p id="receipt-preset-description" class="field-hint"></p>
+
+                <label class="field-label" for="receipt-format">Input format</label>
+                <select id="receipt-format" class="field-input field-select">
+                  <option value="auto">Auto detect</option>
+                  <option value="text">OCR text</option>
+                  <option value="tsv">pdftotext TSV</option>
+                </select>
+
+                <label class="field-label" for="receipt-input">Paste OCR text or TSV</label>
+                <textarea
+                  id="receipt-input"
+                  class="field-input field-textarea receipt-input"
+                  spellcheck="false"
+                  rows="18"
+                ></textarea>
+
+                <label class="field-label" for="receipt-file">Load text file</label>
+                <input
+                  id="receipt-file"
+                  class="field-input receipt-file-input"
+                  type="file"
+                  accept=".txt,.tsv,.log,.json"
+                >
+
+                <div class="control-row">
+                  <select
+                    id="receipt-engine"
+                    class="field-input field-select control-select"
+                    aria-label="Receipt engine"
+                  >
+                    <option value="teacher">Teacher</option>
+                    <option value="model">Local model</option>
+                  </select>
+                  <button id="receipt-run" class="button button-primary" type="button">
+                    Run receipt PSVM
+                  </button>
+                  <button id="receipt-clear" class="button button-secondary" type="button">
+                    Clear
+                  </button>
+                </div>
+                <p class="field-hint">
+                  PDF files are not parsed in-browser. Paste OCR text or `pdftotext -tsv` output instead.
+                </p>
+                <p class="field-hint">
+                  Invoice and receipt tables are supported. Account statements with running balances are rejected.
+                </p>
+              </section>
+
+              <section class="mini-card">
+                <p class="mini-label">Candidate ranking</p>
+                <ol id="receipt-candidates" class="analysis-list trace-list trace-list-scroll"></ol>
+              </section>
+            </div>
+
+            <div class="inspector-column">
+              <section class="mini-card">
+                <p class="mini-label">Run stats</p>
+                <div id="receipt-stats" class="stats-grid"></div>
+              </section>
+
+              <section class="mini-card">
+                <p class="mini-label">Model stats</p>
+                <p id="receipt-model-status" class="field-hint"></p>
+                <div id="receipt-model-stats" class="stats-grid"></div>
+              </section>
+
+              <section class="mini-card">
+                <p class="mini-label">Model to VM</p>
+                <div id="receipt-flow" class="flow-strip">
+                  <div id="receipt-flow-source" class="flow-node">
+                    <div class="flow-node-head">
+                      <span class="flow-node-title">OCR rows</span>
+                      <span class="flow-badge">input</span>
+                    </div>
+                    <p class="flow-node-body">Paste flattened OCR text or structured `pdftotext -tsv` rows.</p>
+                  </div>
+                  <span class="flow-arrow">→</span>
+                  <div id="receipt-flow-candidates" class="flow-node">
+                    <div class="flow-node-head">
+                      <span class="flow-node-title">Legal candidates</span>
+                      <span class="flow-badge">ops</span>
+                    </div>
+                    <p class="flow-node-body">The PSVM extracts every money span and keeps cue + layout features on each row.</p>
+                  </div>
+                  <span class="flow-arrow">→</span>
+                  <div id="receipt-flow-engine" class="flow-node">
+                    <div class="flow-node-head">
+                      <span class="flow-node-title">Teacher / model</span>
+                      <span class="flow-badge">rank</span>
+                    </div>
+                    <p class="flow-node-body">Either the heuristic teacher or the local browser model ranks the legal amount candidates.</p>
+                  </div>
+                  <span class="flow-arrow">→</span>
+                  <div id="receipt-flow-emit" class="flow-node">
+                    <div class="flow-node-head">
+                      <span class="flow-node-title">Exact emit</span>
+                      <span class="flow-badge">exact</span>
+                    </div>
+                    <p class="flow-node-body">The runtime emits one existing amount from the document. No free-form number generation.</p>
+                  </div>
+                </div>
+              </section>
+
+              <section class="mini-card">
+                <p class="mini-label">Hybrid path</p>
+                <div class="code-stack">
+                  <div class="code-section">
+                    <p class="code-label">Prompt</p>
+                    <pre id="receipt-prompt" class="code-block"></pre>
+                  </div>
+                  <div class="code-section">
+                    <p class="code-label">Tool call</p>
+                    <div id="receipt-tool" class="tool-call-card"></div>
+                  </div>
+                  <div class="code-section">
+                    <p class="code-label">Program sketch</p>
+                    <pre id="receipt-program" class="code-block"></pre>
+                  </div>
+                  <div class="code-section">
+                    <p class="code-label">Execution trace</p>
+                    <pre id="receipt-trace" class="code-block code-block-trace"></pre>
+                  </div>
+                </div>
+              </section>
+
+              <section class="mini-card">
+                <p class="mini-label">Readable log</p>
+                <ol id="receipt-log" class="trace-list trace-list-scroll"></ol>
+              </section>
+            </div>
+          </div>
+        </article>
+      </section>
+    </main>
+
+    <script type="module" src="receipt-app.mjs"></script>
+  </body>
+</html>

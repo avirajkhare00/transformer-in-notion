@@ -1,0 +1,8 @@
+{
+  "sampleCount": 5031,
+  "trainCount": 4559,
+  "evalCount": 472,
+  "sample_accuracy": 1.0,
+  "receipt_accuracy": 1.0,
+  "train_loss": 0.002850128358654289
+}

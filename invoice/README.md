@@ -1,91 +1,135 @@
 # Invoice PSVM
 
-This directory is the first small web-app proof of concept for the
-problem-shaped VM idea.
+This directory now contains two related PSVM examples:
 
-## Current prototype
+- invoice arithmetic: exact invoice JSON in, canonical calculator trace out
+- OCR receipt total selection: raw OCR text in, legal money candidates ranked, exact total emitted
 
-The implementation lives in:
+Both follow the same repo rule:
 
-- `index.html` - standalone browser demo
-- `app.mjs` - UI wiring for the invoice page
-- `worker.mjs` - worker-side execution loop
-- `model.mjs` - browser-side local model loader for next-op prediction
-- `psvm.mjs` - invoice-calculator PSVM and canonical trace generator
-- `export_dataset.mjs` - synthetic dataset generator for next-op supervision
-- `train_transformer.py` - tiny invoice next-op transformer trainer/exporter
-- `models/invoice-op-bert/` - shipped local ONNX bundle for invoice next-op prediction
+`code owns legality, the model only scores ambiguity`
 
-## Why this example matters
+## Files
 
-Invoice calculation is a better first "real world" example than a large puzzle
-because it is:
+- `psvm.mjs` - exact invoice calculator PSVM and canonical trace generator
+- `export_dataset.mjs` - synthetic dataset generator for invoice next-op supervision
+- `train_transformer.py` - tiny next-op transformer trainer/exporter for `psvm.mjs`
+- `worker.mjs` - browser worker for the invoice next-op demo
+- `model.mjs` - browser-side model loader for invoice next-op prediction
+- `ocr_layout.mjs` - plain-text and `pdftotext -tsv` row/layout normalization
+- `total_psvm.mjs` - exact OCR receipt total PSVM
+- `export_total_dataset.mjs` - synthetic OCR-style receipt dataset generator for total selection
+- `train_total_selector.py` - binary `TOTAL` vs `NOT_TOTAL` selector trainer
+- `receipt.mjs` - deterministic parser/verifier for known `pdftotext -layout` receipt layouts
+- `receipt.test.mjs` - parser/verifier coverage
+- `total_psvm.test.mjs` - OCR-total PSVM coverage
+- `../scripts/extract_receipt_total_candidates.mjs` - CLI candidate extractor for OCR text or PDFs
+- `../scripts/predict_receipt_total.py` - local model inference over extracted candidates
+- `../scripts/verify_receipt_pdf.mjs` - deterministic PDF parser/verifier CLI
 
-- exact
-- easy to verify
-- legible to non-ML users
-- small enough for browser-local execution
-- naturally expressible as a short canonical trace
+## OCR Receipt Total PSVM
 
-## Current op set
+The OCR-total path is intentionally narrow:
 
-- `READ_ITEM`
-- `LINE_TOTAL`
-- `ADD_SUBTOTAL`
-- `APPLY_TAX`
-- `EMIT_TOTAL`
-- `HALT`
+`OCR text -> EXTRACT_AMOUNTS -> RANK_TOTAL_BRANCHES -> EMIT_TOTAL -> HALT`
 
-This is intentionally narrow. The goal is to prove the value of a
-task-specific execution substrate before adding a local transformer on top of
-it.
+What remains exact:
 
-## Teacher and student
+- OCR text normalization
+- PDF row reconstruction from `pdftotext -tsv`
+- money-span extraction
+- candidate legality and context building
+- layout cues such as right-edge alignment and cue-before-amount position
+- deterministic teacher scoring
+- final total emission
 
-The current split is:
+What the model does:
 
-- `teacher` - the deterministic PSVM in `psvm.mjs`
-- `student` - the tiny classifier trained to predict the next PSVM op from context
+- score each legal candidate as `TOTAL` or `NOT_TOTAL`
 
-The first learned target is intentionally small:
+This is the same pattern as Sudoku:
 
-- input: normalized execution context
-- output: next op in the invoice PSVM
+`state -> model ranks legal branches -> exact runtime executes`
 
-That is not full trace generation yet. It is the first honest learned step.
+not:
 
-The browser worker now runs a strict student-driven loop:
+`OCR text -> model invents the answer`
 
-- build normalized context from the current PSVM snapshot
-- ask the local model for the next op
-- verify that the predicted op is legal for the current state
-- execute that op through the deterministic interpreter
+The current OCR-total lane is intentionally invoice/receipt-shaped. It expects one payable or final document total. Bank/account statements with running balances are rejected instead of forcing a guess.
 
-So the student now drives the live trace instead of being scored beside a
-teacher replay.
+## Local Training Flow
 
-## Current verification
-
-- shipped local model bundle: `invoice/models/invoice-op-bert/`
-- exported training metadata:
-  - samples: `5985`
-  - train split: `5387`
-  - eval split: `598`
-  - eval accuracy: `1.0000`
-
-## Local training flow
-
-Generate a synthetic dataset:
+Generate the arithmetic next-op dataset:
 
 ```bash
 node invoice/export_dataset.mjs
 ```
 
-Train the first invoice student model:
+Train the arithmetic next-op student:
 
 ```bash
-.venv/bin/python invoice/train_transformer.py --skip-export
+<python-env>/bin/python invoice/train_transformer.py --skip-export
 ```
 
-Use `--skip-export` for local smoke tests and training iteration. Drop that flag
-when you want the ONNX export under `invoice/models/`.
+Generate the OCR-total selector dataset:
+
+```bash
+node invoice/export_total_dataset.mjs --count 2000
+```
+
+Train the OCR-total selector and keep the raw checkpoint:
+
+```bash
+<python-env>/bin/python invoice/train_total_selector.py --skip-export
+```
+
+Train and export the OCR-total selector bundle under `invoice/models/`:
+
+```bash
+<python-env>/bin/python invoice/train_total_selector.py
+```
+
+The export step requires `optimum-cli` in that Python environment.
+
+## CLI Smoke Tests
+
+Extract legal total candidates from OCR text or a PDF:
+
+```bash
+node scripts/extract_receipt_total_candidates.mjs receipt.pdf
+```
+
+Score those candidates with a local selector model:
+
+```bash
+<python-env>/bin/python scripts/predict_receipt_total.py \
+  --model-dir invoice/training/invoice-total-selector \
+  receipt.pdf
+```
+
+Run the deterministic parser/verifier for known layouts:
+
+```bash
+node scripts/verify_receipt_pdf.mjs receipt.pdf
+```
+
+PDF input requires `pdftotext` in `PATH`.
+
+## Browser Demo
+
+Serve the repo root and open:
+
+```bash
+python3 -m http.server 8000
+```
+
+Then visit:
+
+- `http://localhost:8000/receipt.html`
+
+The page accepts pasted OCR text or pasted `pdftotext -tsv` output, and supports both:
+
+- `Teacher` - deterministic receipt-total heuristic
+- `Local model` - browser-local ONNX selector under `invoice/models/invoice-total-selector/`
+
+Account statements are not supported in this demo because they usually contain many balances rather than one payable total.

@@ -492,6 +492,11 @@ body.notion-embed-page::after {
   gap: 10px;
 }
 
+.receipt-source-card {
+  display: grid;
+  gap: 10px;
+}
+
 .field-label {
   color: var(--muted);
   font-size: 0.72rem;
@@ -526,6 +531,14 @@ body.notion-embed-page::after {
   line-height: 1.55;
 }
 
+.receipt-input {
+  min-height: 260px;
+}
+
+.receipt-file-input {
+  padding: 10px 12px;
+}
+
 .field-hint {
   margin: 0;
   color: var(--muted);
@@ -542,6 +555,58 @@ body.notion-embed-page::after {
   align-items: center;
   justify-content: center;
   text-decoration: none;
+}
+
+.receipt-candidate-row {
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start;
+}
+
+.receipt-candidate-main {
+  display: grid;
+  gap: 8px;
+}
+
+.receipt-candidate-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.receipt-candidate-meta {
+  color: var(--muted);
+  font-size: 0.76rem;
+}
+
+.receipt-candidate-line {
+  color: var(--muted);
+  font-size: 0.78rem;
+  line-height: 1.55;
+  word-break: break-word;
+}
+
+.receipt-chip-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.receipt-chip {
+  padding: 3px 8px;
+  border-radius: 999px;
+  background: rgba(32, 26, 22, 0.08);
+  color: var(--muted);
+  font-size: 0.68rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.receipt-score-stack {
+  display: grid;
+  gap: 6px;
+  justify-items: end;
 }
 
 .sudoku-board {

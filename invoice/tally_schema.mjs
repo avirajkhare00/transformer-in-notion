@@ -353,6 +353,16 @@ export const TALLY_VOUCHER_FAMILIES = deepFreeze({
       "note_has_reference_or_amount",
     ],
   },
+  unknown_document: {
+    id: "unknown_document",
+    label: "Unknown Document",
+    supported: false,
+    class: "unknown",
+    sourceHints: [],
+    rejectionReason:
+      "The OCR did not match any known voucher family strongly enough yet.",
+    validators: [],
+  },
   account_statement: {
     id: "account_statement",
     label: "Account Statement",

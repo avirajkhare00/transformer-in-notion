@@ -159,6 +159,11 @@ In short:
 - layman view: collect all amount-looking numbers, then pick the one that most looks like the final total
 - main limitation: this is invoice/receipt-shaped, not a general parser for arbitrary tables or account statements
 
+The first broader Tally-style extraction layer is now also in the repo:
+
+- `invoice/tally_schema.mjs` defines voucher families, shared fields, and industry extensions
+- `invoice/tally_psvm.mjs` classifies voucher family and builds schema-aligned field candidates from noisy OCR/layout
+
 ## Local development
 
 Serve the repo root with any static file server:

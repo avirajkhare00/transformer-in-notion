@@ -17,11 +17,14 @@ Both follow the same repo rule:
 - `worker.mjs` - browser worker for the invoice next-op demo
 - `model.mjs` - browser-side model loader for invoice next-op prediction
 - `ocr_layout.mjs` - plain-text and `pdftotext -tsv` row/layout normalization
+- `tally_schema.mjs` - Tally-style voucher families, shared fields, and industry extensions
+- `tally_psvm.mjs` - voucher-family classifier and schema-aligned field candidate extractor
 - `total_psvm.mjs` - exact OCR receipt total PSVM
 - `export_total_dataset.mjs` - synthetic OCR-style receipt dataset generator for total selection
 - `train_total_selector.py` - binary `TOTAL` vs `NOT_TOTAL` selector trainer
 - `receipt.mjs` - deterministic parser/verifier for known `pdftotext -layout` receipt layouts
 - `receipt.test.mjs` - parser/verifier coverage
+- `tally_psvm.test.mjs` - Tally extraction PSVM coverage
 - `total_psvm.test.mjs` - OCR-total PSVM coverage
 - `../scripts/extract_receipt_total_candidates.mjs` - CLI candidate extractor for OCR text or PDFs
 - `../scripts/predict_receipt_total.py` - local model inference over extracted candidates
@@ -58,6 +61,17 @@ not:
 The current OCR-total lane is intentionally invoice/receipt-shaped. It expects one payable or final document total. Bank/account statements with running balances are rejected instead of forcing a guess.
 
 The first Tally-oriented schema draft for broader voucher extraction now lives in `invoice/tally_schema.mjs`. It defines voucher families, a shared field surface, industry extensions, and explicit reject semantics for statement-like documents.
+
+The next layer now lives in `invoice/tally_psvm.mjs`:
+
+`OCR/layout -> voucher family -> schema -> field candidates -> Tally-shaped record`
+
+This path is still deterministic-first. It uses:
+
+- voucher-family classification
+- schema-targeted field candidate extraction
+- opportunistic reuse of the known receipt parser when a document matches the existing invoice layouts
+- explicit reject behavior for unsupported families such as account statements
 
 ## How It Works In AI/ML Terms
 

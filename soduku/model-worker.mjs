@@ -8,6 +8,7 @@ import {
   predictHardSudokuPlaceValue,
   warmHardSudokuValueModel,
 } from "./value-model.mjs";
+import { chooseValueGuidanceDecision } from "./value-guidance.mjs";
 
 const EMIT_EVERY = 16;
 
@@ -40,20 +41,12 @@ function postProgress({
   });
 }
 
-function filterLegalValuePredictions(predictions, focus) {
-  if (!focus || !Array.isArray(focus.candidates) || focus.candidates.length === 0) {
-    return predictions;
-  }
-
-  const legal = predictions.filter((prediction) => focus.candidates.includes(prediction.value));
-  return legal.length > 0 ? legal : predictions;
-}
-
 function postGuidedMetrics({
   events = [],
   tokenCount,
   branchCount,
   valueAverageConfidence,
+  valueAverageMargin,
   tokensPerSecond,
   elapsedMs,
   guidedStats = null,
@@ -71,6 +64,7 @@ function postGuidedMetrics({
     branchCount,
     valuePredictionCount: branchCount,
     valueAverageConfidence,
+    valueAverageMargin,
     tokensPerSecond,
     elapsedMs,
     guidedStats,
@@ -120,13 +114,14 @@ async function runGuidedSolve(puzzle, modelSelectionId = "auto") {
   let tokenCount = 0;
   let branchCount = 0;
   let valueConfidenceSum = 0;
+  let valueMarginSum = 0;
   let pendingEvents = [];
 
   postProgress({
     phase: "guided-solve",
     completed: 0,
     total: reference.stats.focuses,
-    message: `Ranking guided branches 0 / ~${reference.stats.focuses}.`,
+    message: `Evaluating ambiguous branches 0 / ~${reference.stats.focuses}.`,
   });
 
   const guided = await solveSudokuWithGuidance(initialBoard, {
@@ -140,6 +135,7 @@ async function runGuidedSolve(puzzle, modelSelectionId = "auto") {
           tokenCount,
           branchCount,
           valueAverageConfidence: branchCount > 0 ? valueConfidenceSum / branchCount : null,
+          valueAverageMargin: branchCount > 0 ? valueMarginSum / branchCount : null,
           tokensPerSecond: summarizeRate(tokenCount, elapsedMs),
           elapsedMs,
           referenceStats: reference.stats,
@@ -159,16 +155,16 @@ async function runGuidedSolve(puzzle, modelSelectionId = "auto") {
         historyOps,
         historyWindow: HARD_OP_HISTORY_WINDOW,
       });
-      const predictions = filterLegalValuePredictions(
-        await predictHardSudokuPlaceValue(context, 9, modelSelectionId),
-        focus
-      );
+      const predictions = await predictHardSudokuPlaceValue(context, 9, modelSelectionId);
+      const decision = chooseValueGuidanceDecision({
+        predictions,
+        candidates: focus.candidates,
+      });
 
       branchCount += 1;
       tokenCount += 1;
-      if (predictions[0]) {
-        valueConfidenceSum += predictions[0].score;
-      }
+      valueConfidenceSum += decision.confidence;
+      valueMarginSum += decision.margin;
 
       if (branchCount % EMIT_EVERY === 0) {
         const elapsedMs = performance.now() - startedAt;
@@ -176,13 +172,14 @@ async function runGuidedSolve(puzzle, modelSelectionId = "auto") {
           phase: "guided-solve",
           completed: branchCount,
           total: reference.stats.focuses,
-          message: `Ranking guided branches ${branchCount} / ~${reference.stats.focuses}.`,
+          message: `Evaluating ambiguous branches ${branchCount} / ~${reference.stats.focuses}.`,
         });
         postGuidedMetrics({
           events: pendingEvents,
           tokenCount,
           branchCount,
           valueAverageConfidence: branchCount > 0 ? valueConfidenceSum / branchCount : null,
+          valueAverageMargin: branchCount > 0 ? valueMarginSum / branchCount : null,
           tokensPerSecond: summarizeRate(tokenCount, elapsedMs),
           elapsedMs,
           referenceStats: reference.stats,
@@ -195,9 +192,7 @@ async function runGuidedSolve(puzzle, modelSelectionId = "auto") {
         await yieldToBrowser();
       }
 
-      return {
-        orderedCandidates: predictions.map((prediction) => prediction.value),
-      };
+      return decision;
     },
   });
 
@@ -210,13 +205,14 @@ async function runGuidedSolve(puzzle, modelSelectionId = "auto") {
     phase: "guided-solve",
     completed: branchCount,
     total: reference.stats.focuses,
-    message: `Guided solve finished after ${branchCount} ranked branch decisions.`,
+    message: `Guided solve finished after ${branchCount} branch evaluations.`,
   });
   postGuidedMetrics({
     events: pendingEvents,
     tokenCount,
     branchCount,
     valueAverageConfidence: branchCount > 0 ? valueConfidenceSum / branchCount : null,
+    valueAverageMargin: branchCount > 0 ? valueMarginSum / branchCount : null,
     tokensPerSecond: summarizeRate(tokenCount, elapsedMs),
     elapsedMs,
     guidedStats: guided.stats,
@@ -236,6 +232,7 @@ async function runGuidedSolve(puzzle, modelSelectionId = "auto") {
     branchCount,
     valuePredictionCount: branchCount,
     valueAverageConfidence: branchCount > 0 ? valueConfidenceSum / branchCount : null,
+    valueAverageMargin: branchCount > 0 ? valueMarginSum / branchCount : null,
     tokensPerSecond: summarizeRate(tokenCount, elapsedMs),
     elapsedMs: Math.round(elapsedMs),
     traceLength: guided.trace.length,

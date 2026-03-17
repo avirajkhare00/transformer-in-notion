@@ -99,14 +99,14 @@ function describeSudokuModelArtifacts(modelInfo = {}) {
 
   const runtime =
     activeModelId === "gnn"
-      ? "structured ONNX GNN policy + exact JS/WASM runtime"
+      ? "structured ONNX GNN value model + exact JS/WASM runtime"
       : activeModelId === "transformer-regret"
-        ? "structured ONNX regret transformer policy + exact JS/WASM runtime"
+        ? "structured ONNX regret transformer value model + exact JS/WASM runtime"
       : activeModelId === "transformer-hard"
-        ? "structured ONNX hard-set transformer policy + exact JS/WASM runtime"
+        ? "structured ONNX hard-set transformer value model + exact JS/WASM runtime"
       : activeModelId === "transformer"
-        ? "structured ONNX transformer policy + exact JS/WASM runtime"
-        : "structured ONNX value policy + exact JS/WASM runtime";
+        ? "structured ONNX transformer value model + exact JS/WASM runtime"
+        : "structured ONNX value model + exact JS/WASM runtime";
 
   let artifact = "soduku/models/extreme-value-gnn or extreme-value";
   if (selectedModelId === "gnn") {
@@ -122,7 +122,7 @@ function describeSudokuModelArtifacts(modelInfo = {}) {
     artifact = `soduku/models/${loadedModelArtifactId}`;
   }
 
-  const call = "rank_candidates(board, focus, history_ops) -> ordered PLACE candidates";
+  const call = "rank_candidates(board, focus, history_ops) -> ordered PLACE candidates + trust mode";
 
   return {
     badge,
@@ -205,7 +205,7 @@ export function buildSudokuExecutorArtifacts(initialBoard, result, stepIndex, mo
     result
       ? `Runtime: ${modelArtifacts.modelLabel} + exact browser-side verifier.`
       : `Runtime: loading ${modelArtifacts.loadingLabel} + exact browser-side verifier.`,
-    "Strategy: MRV picks the cell, the model ranks legal values, the exact runtime backtracks on contradiction.",
+    "Strategy: MRV picks the cell, the value model only steers ambiguous legal values when the margin is strong, and the exact runtime falls back or backtracks when it is not.",
     `Preview row 1: ${renderSudokuRow(initialBoard[0])}`,
   ].join("\n");
 
@@ -222,7 +222,10 @@ export function buildSudokuExecutorArtifacts(initialBoard, result, stepIndex, mo
     "  load_grid",
     "  select_mrv_cell",
     "  enumerate_legal_values",
-    "  model_rank_legal_values",
+    "  if_singleton_exact_place",
+    "  else value_score_legal_values",
+    "  if_confident_trust_model",
+    "  else beam_or_fallback",
     "  exact_place_or_backtrack",
     "  halt_when_full",
     "}",

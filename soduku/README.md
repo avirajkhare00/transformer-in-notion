@@ -197,6 +197,10 @@ node soduku/export_value_dataset.mjs --eval-puzzles ai-escargot
 The current structured-state run reached `96.35%` eval accuracy on `54,029`
 held-out `PLACE`-value samples from the same hard-set curriculum.
 
+At inference time the browser worker does not blindly follow that score order.
+It uses the top-1 confidence and top-vs-second margin to choose between greedy
+model ordering, a tiny top-2 prefix, or deterministic fallback order.
+
 ## Streaming the large CSV
 
 The external `soduku/train_data/train.csv` file is intentionally handled as a

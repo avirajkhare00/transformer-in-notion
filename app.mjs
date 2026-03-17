@@ -144,6 +144,7 @@ const sudokuModelState = {
   accuracy: null,
   valuePredictionCount: 0,
   valueAverageConfidence: null,
+  valueAverageMargin: null,
   valueAccuracy: null,
   tokensPerSecond: 0,
   elapsedMs: 0,
@@ -543,6 +544,7 @@ function resetSudokuModelState(status = "Guided model is idle.") {
   sudokuModelState.accuracy = null;
   sudokuModelState.valuePredictionCount = 0;
   sudokuModelState.valueAverageConfidence = null;
+  sudokuModelState.valueAverageMargin = null;
   sudokuModelState.valueAccuracy = null;
   sudokuModelState.tokensPerSecond = 0;
   sudokuModelState.elapsedMs = 0;
@@ -979,6 +981,9 @@ function updateSudokuModelMetrics(payload) {
   if (Number.isFinite(payload.valueAverageConfidence)) {
     sudokuModelState.valueAverageConfidence = payload.valueAverageConfidence;
   }
+  if (Number.isFinite(payload.valueAverageMargin)) {
+    sudokuModelState.valueAverageMargin = payload.valueAverageMargin;
+  }
   if (Number.isFinite(payload.valueAccuracy)) {
     sudokuModelState.valueAccuracy = payload.valueAccuracy;
   }
@@ -1010,7 +1015,7 @@ function handleSudokuModelMessage(runId, message) {
 
   if (data.type === "start") {
     updateSudokuModelMetrics(data);
-    sudokuModelState.status = `Reference solve ready. Guided branch ranking will compare against ${data.traceLength} exact events.`;
+    sudokuModelState.status = `Reference solve ready. Uncertainty-aware branch guidance will compare against ${data.traceLength} exact events.`;
     sudokuModelState.referenceTraceLength =
       data.referenceTraceLength ?? sudokuModelState.referenceTraceLength;
     sudokuModelState.referenceStats = data.referenceStats ?? sudokuModelState.referenceStats;
@@ -1018,7 +1023,7 @@ function handleSudokuModelMessage(runId, message) {
       sudokuState.board = cloneSudokuBoard(data.initialBoard);
       sudokuState.emphasis = null;
       sudokuState.log = [];
-      pushSudokuLog("Guided solve started. Streaming model-ranked branch decisions.");
+      pushSudokuLog("Guided solve started. Streaming uncertainty-aware branch decisions.");
     }
     renderSudoku();
     return;
@@ -1039,7 +1044,7 @@ function handleSudokuModelMessage(runId, message) {
     }
     sudokuModelState.status =
       data.branchCount
-        ? `Ranked ${data.branchCount} guided branch decisions.`
+        ? `Evaluated ${data.branchCount} guided branch decisions.`
         : sudokuModelState.status;
     renderSudoku();
     return;
@@ -1049,7 +1054,7 @@ function handleSudokuModelMessage(runId, message) {
     updateSudokuModelMetrics(data);
     sudokuModelState.isRunning = false;
     sudokuModelState.phase = "done";
-    sudokuModelState.status = `Guided solve finished after ${sudokuModelState.branchCount} ranked branch decisions at ${formatSudokuTokenRate(sudokuModelState.tokensPerSecond)}.`;
+    sudokuModelState.status = `Guided solve finished after ${sudokuModelState.branchCount} branch evaluations at ${formatSudokuTokenRate(sudokuModelState.tokensPerSecond)}.`;
     if (Array.isArray(data.solution)) {
       sudokuState.board = cloneSudokuBoard(data.solution);
       sudokuState.emphasis = null;
@@ -1381,19 +1386,29 @@ function renderSudokuModelStats() {
     },
     {
       label: "Output",
-      value: "ranked PLACE candidates",
+      value: "value-scored PLACE candidates",
     },
     {
       label: "Tokens",
       value: sudokuModelState.tokenCount || "—",
     },
     {
-      label: "Branch calls",
+      label: "Branch evals",
       value: sudokuModelState.branchCount || "—",
     },
     {
-      label: "Avg top-1 conf",
+      label: "Avg legal top-1",
       value: formatSudokuPercent(sudokuModelState.valueAverageConfidence),
+    },
+    {
+      label: "Avg legal gap",
+      value: formatSudokuPercent(sudokuModelState.valueAverageMargin),
+    },
+    {
+      label: "Greedy/beam/fallback",
+      value: sudokuModelState.guidedStats
+        ? `${sudokuModelState.guidedStats.guidedGreedyDecisions ?? 0} / ${sudokuModelState.guidedStats.guidedBeamDecisions ?? 0} / ${sudokuModelState.guidedStats.guidedFallbackDecisions ?? 0}`
+        : "—",
     },
     {
       label: "tok/s",
@@ -1470,8 +1485,8 @@ function renderSudokuFlow() {
       detail: sudokuModelState.isRunning
         ? sudokuModelState.status
         : sudokuModelState.branchCount
-          ? `${formatSudokuTokenRate(sudokuModelState.tokensPerSecond)} · ${sudokuModelState.branchCount} ranked branch calls`
-          : `${getSudokuModelChoice(sudokuModelState.selectedModelId).label} selected · ranks legal PLACE values at ambiguous branch points`,
+          ? `${formatSudokuTokenRate(sudokuModelState.tokensPerSecond)} · ${sudokuModelState.branchCount} branch evaluations`
+          : `${getSudokuModelChoice(sudokuModelState.selectedModelId).label} selected · scores ambiguous legal PLACE values and falls back when unsure`,
       active: sudokuModelState.isRunning,
     },
     {

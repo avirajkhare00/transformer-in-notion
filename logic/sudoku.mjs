@@ -171,6 +171,64 @@ function normalizeGuidedCandidateOrder(candidates, rankedCandidates) {
   return ordered;
 }
 
+function resolveGuidedCandidatePlan(candidates, rankedResult) {
+  const heuristicOrder = [...candidates];
+
+  if (Array.isArray(rankedResult)) {
+    return {
+      strategy: "greedy",
+      orderedCandidates: normalizeGuidedCandidateOrder(candidates, rankedResult),
+    };
+  }
+
+  const rankedCandidates = Array.isArray(rankedResult?.orderedCandidates)
+    ? rankedResult.orderedCandidates
+    : [];
+
+  if (rankedCandidates.length === 0 || rankedResult?.strategy === "fallback") {
+    return {
+      ...(rankedResult ?? {}),
+      strategy: "fallback",
+      orderedCandidates: heuristicOrder,
+    };
+  }
+
+  const modelOrder = normalizeGuidedCandidateOrder(candidates, rankedCandidates);
+  if (rankedResult?.strategy === "beam" || rankedResult?.strategy === "beam-2") {
+    const requestedBeamWidth = Number.isFinite(rankedResult?.beamWidth)
+      ? Math.trunc(rankedResult.beamWidth)
+      : 2;
+    const beamWidth = Math.max(1, Math.min(candidates.length, requestedBeamWidth));
+    const trustedPrefix = modelOrder.slice(0, beamWidth);
+    const trusted = new Set(trustedPrefix);
+    const fallbackSuffix = heuristicOrder.filter((value) => !trusted.has(value));
+    return {
+      ...(rankedResult ?? {}),
+      strategy: "beam-2",
+      orderedCandidates: [...trustedPrefix, ...fallbackSuffix],
+      beamWidth,
+    };
+  }
+
+  return {
+    ...(rankedResult ?? {}),
+    strategy: "greedy",
+    orderedCandidates: modelOrder,
+  };
+}
+
+function countGuidanceDecision(stats, strategy) {
+  if (strategy === "beam-2" || strategy === "beam") {
+    stats.guidedBeamDecisions += 1;
+    return;
+  }
+  if (strategy === "fallback") {
+    stats.guidedFallbackDecisions += 1;
+    return;
+  }
+  stats.guidedGreedyDecisions += 1;
+}
+
 function pushHistoryOp(historyOps, op) {
   historyOps.push(op);
   if (historyOps.length > 64) {
@@ -272,6 +330,10 @@ export async function solveSudokuWithGuidance(startBoard, options = {}) {
     chooserCalls: 0,
     chooserCellScans: 0,
     maxDepth: 0,
+    guidedModelCalls: 0,
+    guidedGreedyDecisions: 0,
+    guidedBeamDecisions: 0,
+    guidedFallbackDecisions: 0,
   };
   const historyOps = [];
   const onEvent =
@@ -315,19 +377,16 @@ export async function solveSudokuWithGuidance(startBoard, options = {}) {
       typeof options.rankCandidates === "function" &&
       next.candidates.length > 1
     ) {
+      stats.guidedModelCalls += 1;
       const rankedResult = await options.rankCandidates({
         board,
         focus,
         historyOps: [...historyOps],
         strategy,
       });
-      const rankedCandidates = Array.isArray(rankedResult)
-        ? rankedResult
-        : rankedResult?.orderedCandidates;
-      candidateOrder = normalizeGuidedCandidateOrder(
-        next.candidates,
-        rankedCandidates
-      );
+      const candidatePlan = resolveGuidedCandidatePlan(next.candidates, rankedResult);
+      candidateOrder = candidatePlan.orderedCandidates;
+      countGuidanceDecision(stats, candidatePlan.strategy);
     }
 
     for (const value of candidateOrder) {

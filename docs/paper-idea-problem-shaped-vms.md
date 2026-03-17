@@ -180,6 +180,12 @@ The model should spend its capacity on real uncertainty: branch selection,
 ordering, prioritization, or value estimation over legal continuations. Hard
 constraints should remain in code.
 
+That also means the runtime should not blindly trust the learned score at every
+ambiguous node. If the best legal continuation has only a weak margin over the
+runner-up, the runtime should fall back to a fixed heuristic order or a tiny
+beam rather than converting model uncertainty into catastrophic branch
+misordering.
+
 ### 5.5 Make search explicit when search is real
 
 If the task genuinely backtracks, the VM should make that visible with explicit
@@ -218,6 +224,11 @@ The key point is that the model-guided Sudoku path is not framed as a pure
 model-only solver. It is framed as **model-guided exact search**: the runtime
 still owns candidate generation, legality, contradictions, and backtracking,
 while the model ranks or scores ambiguous decisions.
+
+In other words, the model is a heuristic oracle with uncertainty, not the
+executor. A strong value margin can justify greedy ordering, a middling margin
+can justify trying only a tiny top-k prefix first, and low-confidence states
+should fall back to deterministic runtime order.
 
 Recent browser runs make the sharper state-evaluation claim more concrete. On
 the current hard preset `Forum hardest 1106 · r365`, the shipped imitation

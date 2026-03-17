@@ -58,7 +58,7 @@ The repo currently centers on two browser-local tasks:
   Exact 9x9 Sudoku solve with:
   - exact browser-side runtime
   - deterministic backtracking
-  - local guided branch ranking with `Auto`, `Transformer`, `Transformer (Regret)`, or `GNN` selection
+  - local guided branch ranking with `Auto`, `Transformer`, `Transformer (Regret)`, `Transformer (Hard)`, or `GNN` selection
   - visible trace and model stats
 
 - [weiqi/index.html](/Users/avirajkhare/hack2/transformers/transformer-in-notion/weiqi/index.html)

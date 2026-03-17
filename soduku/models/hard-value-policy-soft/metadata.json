@@ -1,0 +1,42 @@
+{
+  "sampleCount": 18025,
+  "trainPuzzleIds": [
+    "inkala-2012",
+    "benchmark-28",
+    "benchmark-49"
+  ],
+  "evalPuzzleIds": [
+    "ai-escargot"
+  ],
+  "limitPerPuzzle": 20000,
+  "historyWindow": 8,
+  "format": "structured-state-v1",
+  "objective": "branch-cost",
+  "targetEncoding": "soft-branch-cost",
+  "trainCount": 18003,
+  "evalCount": 22,
+  "accuracy": 0.5909090909090909,
+  "train_loss": 0.6916616712220144,
+  "labels": [
+    "1",
+    "2",
+    "3",
+    "4",
+    "5",
+    "6",
+    "7",
+    "8",
+    "9"
+  ],
+  "inputNames": [
+    "board_tokens",
+    "focus_row",
+    "focus_col",
+    "candidate_mask",
+    "history_ops",
+    "filled_count",
+    "search_depth"
+  ],
+  "sequenceLength": 103,
+  "modelKind": "structured-sudoku-transformer"
+}

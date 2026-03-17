@@ -63,21 +63,36 @@ const SUDOKU_MODEL_CHOICES = Object.freeze({
     label: "Auto",
     engineLabel: "local value auto (GNN -> transformer)",
     flowTitle: "Local model",
+    meaning:
+      "Tries the local GNN first, then falls back to transformer artifacts. Use this when you want the page to pick the first available local policy.",
   },
   transformer: {
     label: "Transformer",
     engineLabel: "local value transformer",
     flowTitle: "Local transformer",
+    meaning:
+      "Shipped imitation transformer. It mostly learns the reference solver's preferred value order, so it often matches the exact search trace.",
   },
   "transformer-regret": {
     label: "Transformer (Regret)",
     engineLabel: "local regret transformer",
     flowTitle: "Local regret transformer",
+    meaning:
+      "Broader sampled branch-cost transformer. It is trained on soft regret targets to reduce future search cost instead of just imitating the teacher.",
+  },
+  "transformer-hard": {
+    label: "Transformer (Hard)",
+    engineLabel: "local hard-set transformer",
+    flowTitle: "Local hard-set transformer",
+    meaning:
+      "Curated hard-set branch-cost transformer. It is trained on the small hard benchmark set, so it can be strong on those puzzles but less general.",
   },
   gnn: {
     label: "GNN",
     engineLabel: "local value gnn",
     flowTitle: "Local GNN",
+    meaning:
+      "Graph-style value model over the same structured Sudoku state. It still only ranks legal values; the exact runtime keeps legality and backtracking.",
   },
 });
 
@@ -172,6 +187,7 @@ const refs = {
   sudokuModelSelect: document.querySelector("#sudoku-model-select"),
   sudokuModelRun: document.querySelector("#sudoku-model-run"),
   sudokuModelStatus: document.querySelector("#sudoku-model-status"),
+  sudokuModelMeaning: document.querySelector("#sudoku-model-meaning"),
   sudokuModelStats: document.querySelector("#sudoku-model-stats"),
   sudokuFlow: document.querySelector("#sudoku-flow"),
   tttCells: [],
@@ -407,6 +423,12 @@ function getSudokuModelFlowTitle() {
   return getSudokuModelChoice(sudokuModelState.selectedModelId).flowTitle;
 }
 
+function getSudokuModelMeaning() {
+  const activeModelId = sudokuModelState.loadedModelId ?? sudokuModelState.selectedModelId;
+  const choice = getSudokuModelChoice(activeModelId);
+  return `${choice.meaning} All modes only rank legal PLACE candidates after exact MRV selection.`;
+}
+
 function formatSudokuBacktrackComparison(guidedBacktracks, referenceBacktracks) {
   if (
     !Number.isFinite(guidedBacktracks) ||
@@ -614,6 +636,7 @@ function onSudokuModelSelectionChange() {
   sudokuModelState.selectedModelId =
     nextModelId === "transformer" ||
     nextModelId === "transformer-regret" ||
+    nextModelId === "transformer-hard" ||
     nextModelId === "gnn"
       ? nextModelId
       : "auto";
@@ -1339,6 +1362,9 @@ function renderSudokuStats() {
 
 function renderSudokuModelStats() {
   refs.sudokuModelStatus.textContent = sudokuModelState.status;
+  if (refs.sudokuModelMeaning) {
+    refs.sudokuModelMeaning.textContent = getSudokuModelMeaning();
+  }
   refs.sudokuModelSelect.value = sudokuModelState.selectedModelId;
   refs.sudokuModelSelect.disabled = sudokuModelState.isRunning;
   refs.sudokuModelRun.disabled =

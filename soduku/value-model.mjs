@@ -58,6 +58,17 @@ const MODEL_REGISTRY = Object.freeze({
       ),
     },
   ],
+  "transformer-hard": [
+    {
+      modelId: "transformer-hard",
+      modelLabel: "local hard-set transformer",
+      modelArtifactId: "hard-value-policy-soft",
+      modelUrl: new URL(
+        "./models/hard-value-policy-soft/onnx/model_quantized.onnx",
+        import.meta.url
+      ),
+    },
+  ],
   gnn: [
     {
       modelId: "gnn",

@@ -53,12 +53,14 @@ function describeSudokuModelArtifacts(modelInfo = {}) {
   const selectedModelId =
     modelInfo.selectedModelId === "transformer" ||
     modelInfo.selectedModelId === "transformer-regret" ||
+    modelInfo.selectedModelId === "transformer-hard" ||
     modelInfo.selectedModelId === "gnn"
       ? modelInfo.selectedModelId
       : "auto";
   const loadedModelId =
     modelInfo.loadedModelId === "transformer" ||
     modelInfo.loadedModelId === "transformer-regret" ||
+    modelInfo.loadedModelId === "transformer-hard" ||
     modelInfo.loadedModelId === "gnn"
       ? modelInfo.loadedModelId
       : null;
@@ -78,6 +80,8 @@ function describeSudokuModelArtifacts(modelInfo = {}) {
       ? "local value gnn"
       : activeModelId === "transformer-regret"
         ? "local regret transformer"
+      : activeModelId === "transformer-hard"
+        ? "local hard-set transformer"
       : activeModelId === "transformer"
         ? "local value transformer"
         : "local value model");
@@ -87,6 +91,8 @@ function describeSudokuModelArtifacts(modelInfo = {}) {
       ? "gnn + verifier"
       : activeModelId === "transformer-regret"
         ? "regret transformer + verifier"
+      : activeModelId === "transformer-hard"
+        ? "hard transformer + verifier"
       : activeModelId === "transformer"
         ? "transformer + verifier"
         : "model + verifier";
@@ -96,6 +102,8 @@ function describeSudokuModelArtifacts(modelInfo = {}) {
       ? "structured ONNX GNN policy + exact JS/WASM runtime"
       : activeModelId === "transformer-regret"
         ? "structured ONNX regret transformer policy + exact JS/WASM runtime"
+      : activeModelId === "transformer-hard"
+        ? "structured ONNX hard-set transformer policy + exact JS/WASM runtime"
       : activeModelId === "transformer"
         ? "structured ONNX transformer policy + exact JS/WASM runtime"
         : "structured ONNX value policy + exact JS/WASM runtime";
@@ -105,6 +113,8 @@ function describeSudokuModelArtifacts(modelInfo = {}) {
     artifact = "soduku/models/extreme-value-gnn or hard-value-gnn";
   } else if (selectedModelId === "transformer-regret") {
     artifact = "soduku/models/extreme-value-regret-s64-r80-sharp12";
+  } else if (selectedModelId === "transformer-hard") {
+    artifact = "soduku/models/hard-value-policy-soft";
   } else if (selectedModelId === "transformer") {
     artifact = "soduku/models/extreme-value or hard-value-structured";
   }
@@ -125,6 +135,8 @@ function describeSudokuModelArtifacts(modelInfo = {}) {
         ? "local value gnn"
         : selectedModelId === "transformer-regret"
           ? "local regret transformer"
+        : selectedModelId === "transformer-hard"
+          ? "local hard-set transformer"
         : selectedModelId === "transformer"
           ? "local value transformer"
           : "local value model",

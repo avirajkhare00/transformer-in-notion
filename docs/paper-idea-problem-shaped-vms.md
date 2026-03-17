@@ -219,6 +219,16 @@ model-only solver. It is framed as **model-guided exact search**: the runtime
 still owns candidate generation, legality, contradictions, and backtracking,
 while the model ranks or scores ambiguous decisions.
 
+Recent browser runs make the sharper state-evaluation claim more concrete. On
+the current hard preset `Forum hardest 1106 · r365`, the shipped imitation
+transformer required 7,523 ranked branch decisions and 86,376 guided
+backtracks, while the regret-trained transformer required 5,133 branch
+decisions and 57,057 backtracks on the same exact runtime, cutting wall time
+from 96.99 seconds to 64.94 seconds. The legality surface was unchanged; the
+only thing that moved was branch ordering. That is exactly the behavior this
+note wants from the learned component: not free-running next-op generation, but
+better value estimates over exact PSVM states.
+
 That is exactly the pattern this note argues for.
 
 ### 6.2 Invoice calculation
@@ -258,6 +268,8 @@ The codebase already supports these claims:
   one domain
 - hybrid execution, where the model helps but the runtime remains authoritative,
   is a real engineering pattern rather than only an idea
+- a regret-trained value model can sometimes materially reduce exact Sudoku
+  search work relative to an imitation-trained transformer on the same runtime
 
 ### Not supported yet
 
@@ -265,6 +277,7 @@ The codebase does **not** yet justify the stronger claims below:
 
 - that PSVMs already outperform strong baselines quantitatively
 - that a student model can replace the teacher runtime end to end
+- that the current learned policy wins consistently across puzzle regimes
 - that the approach scales cleanly from narrow demos to broad arbitrary program
   execution
 - that "compile arbitrary C into weights" is the immediate right target for

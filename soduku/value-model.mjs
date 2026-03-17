@@ -47,6 +47,17 @@ const MODEL_REGISTRY = Object.freeze({
       modelUrl: new URL("./models/hard-value-structured/onnx/model_quantized.onnx", import.meta.url),
     },
   ],
+  "transformer-regret": [
+    {
+      modelId: "transformer-regret",
+      modelLabel: "local regret transformer",
+      modelArtifactId: "extreme-value-regret-s64-r80-sharp12",
+      modelUrl: new URL(
+        "./models/extreme-value-regret-s64-r80-sharp12/onnx/model_quantized.onnx",
+        import.meta.url
+      ),
+    },
+  ],
   gnn: [
     {
       modelId: "gnn",

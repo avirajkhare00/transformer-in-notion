@@ -69,6 +69,11 @@ const SUDOKU_MODEL_CHOICES = Object.freeze({
     engineLabel: "local value transformer",
     flowTitle: "Local transformer",
   },
+  "transformer-regret": {
+    label: "Transformer (Regret)",
+    engineLabel: "local regret transformer",
+    flowTitle: "Local regret transformer",
+  },
   gnn: {
     label: "GNN",
     engineLabel: "local value gnn",
@@ -607,7 +612,11 @@ function onSudokuLoadClick() {
 function onSudokuModelSelectionChange() {
   const nextModelId = refs.sudokuModelSelect.value;
   sudokuModelState.selectedModelId =
-    nextModelId === "transformer" || nextModelId === "gnn" ? nextModelId : "auto";
+    nextModelId === "transformer" ||
+    nextModelId === "transformer-regret" ||
+    nextModelId === "gnn"
+      ? nextModelId
+      : "auto";
 
   if (sudokuModelState.isRunning) {
     return;

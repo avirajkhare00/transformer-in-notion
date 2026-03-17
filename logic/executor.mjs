@@ -51,11 +51,15 @@ function formatSudokuToken(event, index) {
 
 function describeSudokuModelArtifacts(modelInfo = {}) {
   const selectedModelId =
-    modelInfo.selectedModelId === "transformer" || modelInfo.selectedModelId === "gnn"
+    modelInfo.selectedModelId === "transformer" ||
+    modelInfo.selectedModelId === "transformer-regret" ||
+    modelInfo.selectedModelId === "gnn"
       ? modelInfo.selectedModelId
       : "auto";
   const loadedModelId =
-    modelInfo.loadedModelId === "transformer" || modelInfo.loadedModelId === "gnn"
+    modelInfo.loadedModelId === "transformer" ||
+    modelInfo.loadedModelId === "transformer-regret" ||
+    modelInfo.loadedModelId === "gnn"
       ? modelInfo.loadedModelId
       : null;
   const loadedModelLabel =
@@ -72,6 +76,8 @@ function describeSudokuModelArtifacts(modelInfo = {}) {
     loadedModelLabel ||
     (activeModelId === "gnn"
       ? "local value gnn"
+      : activeModelId === "transformer-regret"
+        ? "local regret transformer"
       : activeModelId === "transformer"
         ? "local value transformer"
         : "local value model");
@@ -79,6 +85,8 @@ function describeSudokuModelArtifacts(modelInfo = {}) {
   const badge =
     activeModelId === "gnn"
       ? "gnn + verifier"
+      : activeModelId === "transformer-regret"
+        ? "regret transformer + verifier"
       : activeModelId === "transformer"
         ? "transformer + verifier"
         : "model + verifier";
@@ -86,6 +94,8 @@ function describeSudokuModelArtifacts(modelInfo = {}) {
   const runtime =
     activeModelId === "gnn"
       ? "structured ONNX GNN policy + exact JS/WASM runtime"
+      : activeModelId === "transformer-regret"
+        ? "structured ONNX regret transformer policy + exact JS/WASM runtime"
       : activeModelId === "transformer"
         ? "structured ONNX transformer policy + exact JS/WASM runtime"
         : "structured ONNX value policy + exact JS/WASM runtime";
@@ -93,6 +103,8 @@ function describeSudokuModelArtifacts(modelInfo = {}) {
   let artifact = "soduku/models/extreme-value-gnn or extreme-value";
   if (selectedModelId === "gnn") {
     artifact = "soduku/models/extreme-value-gnn or hard-value-gnn";
+  } else if (selectedModelId === "transformer-regret") {
+    artifact = "soduku/models/extreme-value-regret-s64-r80-sharp12";
   } else if (selectedModelId === "transformer") {
     artifact = "soduku/models/extreme-value or hard-value-structured";
   }
@@ -111,6 +123,8 @@ function describeSudokuModelArtifacts(modelInfo = {}) {
     loadingLabel:
       selectedModelId === "gnn"
         ? "local value gnn"
+        : selectedModelId === "transformer-regret"
+          ? "local regret transformer"
         : selectedModelId === "transformer"
           ? "local value transformer"
           : "local value model",

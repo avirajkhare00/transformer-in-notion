@@ -76,7 +76,7 @@ UNDO / backtrack     exact
 HALT                 exact
 ```
 
-In the browser UI, that model layer can now be selected explicitly as `Auto`, `Transformer`, or `GNN`.
+In the browser UI, that model layer can now be selected explicitly as `Auto`, `Transformer`, `Transformer (Regret)`, or `GNN`.
 
 ## What the model sees
 

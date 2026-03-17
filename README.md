@@ -58,7 +58,7 @@ The repo currently centers on two browser-local tasks:
   Exact 9x9 Sudoku solve with:
   - exact browser-side runtime
   - deterministic backtracking
-  - local guided branch ranking with `Auto`, `Transformer`, or `GNN` selection
+  - local guided branch ranking with `Auto`, `Transformer`, `Transformer (Regret)`, or `GNN` selection
   - visible trace and model stats
 
 - [weiqi/index.html](/Users/avirajkhare/hack2/transformers/transformer-in-notion/weiqi/index.html)
@@ -184,7 +184,7 @@ This pipeline does:
 - [app.mjs](/Users/avirajkhare/hack2/transformers/transformer-in-notion/app.mjs) - UI wiring and live board/model updates
 - [logic/sudoku.mjs](/Users/avirajkhare/hack2/transformers/transformer-in-notion/logic/sudoku.mjs) - exact Sudoku runtime, trace generation, guided solve path
 - [logic/executor.mjs](/Users/avirajkhare/hack2/transformers/transformer-in-notion/logic/executor.mjs) - prompt/program/tool-call artifact builder
-- [soduku/model-worker.mjs](/Users/avirajkhare/hack2/transformers/transformer-in-notion/soduku/model-worker.mjs) - guided model worker with explicit transformer/GNN selection
+- [soduku/model-worker.mjs](/Users/avirajkhare/hack2/transformers/transformer-in-notion/soduku/model-worker.mjs) - guided model worker with explicit transformer, regret-transformer, and GNN selection
 - [soduku/model.mjs](/Users/avirajkhare/hack2/transformers/transformer-in-notion/soduku/model.mjs) - structured op/value model loading
 - [soduku/value-model.mjs](/Users/avirajkhare/hack2/transformers/transformer-in-notion/soduku/value-model.mjs) - structured value-model loading and `Auto / Transformer / GNN` routing
 - [soduku/structured-onnx.mjs](/Users/avirajkhare/hack2/transformers/transformer-in-notion/soduku/structured-onnx.mjs) - ONNX Runtime setup for structured state tensors

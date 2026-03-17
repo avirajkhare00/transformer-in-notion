@@ -4,7 +4,7 @@ This repository explores a simple thesis:
 
 `code is the source of truth`
 
-For exact tasks, the runtime should own legality, state transitions, and backtracking. The model should learn the narrow decision surface on top of that runtime, not replace the runtime with a one-shot guess.
+For exact tasks, the runtime should own legality, state transitions, and backtracking. The model should learn the narrow decision surface on top of that runtime by evaluating ambiguous PSVM states, not replace the runtime with a one-shot guess.
 
 ## Core idea
 
@@ -20,18 +20,18 @@ or:
 
 we use:
 
-`task -> custom ops -> PSVM trace -> local model`
+`task -> custom ops -> exact PSVM state -> local model estimates branch value`
 
 In practice that means:
 
 1. Write or keep an exact reference runtime.
 2. Define the smallest sound op surface for the task.
-3. Export canonical traces from the runtime.
+3. Export canonical traces and state/decision records from the runtime.
 4. Encode structured state snapshots.
-5. Train a local structured policy model to predict the next op or argument.
+5. Train a local structured model to estimate branch value over PSVM states or rank legal arguments.
 6. Keep the exact runtime in the loop for verification and rollback.
 
-The model handles ambiguity. The code handles truth.
+The model handles ambiguity by scoring branches. The code handles truth.
 
 ## Why this approach
 
@@ -93,11 +93,11 @@ This repository explicitly treats code and runtime behavior as authoritative.
 - The solver defines what a legal step is.
 - The verifier defines whether a branch is valid.
 - The canonical trace comes from the runtime.
-- The model is trained against that trace.
+- The model is trained against exact state/decision records derived from that trace.
 
 So the meta-pattern is:
 
-`state -> model -> VM token -> exact runtime -> new state`
+`state -> model estimates branch value -> exact runtime -> new state`
 
 not:
 

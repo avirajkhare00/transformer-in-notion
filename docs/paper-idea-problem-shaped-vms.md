@@ -16,8 +16,9 @@ intermediate target: **problem-shaped virtual machines (PSVMs)**. A PSVM is the
 smallest executable substrate whose legal actions match the real state
 transitions of a task family. The exact runtime remains the source of truth: it
 defines legality, emits canonical traces, verifies proposed actions, and owns
-rollback or failure handling. The model learns only the ambiguous frontier of
-execution. This repository already contains several pieces of that stack,
+rollback or failure handling. The model learns only to evaluate the ambiguous
+frontier of execution. This repository already contains several pieces of that
+stack,
 including exact browser-local Sudoku runtimes, worker-driven trace streaming,
 structured model training paths, and a small invoice-calculation PSVM. The
 strongest current claim is not that the model can replace the runtime, but that
@@ -26,9 +27,10 @@ direct answer prediction or full machine emulation.
 
 ## One-Sentence Thesis
 
-For narrow exact tasks, the right target for a local transformer is usually not
-the final answer and not a full machine trace, but the smallest executable VM
-whose legal actions already match the task's true state transitions.
+For narrow exact tasks, the right target for a local model is usually not the
+final answer and not a full machine trace, but state evaluation over the
+smallest executable VM whose legal actions already match the task's true state
+transitions.
 
 ## 1. Motivation
 
@@ -128,22 +130,28 @@ machine traces.
 
 The intended execution loop is:
 
-`task instance -> PSVM state/program -> canonical trace -> model predicts next token -> exact runtime applies/verifies -> new state`
+`task instance -> exact PSVM state -> canonical state/decision record -> model evaluates legal branches -> exact runtime applies/verifies -> new state`
 
 The exact runtime remains authoritative throughout. The model proposes; the
 runtime decides.
 
 In the strongest form of the idea:
 
-1. an exact teacher runtime defines legal steps
-2. the teacher emits canonical traces
-3. a local model learns to predict the next trace token
+1. an exact teacher runtime defines legal states and steps
+2. the teacher emits canonical state/decision records
+3. a local model learns to estimate branch value over ambiguous PSVM states
 4. the runtime verifies or rejects student proposals
 5. the UI streams the trace and state changes in real time
 
 This is not "weights instead of code." It is a hybrid design in which the
-runtime owns truth and the model handles ambiguity, ranking, or next-step
-prediction within a narrow legal action surface.
+runtime owns truth and the model handles ambiguity, ranking, or state
+evaluation within a narrow legal action surface.
+
+Canonical traces still matter, but mainly as a serialization of exact states
+and decisions. The sharper thesis is not that the model should free-run the
+PSVM by imitating the next serialized op. The sharper thesis is that the model
+should evaluate or rank legal continuations over exact PSVM states while the
+runtime remains the executor and verifier.
 
 ## 5. PSVM Design Rules
 
@@ -169,8 +177,8 @@ teacher.
 ### 5.4 Separate rules from ambiguity
 
 The model should spend its capacity on real uncertainty: branch selection,
-ordering, prioritization, or token prediction. Hard constraints should remain in
-code.
+ordering, prioritization, or value estimation over legal continuations. Hard
+constraints should remain in code.
 
 ### 5.5 Make search explicit when search is real
 
@@ -279,6 +287,10 @@ The sharp claim is:
 both direct answer prediction and full-machine emulation: a problem-shaped VM
 whose instruction surface already matches the task's true legal transitions.**
 
+In the strongest form, the learned component over that VM should estimate state
+or branch value over exact PSVM states, not merely imitate the next serialized
+op.
+
 That claim is strong enough to be interesting and narrow enough to defend.
 
 ## 9. Experiments That Would Turn This Note into a Paper
@@ -292,7 +304,7 @@ For a domain such as Sudoku, compare:
 
 1. `state -> final answer`
 2. `state -> next domain action`
-3. `state -> next PSVM trace token`
+3. `state -> value/ranking over legal PSVM branches`
 4. `state -> next token of a broader generic VM`
 
 The same structure can be repeated for invoice-style deterministic tasks.
@@ -302,7 +314,8 @@ The same structure can be repeated for invoice-style deterministic tasks.
 The evaluation should emphasize exactness, not only loss:
 
 - exact final solve rate
-- exact step accuracy
+- average backtracks or downstream search cost
+- solve rate under a fixed compute budget
 - illegal action rate
 - contradiction or verifier-failure rate
 - average trace length

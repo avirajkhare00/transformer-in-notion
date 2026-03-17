@@ -78,7 +78,7 @@ executable substrate whose legal actions match the real state
 transitions of a task family. The exact runtime remains the source of
 truth: it defines legality, emits canonical traces, verifies proposed
 actions, and owns rollback or failure handling. The model learns only
-the ambiguous frontier of execution. This repository already contains
+to evaluate the ambiguous frontier of execution. This repository already contains
 several pieces of that stack, including exact browser-local Sudoku
 runtimes, worker-driven trace streaming, structured model training
 paths, and a small invoice-calculation PSVM. The strongest current claim
@@ -88,10 +88,10 @@ answer prediction or full machine emulation.
 
 \subsection{One-Sentence Thesis}\label{one-sentence-thesis}
 
-For narrow exact tasks, the right target for a local transformer is
-usually not the final answer and not a full machine trace, but the
-smallest executable VM whose legal actions already match the
-task\textquotesingle s true state transitions.
+For narrow exact tasks, the right target for a local model is usually
+not the final answer and not a full machine trace, but state
+evaluation over the smallest executable VM whose legal actions already
+match the task\textquotesingle s true state transitions.
 
 \subsection{1. Motivation}\label{1-motivation}
 
@@ -212,7 +212,7 @@ or full machine traces.
 
 The intended execution loop is:
 
-\texttt{task\ instance\ -\textgreater{}\ PSVM\ state/program\ -\textgreater{}\ canonical\ trace\ -\textgreater{}\ model\ predicts\ next\ token\ -\textgreater{}\ exact\ runtime\ applies/verifies\ -\textgreater{}\ new\ state}
+\texttt{task\ instance\ -\textgreater{}\ exact\ PSVM\ state\ -\textgreater{}\ canonical\ state/decision\ record\ -\textgreater{}\ model\ evaluates\ legal\ branches\ -\textgreater{}\ exact\ runtime\ applies/verifies\ -\textgreater{}\ new\ state}
 
 The exact runtime remains authoritative throughout. The model proposes;
 the runtime decides.
@@ -223,11 +223,12 @@ In the strongest form of the idea:
 \def\labelenumi{\arabic{enumi}.}
 \tightlist
 \item
-  an exact teacher runtime defines legal steps
+  an exact teacher runtime defines legal states and steps
 \item
-  the teacher emits canonical traces
+  the teacher emits canonical state/decision records
 \item
-  a local model learns to predict the next trace token
+  a local model learns to estimate branch value over ambiguous PSVM
+  states
 \item
   the runtime verifies or rejects student proposals
 \item
@@ -236,7 +237,14 @@ In the strongest form of the idea:
 
 This is not "weights instead of code." It is a hybrid design in which
 the runtime owns truth and the model handles ambiguity, ranking, or
-next-step prediction within a narrow legal action surface.
+state evaluation within a narrow legal action surface.
+
+Canonical traces still matter, but mainly as a serialization of exact
+states and decisions. The sharper thesis is not that the model should
+free-run the PSVM by imitating the next serialized op. The sharper
+thesis is that the model should evaluate or rank legal continuations
+over exact PSVM states while the runtime remains the executor and
+verifier.
 
 \subsection{5. PSVM Design Rules}\label{5-psvm-design-rules}
 
@@ -268,8 +276,8 @@ should be fixed by the teacher.
 ambiguity}\label{54-separate-rules-from-ambiguity}
 
 The model should spend its capacity on real uncertainty: branch
-selection, ordering, prioritization, or token prediction. Hard
-constraints should remain in code.
+selection, ordering, prioritization, or value estimation over legal
+continuations. Hard constraints should remain in code.
 
 \subsubsection{5.5 Make search explicit when search is
 real}\label{55-make-search-explicit-when-search-is-real}
@@ -429,6 +437,10 @@ representation than both direct answer prediction and full-machine
 emulation: a problem-shaped VM whose instruction surface already matches
 the task\textquotesingle s true legal transitions.}
 
+In the strongest form, the learned component over that VM should
+estimate state or branch value over exact PSVM states, not merely
+imitate the next serialized op.
+
 That claim is strong enough to be interesting and narrow enough to
 defend.
 
@@ -451,7 +463,7 @@ For a domain such as Sudoku, compare:
 \item
   \texttt{state\ -\textgreater{}\ next\ domain\ action}
 \item
-  \texttt{state\ -\textgreater{}\ next\ PSVM\ trace\ token}
+  \texttt{state\ -\textgreater{}\ value/ranking\ over\ legal\ PSVM\ branches}
 \item
   \texttt{state\ -\textgreater{}\ next\ token\ of\ a\ broader\ generic\ VM}
 \end{enumerate}
@@ -468,7 +480,9 @@ The evaluation should emphasize exactness, not only loss:
 \item
   exact final solve rate
 \item
-  exact step accuracy
+  average backtracks or downstream search cost
+\item
+  solve rate under a fixed compute budget
 \item
   illegal action rate
 \item

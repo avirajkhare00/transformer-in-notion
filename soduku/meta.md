@@ -3,15 +3,15 @@
 This directory follows one systems pattern:
 
 ```text
-task state -> model -> next VM token(s) -> exact runtime -> new state
+task state -> model -> state/action value estimate -> exact runtime -> new state
 ```
 
 For Sudoku, that becomes:
 
 ```text
 board + focus + candidates + short op history
--> local structured policy (transformer or GNN)
--> next PSVM decision
+-> local structured value model (transformer or GNN)
+-> ranked legal PLACE candidates / branch value estimate
 -> exact Sudoku runtime
 -> updated board / backtrack / halt
 ```
@@ -24,8 +24,8 @@ We:
 
 1. Define a small, task-shaped VM surface.
 2. Run an exact reference solver.
-3. Convert solving into a canonical trace.
-4. Train on structured state snapshots instead of raw text strings.
+3. Convert solving into canonical state/decision records.
+4. Train on structured state snapshots and branch-quality targets instead of raw text strings.
 5. Let the exact runtime keep legality and backtracking deterministic.
 
 This keeps the model focused on ambiguity, not on generic machine detail.
@@ -95,7 +95,7 @@ Current features include:
 So the mapping is:
 
 ```text
-Sudoku state -> next executable decision
+Sudoku PSVM state -> branch value estimate over legal candidates
 ```
 
 not:
@@ -123,18 +123,20 @@ Not every op has the same value.
 
 High-value supervision:
 
-- `PLACE`
-- `UNDO`
-- `FAIL`
+- ambiguous branch states with multiple legal candidates
+- large-regret candidate orderings
+- states where exact downstream search cost differs materially by choice
 
 Lower-value supervision:
 
+- deterministic single-candidate states
+- near-tie branches
 - bookkeeping-heavy focus/candidate steps
 
 So the long-term direction is:
 
-- weight decision-heavy states more
-- reduce repetitive bookkeeping states
+- weight large-regret branch states more
+- reduce weak-signal and repetitive bookkeeping states
 - keep the exact runtime as the verifier
 
 ## Repo thesis
@@ -149,7 +151,7 @@ For Sudoku specifically:
 
 ```text
 Sudoku rules -> problem-shaped VM
-ambiguous branch choice -> learned policy
+ambiguous PSVM state -> learned value estimator
 exact legality + backtracking -> deterministic runtime
 ```
 

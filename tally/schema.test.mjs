@@ -6,7 +6,7 @@ import {
   buildTallyVoucherSchema,
   listSupportedIndustries,
   listVoucherFamilies,
-} from "./tally_schema.mjs";
+} from "./schema.mjs";
 
 test("sales invoice schema exposes the shared Tally-style core fields", () => {
   const schema = buildTallyVoucherSchema("sales_invoice");

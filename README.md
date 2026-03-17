@@ -52,7 +52,7 @@ A PSVM keeps only the transitions that carry semantic weight for the task. That 
 
 ## Current focus
 
-The repo currently centers on two browser-local game tasks and two browser-local invoice/document tasks:
+The repo currently centers on two browser-local game tasks and two browser-local document tasks:
 
 - [sudoku.html](/Users/avirajkhare/hack2/transformers/transformer-in-notion/sudoku.html)
   Exact 9x9 Sudoku solve with:
@@ -72,8 +72,14 @@ The repo currently centers on two browser-local game tasks and two browser-local
   - a local transformer that scores `TOTAL` vs `NOT_TOTAL` candidates
   - explicit rejection of account-statement style documents with running balances
   - a browser demo at [receipt.html](/Users/avirajkhare/hack2/transformers/transformer-in-notion/receipt.html)
-  - a broader voucher extraction demo at [tally.html](/Users/avirajkhare/hack2/transformers/transformer-in-notion/tally.html)
-  - a Tally-style schema/runtime split for voucher families, field candidates, and structured output
+
+- [tally/README.md](/Users/avirajkhare/hack2/transformers/transformer-in-notion/tally/README.md)
+  Tally-style voucher extraction with:
+  - voucher-family classification and schema selection
+  - schema-aligned field candidate extraction from OCR/layout
+  - shared invoice fields plus industry extensions for pharma, medical, trading, and stockist flows
+  - deterministic-first PSVM emission of Tally-shaped records
+  - a browser demo at [tally.html](/Users/avirajkhare/hack2/transformers/transformer-in-notion/tally.html)
 
 The main Sudoku page is the current source of truth for the end-to-end architecture.
 
@@ -140,7 +146,7 @@ What is working now:
 - packed tensor-shard training path for structured Sudoku models
 - PSVM-style OCR receipt total extraction and candidate ranking under `invoice/`
 - synthetic OCR receipt dataset export and local total-selector training
-- Tally-style voucher-family classification and schema-aligned field extraction under `invoice/`
+- Tally-style voucher-family classification and schema-aligned field extraction under `tally/`
 - a browser demo for Tally-shaped OCR extraction at `tally.html`
 
 What is not claimed yet:
@@ -155,7 +161,7 @@ The invoice lane now follows the same repo thesis as Sudoku:
 
 `OCR text -> legal money candidates -> model ranks branches -> exact runtime emits total`
 
-That means the model is not asked to invent the receipt total end-to-end. It only scores legal candidates extracted by the runtime. See [invoice/README.md](/Users/avirajkhare/hack2/transformers/transformer-in-notion/invoice/README.md) for the dataset, trainer, and CLI flow.
+That means the model is not asked to invent the receipt total end-to-end. It only scores legal candidates extracted by the runtime.
 
 In short:
 
@@ -163,11 +169,21 @@ In short:
 - layman view: collect all amount-looking numbers, then pick the one that most looks like the final total
 - main limitation: this is invoice/receipt-shaped, not a general parser for arbitrary tables or account statements
 
-The first broader Tally-style extraction layer is now also in the repo:
+See [invoice/README.md](/Users/avirajkhare/hack2/transformers/transformer-in-notion/invoice/README.md) for the detailed runtime, training, and browser flow.
 
-- `invoice/tally_schema.mjs` defines voucher families, shared fields, and industry extensions
-- `invoice/tally_psvm.mjs` classifies voucher family and builds schema-aligned field candidates from noisy OCR/layout
-- `tally.html` provides a browser surface for testing voucher-family classification and emitted Tally-shaped records
+## Tally / Voucher Extraction
+
+The Tally lane follows a broader document-extraction PSVM:
+
+`OCR/layout -> voucher family -> schema -> legal field candidates -> exact runtime emits Tally-shaped record`
+
+That means the system is not trying to hallucinate a full accounting document from raw OCR text. It first narrows the document family, then only fills fields that the selected voucher schema allows. See [tally/README.md](/Users/avirajkhare/hack2/transformers/transformer-in-notion/tally/README.md) for the schema, browser demo, and current limitations.
+
+In short:
+
+- AI/ML view: constrained information extraction over voucher families and field candidates
+- layman view: detect the document type, look for the likely invoice fields, and fill a Tally-shaped record
+- main limitation: deterministic today, with partial table understanding and explicit rejection of unsupported statement-like documents
 
 ## Local development
 
@@ -226,11 +242,12 @@ This pipeline does:
 - [soduku/value-model.mjs](/Users/avirajkhare/hack2/transformers/transformer-in-notion/soduku/value-model.mjs) - structured value-model loading and `Auto / Transformer / GNN` routing
 - [soduku/structured-onnx.mjs](/Users/avirajkhare/hack2/transformers/transformer-in-notion/soduku/structured-onnx.mjs) - ONNX Runtime setup for structured state tensors
 - [invoice/psvm.mjs](/Users/avirajkhare/hack2/transformers/transformer-in-notion/invoice/psvm.mjs) - exact invoice arithmetic PSVM
-- [invoice/tally_schema.mjs](/Users/avirajkhare/hack2/transformers/transformer-in-notion/invoice/tally_schema.mjs) - voucher families, core shared fields, and industry extensions
-- [invoice/tally_psvm.mjs](/Users/avirajkhare/hack2/transformers/transformer-in-notion/invoice/tally_psvm.mjs) - voucher-family classifier and schema-aligned field extractor
+- [tally/README.md](/Users/avirajkhare/hack2/transformers/transformer-in-notion/tally/README.md) - Tally voucher extraction overview, browser flow, and limitations
+- [tally/schema.mjs](/Users/avirajkhare/hack2/transformers/transformer-in-notion/tally/schema.mjs) - voucher families, core shared fields, and industry extensions
+- [tally/psvm.mjs](/Users/avirajkhare/hack2/transformers/transformer-in-notion/tally/psvm.mjs) - voucher-family classifier and schema-aligned field extractor
 - [invoice/total_psvm.mjs](/Users/avirajkhare/hack2/transformers/transformer-in-notion/invoice/total_psvm.mjs) - exact OCR receipt total candidate extractor and teacher ranker
 - [tally.html](/Users/avirajkhare/hack2/transformers/transformer-in-notion/tally.html) - browser Tally extraction demo
-- [tally-app.mjs](/Users/avirajkhare/hack2/transformers/transformer-in-notion/tally-app.mjs) - browser UI for voucher-family and field-candidate inspection
+- [tally/app.mjs](/Users/avirajkhare/hack2/transformers/transformer-in-notion/tally/app.mjs) - browser UI for voucher-family and field-candidate inspection
 - [invoice/export_total_dataset.mjs](/Users/avirajkhare/hack2/transformers/transformer-in-notion/invoice/export_total_dataset.mjs) - synthetic OCR receipt dataset generator
 - [invoice/train_total_selector.py](/Users/avirajkhare/hack2/transformers/transformer-in-notion/invoice/train_total_selector.py) - local transformer trainer for `TOTAL` vs `NOT_TOTAL`
 - [scripts/predict_receipt_total.py](/Users/avirajkhare/hack2/transformers/transformer-in-notion/scripts/predict_receipt_total.py) - local inference over extracted receipt candidates

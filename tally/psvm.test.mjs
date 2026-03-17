@@ -5,7 +5,7 @@ import {
   buildTallyExtractionState,
   classifyTallyVoucherFamily,
   runTallyExtractionPsvm,
-} from "./tally_psvm.mjs";
+} from "./psvm.mjs";
 
 const PROFORMA_SAMPLE = `
 PROFORMA INVOICE

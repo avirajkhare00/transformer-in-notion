@@ -1,5 +1,5 @@
-import { TALLY_DEMO_PRESETS } from "./invoice/tally-demo-samples.mjs";
-import { TALLY_VOUCHER_FAMILIES, listSupportedIndustries } from "./invoice/tally_schema.mjs";
+import { TALLY_DEMO_PRESETS } from "./demo-samples.mjs";
+import { TALLY_VOUCHER_FAMILIES, listSupportedIndustries } from "./schema.mjs";
 
 const state = {
   worker: null,
@@ -37,7 +37,7 @@ const refs = {
 
 function getWorker() {
   if (!state.worker) {
-    state.worker = new Worker(new URL("./invoice/tally-worker.mjs", import.meta.url), {
+    state.worker = new Worker(new URL("./worker.mjs", import.meta.url), {
       type: "module",
     });
     state.worker.addEventListener("message", handleWorkerMessage);

@@ -1,7 +1,7 @@
-import { buildPlainTextReceiptSource, collapseWhitespace } from "./ocr_layout.mjs";
-import { parseReceiptText } from "./receipt.mjs";
-import { buildTallyVoucherSchema, TALLY_VOUCHER_FAMILIES } from "./tally_schema.mjs";
-import { extractReceiptAmountCandidates, rankReceiptTotalCandidates } from "./total_psvm.mjs";
+import { buildPlainTextReceiptSource, collapseWhitespace } from "../invoice/ocr_layout.mjs";
+import { parseReceiptText } from "../invoice/receipt.mjs";
+import { buildTallyVoucherSchema, TALLY_VOUCHER_FAMILIES } from "./schema.mjs";
+import { extractReceiptAmountCandidates, rankReceiptTotalCandidates } from "../invoice/total_psvm.mjs";
 
 const GSTIN_PATTERN = /\b\d{2}[A-Z]{5}\d{4}[A-Z][0-9A-Z]Z[0-9A-Z]\b/g;
 const GSTIN_VALUE_PATTERN = /\b\d{2}[A-Z]{5}\d{4}[A-Z][0-9A-Z]Z[0-9A-Z]\b/;

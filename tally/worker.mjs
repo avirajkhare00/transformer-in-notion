@@ -1,6 +1,6 @@
-import { parsePdftotextTsv } from "./ocr_layout.mjs";
-import { TALLY_VOUCHER_FAMILIES } from "./tally_schema.mjs";
-import { runTallyExtractionPsvm } from "./tally_psvm.mjs";
+import { parsePdftotextTsv } from "../invoice/ocr_layout.mjs";
+import { TALLY_VOUCHER_FAMILIES } from "./schema.mjs";
+import { runTallyExtractionPsvm } from "./psvm.mjs";
 
 const TSV_HEADER =
   "level\tpage_num\tpar_num\tblock_num\tline_num\tword_num\tleft\ttop\twidth\theight\tconf\ttext";

@@ -513,6 +513,12 @@ body.notion-embed-page::after {
   padding: 11px 14px;
 }
 
+.control-select {
+  flex: 1 1 180px;
+  min-width: 170px;
+  width: auto;
+}
+
 .field-textarea {
   min-height: 128px;
   padding: 12px 14px;

@@ -10,7 +10,7 @@ For Sudoku, that becomes:
 
 ```text
 board + focus + candidates + short op history
--> local transformer
+-> local structured policy (transformer or GNN)
 -> next PSVM decision
 -> exact Sudoku runtime
 -> updated board / backtrack / halt
@@ -75,6 +75,8 @@ PLACE                exact
 UNDO / backtrack     exact
 HALT                 exact
 ```
+
+In the browser UI, that model layer can now be selected explicitly as `Auto`, `Transformer`, or `GNN`.
 
 ## What the model sees
 

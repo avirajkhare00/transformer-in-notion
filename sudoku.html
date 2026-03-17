@@ -73,6 +73,15 @@
               <section class="mini-card">
                 <p class="mini-label">Model stats</p>
                 <div class="control-row control-row-compact">
+                  <select
+                    id="sudoku-model-select"
+                    class="field-input field-select control-select"
+                    aria-label="Sudoku model engine"
+                  >
+                    <option value="auto">Auto</option>
+                    <option value="transformer">Transformer</option>
+                    <option value="gnn">GNN</option>
+                  </select>
                   <button id="sudoku-model-run" class="button button-secondary" type="button">
                     Run guided model
                   </button>

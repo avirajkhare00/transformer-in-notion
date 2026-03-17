@@ -58,6 +58,23 @@ const SUDOKU_REPLAY_MODES = Object.freeze({
     statusVerb: "Fast replaying",
   },
 });
+const SUDOKU_MODEL_CHOICES = Object.freeze({
+  auto: {
+    label: "Auto",
+    engineLabel: "local value auto (GNN -> transformer)",
+    flowTitle: "Local model",
+  },
+  transformer: {
+    label: "Transformer",
+    engineLabel: "local value transformer",
+    flowTitle: "Local transformer",
+  },
+  gnn: {
+    label: "GNN",
+    engineLabel: "local value gnn",
+    flowTitle: "Local GNN",
+  },
+});
 
 const tttState = {
   board: createTicTacToeBoard(),
@@ -114,6 +131,10 @@ const sudokuModelState = {
   referenceTraceLength: 0,
   guidedStats: null,
   referenceStats: null,
+  selectedModelId: "auto",
+  loadedModelId: null,
+  loadedModelLabel: "",
+  loadedModelArtifactId: "",
   runId: 0,
 };
 
@@ -143,6 +164,7 @@ const refs = {
   sudokuPreset: document.querySelector("#sudoku-preset"),
   sudokuInput: document.querySelector("#sudoku-input"),
   sudokuLoad: document.querySelector("#sudoku-load"),
+  sudokuModelSelect: document.querySelector("#sudoku-model-select"),
   sudokuModelRun: document.querySelector("#sudoku-model-run"),
   sudokuModelStatus: document.querySelector("#sudoku-model-status"),
   sudokuModelStats: document.querySelector("#sudoku-model-stats"),
@@ -193,6 +215,7 @@ function hasSudokuUI() {
       refs.sudokuPreset &&
       refs.sudokuInput &&
       refs.sudokuLoad &&
+      refs.sudokuModelSelect &&
       refs.sudokuModelRun &&
       refs.sudokuModelStatus &&
       refs.sudokuModelStats &&
@@ -236,6 +259,7 @@ function bindSudokuEvents() {
   refs.sudokuAnimate.addEventListener("click", () => animateSudoku());
   refs.sudokuFast.addEventListener("click", () => animateSudoku("fast"));
   refs.sudokuSolve.addEventListener("click", () => solveSudokuInstantly());
+  refs.sudokuModelSelect.addEventListener("change", onSudokuModelSelectionChange);
   refs.sudokuModelRun.addEventListener("click", () => runSudokuModelTrace());
   refs.sudokuPreset.addEventListener("change", onSudokuPresetChange);
   refs.sudokuLoad.addEventListener("click", onSudokuLoadClick);
@@ -351,6 +375,31 @@ function formatSudokuTokenRate(value) {
     return "—";
   }
   return `${Math.round(value)} tok/s`;
+}
+
+function getSudokuModelChoice(modelId) {
+  return SUDOKU_MODEL_CHOICES[modelId] ?? SUDOKU_MODEL_CHOICES.auto;
+}
+
+function getSudokuIdleModelStatus() {
+  return `Guided model is idle. ${getSudokuModelChoice(sudokuModelState.selectedModelId).label} selected.`;
+}
+
+function getSudokuEngineValue() {
+  if (sudokuModelState.loadedModelLabel) {
+    const artifactSuffix = sudokuModelState.loadedModelArtifactId
+      ? ` (${sudokuModelState.loadedModelArtifactId})`
+      : "";
+    return `${sudokuModelState.loadedModelLabel}${artifactSuffix} + verifier`;
+  }
+  return `${getSudokuModelChoice(sudokuModelState.selectedModelId).engineLabel} + verifier`;
+}
+
+function getSudokuModelFlowTitle() {
+  if (sudokuModelState.loadedModelId) {
+    return getSudokuModelChoice(sudokuModelState.loadedModelId).flowTitle;
+  }
+  return getSudokuModelChoice(sudokuModelState.selectedModelId).flowTitle;
 }
 
 function formatSudokuBacktrackComparison(guidedBacktracks, referenceBacktracks) {
@@ -474,6 +523,9 @@ function resetSudokuModelState(status = "Guided model is idle.") {
   sudokuModelState.referenceTraceLength = 0;
   sudokuModelState.guidedStats = null;
   sudokuModelState.referenceStats = null;
+  sudokuModelState.loadedModelId = null;
+  sudokuModelState.loadedModelLabel = "";
+  sudokuModelState.loadedModelArtifactId = "";
 }
 
 function syncSudokuInput(puzzle) {
@@ -550,6 +602,19 @@ function onSudokuLoadClick() {
     refs.sudokuInput.value,
     preset ? `Loaded preset: ${preset.label}.` : "Loaded custom puzzle."
   );
+}
+
+function onSudokuModelSelectionChange() {
+  const nextModelId = refs.sudokuModelSelect.value;
+  sudokuModelState.selectedModelId =
+    nextModelId === "transformer" || nextModelId === "gnn" ? nextModelId : "auto";
+
+  if (sudokuModelState.isRunning) {
+    return;
+  }
+
+  resetSudokuModelState(getSudokuIdleModelStatus());
+  renderSudoku();
 }
 
 function onTicTacToeCellClick(event) {
@@ -756,7 +821,7 @@ async function resetSudoku() {
   const requestId = ++sudokuState.requestId;
   stopSudokuAnimation();
   stopSudokuSolveClock();
-  resetSudokuModelState("Guided model is idle.");
+  resetSudokuModelState(getSudokuIdleModelStatus());
   sudokuState.givenMask = buildGivenMask(sudokuState.initialBoard);
   sudokuState.board = cloneSudokuBoard(sudokuState.initialBoard);
   sudokuState.result = null;
@@ -849,6 +914,18 @@ async function queueSudokuDeterministicBaseline(requestId) {
 }
 
 function updateSudokuModelMetrics(payload) {
+  if (typeof payload.selectedModelId === "string" && payload.selectedModelId) {
+    sudokuModelState.selectedModelId = payload.selectedModelId;
+  }
+  if (typeof payload.modelId === "string" && payload.modelId) {
+    sudokuModelState.loadedModelId = payload.modelId;
+  }
+  if (typeof payload.modelLabel === "string" && payload.modelLabel) {
+    sudokuModelState.loadedModelLabel = payload.modelLabel;
+  }
+  if (typeof payload.modelArtifactId === "string" && payload.modelArtifactId) {
+    sudokuModelState.loadedModelArtifactId = payload.modelArtifactId;
+  }
   if (Number.isFinite(payload.tokenCount)) {
     sudokuModelState.tokenCount = payload.tokenCount;
   }
@@ -900,6 +977,7 @@ function handleSudokuModelMessage(runId, message) {
   }
 
   if (data.type === "start") {
+    updateSudokuModelMetrics(data);
     sudokuModelState.status = `Reference solve ready. Guided branch ranking will compare against ${data.traceLength} exact events.`;
     sudokuModelState.referenceTraceLength =
       data.referenceTraceLength ?? sudokuModelState.referenceTraceLength;
@@ -915,6 +993,7 @@ function handleSudokuModelMessage(runId, message) {
   }
 
   if (data.type === "progress") {
+    updateSudokuModelMetrics(data);
     sudokuModelState.phase = data.phase ?? sudokuModelState.phase;
     sudokuModelState.status = data.message ?? "Running local guided solve.";
     renderSudoku();
@@ -969,7 +1048,9 @@ function runSudokuModelTrace() {
     return;
   }
 
-  resetSudokuModelState("Warming local guided model.");
+  resetSudokuModelState(
+    `Warming ${getSudokuModelChoice(sudokuModelState.selectedModelId).label} guided model.`
+  );
   sudokuModelState.isRunning = true;
   sudokuModelState.phase = "warm-models";
   sudokuModelState.runId += 1;
@@ -996,6 +1077,7 @@ function runSudokuModelTrace() {
   worker.postMessage({
     type: "run",
     puzzle: sudokuState.puzzle,
+    modelId: sudokuModelState.selectedModelId,
   });
   renderSudoku();
 }
@@ -1248,11 +1330,19 @@ function renderSudokuStats() {
 
 function renderSudokuModelStats() {
   refs.sudokuModelStatus.textContent = sudokuModelState.status;
+  refs.sudokuModelSelect.value = sudokuModelState.selectedModelId;
+  refs.sudokuModelSelect.disabled = sudokuModelState.isRunning;
+  refs.sudokuModelRun.disabled =
+    sudokuState.isLoading || !sudokuState.result || sudokuModelState.isRunning;
 
   const items = [
     {
       label: "Engine",
-      value: "local value transformer + verifier",
+      value: getSudokuEngineValue(),
+    },
+    {
+      label: "Mode",
+      value: getSudokuModelChoice(sudokuModelState.selectedModelId).label,
     },
     {
       label: "Output",
@@ -1340,13 +1430,13 @@ function renderSudokuFlow() {
       active: sudokuState.isLoading,
     },
     {
-      title: "Local transformer",
+      title: getSudokuModelFlowTitle(),
       badge: sudokuModelState.isRunning ? "active" : "model",
       detail: sudokuModelState.isRunning
         ? sudokuModelState.status
         : sudokuModelState.branchCount
           ? `${formatSudokuTokenRate(sudokuModelState.tokensPerSecond)} · ${sudokuModelState.branchCount} ranked branch calls`
-          : "Ranks legal PLACE values at ambiguous branch points",
+          : `${getSudokuModelChoice(sudokuModelState.selectedModelId).label} selected · ranks legal PLACE values at ambiguous branch points`,
       active: sudokuModelState.isRunning,
     },
     {
@@ -1399,7 +1489,13 @@ function renderSudokuArtifacts() {
   const artifacts = buildSudokuExecutorArtifacts(
     sudokuState.initialBoard,
     sudokuState.result,
-    sudokuState.stepIndex
+    sudokuState.stepIndex,
+    {
+      selectedModelId: sudokuModelState.selectedModelId,
+      loadedModelId: sudokuModelState.loadedModelId,
+      loadedModelLabel: sudokuModelState.loadedModelLabel,
+      loadedModelArtifactId: sudokuModelState.loadedModelArtifactId,
+    }
   );
   refs.sudokuPrompt.textContent = artifacts.prompt;
   renderToolCall(refs.sudokuTool, artifacts.tool);

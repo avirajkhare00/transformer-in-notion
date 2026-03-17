@@ -10,9 +10,12 @@ from typing import Iterable
 
 import torch
 from torch import nn
+from torch.nn import functional as F
 from torch.utils.data import DataLoader, IterableDataset, TensorDataset, get_worker_info
 
 BOARD_LENGTH = 81
+BOARD_SIDE = 9
+BOX_SIDE = 3
 CANDIDATE_LENGTH = 9
 HISTORY_LENGTH = 8
 FOCUS_NONE = 0
@@ -33,6 +36,46 @@ INPUT_NAMES = [
 ]
 STRUCTURED_TENSOR_NAMES = [*INPUT_NAMES, "labels"]
 PACKED_FORMAT = "structured-state-v1-ptshards"
+SUPPORTED_MODEL_ARCHITECTURES = ("transformer", "gnn")
+
+
+def _build_sudoku_graph() -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
+    row_ids: list[int] = []
+    col_ids: list[int] = []
+    box_ids: list[int] = []
+    adjacency = torch.zeros((BOARD_LENGTH, BOARD_LENGTH), dtype=torch.float32)
+
+    for row in range(BOARD_SIDE):
+        for col in range(BOARD_SIDE):
+            index = row * BOARD_SIDE + col
+            row_ids.append(row)
+            col_ids.append(col)
+            box_ids.append((row // BOX_SIDE) * BOX_SIDE + (col // BOX_SIDE))
+
+            neighbors = {index}
+            for peer in range(BOARD_SIDE):
+                neighbors.add(row * BOARD_SIDE + peer)
+                neighbors.add(peer * BOARD_SIDE + col)
+            box_row = (row // BOX_SIDE) * BOX_SIDE
+            box_col = (col // BOX_SIDE) * BOX_SIDE
+            for box_r in range(box_row, box_row + BOX_SIDE):
+                for box_c in range(box_col, box_col + BOX_SIDE):
+                    neighbors.add(box_r * BOARD_SIDE + box_c)
+
+            weight = 1.0 / len(neighbors)
+            for neighbor in neighbors:
+                adjacency[index, neighbor] = weight
+
+    return (
+        torch.tensor(row_ids, dtype=torch.long),
+        torch.tensor(col_ids, dtype=torch.long),
+        torch.tensor(box_ids, dtype=torch.long),
+        adjacency,
+    )
+
+
+SUDOKU_ROW_IDS, SUDOKU_COL_IDS, SUDOKU_BOX_IDS, SUDOKU_ADJACENCY = _build_sudoku_graph()
+SUDOKU_NODE_INDICES = torch.arange(BOARD_LENGTH, dtype=torch.long)
 
 
 @dataclass
@@ -451,6 +494,7 @@ class StructuredSudokuTransformer(nn.Module):
         d_ff: int = 192,
     ) -> None:
         super().__init__()
+        self.model_kind = "structured-sudoku-transformer"
         self.board_embed = nn.Embedding(BOARD_VOCAB, d_model)
         self.focus_embed = nn.Embedding(FOCUS_VOCAB, d_model)
         self.binary_embed = nn.Embedding(BINARY_VOCAB, d_model)
@@ -530,8 +574,160 @@ class StructuredSudokuTransformer(nn.Module):
         return self.head(pooled)
 
 
+class SudokuGraphLayer(nn.Module):
+    def __init__(self, d_model: int) -> None:
+        super().__init__()
+        self.self_proj = nn.Linear(d_model, d_model)
+        self.neighbor_proj = nn.Linear(d_model, d_model)
+        self.context_proj = nn.Linear(d_model, d_model)
+        self.output_proj = nn.Linear(d_model, d_model)
+        self.norm = nn.LayerNorm(d_model)
+
+    def forward(
+        self,
+        node_states: torch.Tensor,
+        graph_context: torch.Tensor,
+        adjacency: torch.Tensor,
+    ) -> torch.Tensor:
+        neighbors = torch.matmul(adjacency, node_states)
+        updates = (
+            self.self_proj(node_states)
+            + self.neighbor_proj(neighbors)
+            + self.context_proj(graph_context).unsqueeze(1)
+        )
+        updates = self.output_proj(F.gelu(updates))
+        return self.norm(node_states + updates)
+
+
+class StructuredSudokuGNN(nn.Module):
+    def __init__(
+        self,
+        num_labels: int,
+        d_model: int = 96,
+        n_layers: int = 6,
+        d_readout: int = 192,
+    ) -> None:
+        super().__init__()
+        self.model_kind = "structured-sudoku-gnn"
+        self.sequence_length = BOARD_LENGTH
+
+        self.board_embed = nn.Embedding(BOARD_VOCAB, d_model)
+        self.row_embed = nn.Embedding(BOARD_SIDE, d_model)
+        self.col_embed = nn.Embedding(BOARD_SIDE, d_model)
+        self.box_embed = nn.Embedding(BOARD_SIDE, d_model)
+        self.focus_flag_embed = nn.Embedding(BINARY_VOCAB, d_model)
+
+        self.focus_embed = nn.Embedding(FOCUS_VOCAB, d_model)
+        self.binary_embed = nn.Embedding(BINARY_VOCAB, d_model)
+        self.history_embed = nn.Embedding(HISTORY_VOCAB, d_model)
+        self.count_embed = nn.Embedding(COUNT_VOCAB, d_model)
+        self.depth_embed = nn.Embedding(DEPTH_VOCAB, d_model)
+
+        self.candidate_proj = nn.Linear(CANDIDATE_LENGTH * d_model, d_model)
+        self.history_proj = nn.Linear(HISTORY_LENGTH * d_model, d_model)
+        self.context_proj = nn.Linear(d_model * 6, d_model)
+        self.layers = nn.ModuleList(SudokuGraphLayer(d_model) for _ in range(n_layers))
+        self.readout = nn.Sequential(
+            nn.Linear(d_model * 3, d_readout),
+            nn.GELU(),
+            nn.LayerNorm(d_readout),
+            nn.Linear(d_readout, num_labels),
+        )
+
+        self.register_buffer("row_ids", SUDOKU_ROW_IDS.clone(), persistent=False)
+        self.register_buffer("col_ids", SUDOKU_COL_IDS.clone(), persistent=False)
+        self.register_buffer("box_ids", SUDOKU_BOX_IDS.clone(), persistent=False)
+        self.register_buffer("adjacency", SUDOKU_ADJACENCY.clone(), persistent=False)
+        self.register_buffer("node_indices", SUDOKU_NODE_INDICES.clone(), persistent=False)
+
+    def forward(
+        self,
+        board_tokens: torch.Tensor,
+        focus_row: torch.Tensor,
+        focus_col: torch.Tensor,
+        candidate_mask: torch.Tensor,
+        history_ops: torch.Tensor,
+        filled_count: torch.Tensor,
+        search_depth: torch.Tensor,
+    ) -> torch.Tensor:
+        if board_tokens.dtype != torch.long:
+            board_tokens = board_tokens.long()
+        if focus_row.dtype != torch.long:
+            focus_row = focus_row.long()
+        if focus_col.dtype != torch.long:
+            focus_col = focus_col.long()
+        if candidate_mask.dtype != torch.long:
+            candidate_mask = candidate_mask.long()
+        if history_ops.dtype != torch.long:
+            history_ops = history_ops.long()
+        if filled_count.dtype != torch.long:
+            filled_count = filled_count.long()
+        if search_depth.dtype != torch.long:
+            search_depth = search_depth.long()
+
+        board_tokens = board_tokens.clamp_(0, BOARD_VOCAB - 1)
+        focus_row = focus_row.clamp_(0, FOCUS_VOCAB - 1)
+        focus_col = focus_col.clamp_(0, FOCUS_VOCAB - 1)
+        candidate_mask = candidate_mask.clamp_(0, BINARY_VOCAB - 1)
+        history_ops = history_ops.clamp_(0, HISTORY_VOCAB - 1)
+        filled_count = filled_count.clamp_(0, COUNT_VOCAB - 1)
+        search_depth = search_depth.clamp_(0, DEPTH_VOCAB - 1)
+
+        focus_row_index = (focus_row - 1).clamp(min=0, max=BOARD_SIDE - 1)
+        focus_col_index = (focus_col - 1).clamp(min=0, max=BOARD_SIDE - 1)
+        focus_valid = ((focus_row > 0) & (focus_col > 0)).long()
+        focus_index = focus_row_index * BOARD_SIDE + focus_col_index
+        focus_flags = (self.node_indices.unsqueeze(0) == focus_index.unsqueeze(1)).long()
+        focus_flags = focus_flags * focus_valid.unsqueeze(1)
+
+        node_states = (
+            self.board_embed(board_tokens)
+            + self.row_embed(self.row_ids).unsqueeze(0)
+            + self.col_embed(self.col_ids).unsqueeze(0)
+            + self.box_embed(self.box_ids).unsqueeze(0)
+            + self.focus_flag_embed(focus_flags)
+        )
+
+        candidate_context = self.candidate_proj(self.binary_embed(candidate_mask).flatten(1))
+        history_context = self.history_proj(self.history_embed(history_ops).flatten(1))
+        graph_context = self.context_proj(
+            torch.cat(
+                [
+                    self.focus_embed(focus_row),
+                    self.focus_embed(focus_col),
+                    candidate_context,
+                    history_context,
+                    self.count_embed(filled_count),
+                    self.depth_embed(search_depth),
+                ],
+                dim=-1,
+            )
+        )
+        graph_context = F.gelu(graph_context)
+
+        for layer in self.layers:
+            node_states = layer(node_states, graph_context, self.adjacency)
+
+        gather_index = focus_index.view(-1, 1, 1).expand(-1, 1, node_states.shape[-1])
+        focus_state = torch.gather(node_states, 1, gather_index).squeeze(1)
+        focus_state = focus_state * focus_valid.unsqueeze(-1)
+        global_state = node_states.mean(dim=1)
+
+        return self.readout(torch.cat([focus_state, global_state, graph_context], dim=-1))
+
+
+def build_structured_model(num_labels: int, arch: str = "transformer") -> nn.Module:
+    if arch == "transformer":
+        return StructuredSudokuTransformer(num_labels=num_labels)
+    if arch == "gnn":
+        return StructuredSudokuGNN(num_labels=num_labels)
+    raise ValueError(
+        f"Unsupported architecture {arch!r}. Expected one of: {', '.join(SUPPORTED_MODEL_ARCHITECTURES)}."
+    )
+
+
 def evaluate(
-    model: StructuredSudokuTransformer,
+    model: nn.Module,
     dataloader: DataLoader,
     device: torch.device,
     *,
@@ -584,7 +780,7 @@ def evaluate(
 
 
 def train_model(
-    model: StructuredSudokuTransformer,
+    model: nn.Module,
     train_loader: DataLoader,
     eval_loader: DataLoader,
     device: torch.device,
@@ -599,7 +795,7 @@ def train_model(
     checkpoint_dir: Path | None = None,
     checkpoint_every: int = 1,
     resume_from_checkpoint: Path | None = None,
-) -> tuple[StructuredSudokuTransformer, dict[str, float]]:
+) -> tuple[nn.Module, dict[str, float]]:
     optimizer = torch.optim.AdamW(model.parameters(), lr=learning_rate, weight_decay=0.0)
     criterion = nn.CrossEntropyLoss()
     best_accuracy = 0.0
@@ -744,7 +940,7 @@ def train_model(
 
 
 def export_model(
-    model: StructuredSudokuTransformer,
+    model: nn.Module,
     raw_dir: Path,
     export_dir: Path,
     metrics: dict[str, float],
@@ -765,9 +961,11 @@ def export_model(
         **metrics,
         "labels": label_names,
         "inputNames": INPUT_NAMES,
-        "sequenceLength": model.sequence_length,
-        "modelKind": "structured-sudoku-transformer",
+        "modelKind": getattr(model, "model_kind", model.__class__.__name__),
     }
+    sequence_length = getattr(model, "sequence_length", None)
+    if sequence_length is not None:
+        export_metadata["sequenceLength"] = sequence_length
     (raw_dir / "metadata.json").write_text(json.dumps(export_metadata, indent=2))
 
     if export_dir.exists():

@@ -28,7 +28,7 @@ In practice that means:
 2. Define the smallest sound op surface for the task.
 3. Export canonical traces from the runtime.
 4. Encode structured state snapshots.
-5. Train a local transformer to predict the next op or argument.
+5. Train a local structured policy model to predict the next op or argument.
 6. Keep the exact runtime in the loop for verification and rollback.
 
 The model handles ambiguity. The code handles truth.
@@ -58,7 +58,7 @@ The repo currently centers on two browser-local tasks:
   Exact 9x9 Sudoku solve with:
   - exact browser-side runtime
   - deterministic backtracking
-  - local transformer-guided branch ranking
+  - local guided branch ranking with `Auto`, `Transformer`, or `GNN` selection
   - visible trace and model stats
 
 - [weiqi/index.html](/Users/avirajkhare/hack2/transformers/transformer-in-notion/weiqi/index.html)
@@ -70,7 +70,7 @@ The main Sudoku page is the current source of truth for the end-to-end architect
 
 Sudoku is the clearest example of the stack:
 
-`structured state -> local transformer -> ranked PLACE candidates -> exact runtime -> new state`
+`structured state -> local value policy (transformer or GNN) -> ranked PLACE candidates -> exact runtime -> new state`
 
 What remains exact:
 
@@ -164,6 +164,12 @@ sh scripts/train_sudoku_extreme.sh \
   --value-epochs 1
 ```
 
+To train the GNN value path instead of the transformer value path, add:
+
+```bash
+  --value-arch gnn
+```
+
 This pipeline does:
 
 1. stream the CSV dataset
@@ -178,11 +184,11 @@ This pipeline does:
 - [app.mjs](/Users/avirajkhare/hack2/transformers/transformer-in-notion/app.mjs) - UI wiring and live board/model updates
 - [logic/sudoku.mjs](/Users/avirajkhare/hack2/transformers/transformer-in-notion/logic/sudoku.mjs) - exact Sudoku runtime, trace generation, guided solve path
 - [logic/executor.mjs](/Users/avirajkhare/hack2/transformers/transformer-in-notion/logic/executor.mjs) - prompt/program/tool-call artifact builder
-- [soduku/model-worker.mjs](/Users/avirajkhare/hack2/transformers/transformer-in-notion/soduku/model-worker.mjs) - guided model worker
+- [soduku/model-worker.mjs](/Users/avirajkhare/hack2/transformers/transformer-in-notion/soduku/model-worker.mjs) - guided model worker with explicit transformer/GNN selection
 - [soduku/model.mjs](/Users/avirajkhare/hack2/transformers/transformer-in-notion/soduku/model.mjs) - structured op/value model loading
-- [soduku/value-model.mjs](/Users/avirajkhare/hack2/transformers/transformer-in-notion/soduku/value-model.mjs) - structured value-model loading
+- [soduku/value-model.mjs](/Users/avirajkhare/hack2/transformers/transformer-in-notion/soduku/value-model.mjs) - structured value-model loading and `Auto / Transformer / GNN` routing
 - [soduku/structured-onnx.mjs](/Users/avirajkhare/hack2/transformers/transformer-in-notion/soduku/structured-onnx.mjs) - ONNX Runtime setup for structured state tensors
-- [soduku/structured_transformer_common.py](/Users/avirajkhare/hack2/transformers/transformer-in-notion/soduku/structured_transformer_common.py) - shared structured transformer training/export utilities
+- [soduku/structured_transformer_common.py](/Users/avirajkhare/hack2/transformers/transformer-in-notion/soduku/structured_transformer_common.py) - shared structured transformer/GNN training/export utilities
 - [soduku/meta.md](/Users/avirajkhare/hack2/transformers/transformer-in-notion/soduku/meta.md) - meta pattern and runtime philosophy
 - [docs/paper-idea-problem-shaped-vms.md](/Users/avirajkhare/hack2/transformers/transformer-in-notion/docs/paper-idea-problem-shaped-vms.md) - paper note for PSVMs
 - [weiqi/psvm5x5.mjs](/Users/avirajkhare/hack2/transformers/transformer-in-notion/weiqi/psvm5x5.mjs) - exact Weiqi PSVM

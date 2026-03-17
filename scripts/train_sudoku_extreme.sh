@@ -38,9 +38,16 @@ OP_EPOCHS=1
 OP_BATCH_SIZE=1024
 OP_TARGET_ACCURACY=0.0
 
-VALUE_RAW_DIR="$ROOT/soduku/training/extreme-value"
-VALUE_EXPORT_DIR="$ROOT/soduku/models/extreme-value"
-VALUE_CHECKPOINT_DIR="$ROOT/soduku/checkpoints/extreme-value"
+VALUE_ARCH="transformer"
+DEFAULT_VALUE_RAW_DIR="$ROOT/soduku/training/extreme-value"
+DEFAULT_VALUE_EXPORT_DIR="$ROOT/soduku/models/extreme-value"
+DEFAULT_VALUE_CHECKPOINT_DIR="$ROOT/soduku/checkpoints/extreme-value"
+DEFAULT_GNN_VALUE_RAW_DIR="$ROOT/soduku/training/extreme-value-gnn"
+DEFAULT_GNN_VALUE_EXPORT_DIR="$ROOT/soduku/models/extreme-value-gnn"
+DEFAULT_GNN_VALUE_CHECKPOINT_DIR="$ROOT/soduku/checkpoints/extreme-value-gnn"
+VALUE_RAW_DIR="$DEFAULT_VALUE_RAW_DIR"
+VALUE_EXPORT_DIR="$DEFAULT_VALUE_EXPORT_DIR"
+VALUE_CHECKPOINT_DIR="$DEFAULT_VALUE_CHECKPOINT_DIR"
 VALUE_RESUME_CHECKPOINT=""
 VALUE_EPOCHS=1
 VALUE_BATCH_SIZE=1024
@@ -83,6 +90,7 @@ Options:
   --value-raw-dir DIR          Raw value-model training dir.
   --value-export-dir DIR       ONNX value-model export dir.
   --value-checkpoint-dir DIR   Value-model checkpoint dir. Default: soduku/checkpoints/extreme-value
+  --value-arch NAME            Value-model architecture: transformer or gnn. Default: transformer
   --value-resume-checkpoint DIR
                                Explicit value-model checkpoint to resume from.
   --value-epochs N             Value-model epochs. Default: 1
@@ -135,6 +143,7 @@ while [ $# -gt 0 ]; do
     --value-raw-dir) VALUE_RAW_DIR="$2"; shift 2 ;;
     --value-export-dir) VALUE_EXPORT_DIR="$2"; shift 2 ;;
     --value-checkpoint-dir) VALUE_CHECKPOINT_DIR="$2"; shift 2 ;;
+    --value-arch) VALUE_ARCH="$2"; shift 2 ;;
     --value-resume-checkpoint) VALUE_RESUME_CHECKPOINT="$2"; shift 2 ;;
     --value-epochs) VALUE_EPOCHS="$2"; shift 2 ;;
     --value-batch-size) VALUE_BATCH_SIZE="$2"; shift 2 ;;
@@ -149,8 +158,23 @@ while [ $# -gt 0 ]; do
       usage >&2
       exit 1
       ;;
-  esac
+    esac
 done
+
+if [ "$VALUE_ARCH" = "gnn" ]; then
+  if [ "$VALUE_RAW_DIR" = "$DEFAULT_VALUE_RAW_DIR" ]; then
+    VALUE_RAW_DIR="$DEFAULT_GNN_VALUE_RAW_DIR"
+  fi
+  if [ "$VALUE_EXPORT_DIR" = "$DEFAULT_VALUE_EXPORT_DIR" ]; then
+    VALUE_EXPORT_DIR="$DEFAULT_GNN_VALUE_EXPORT_DIR"
+  fi
+  if [ "$VALUE_CHECKPOINT_DIR" = "$DEFAULT_VALUE_CHECKPOINT_DIR" ]; then
+    VALUE_CHECKPOINT_DIR="$DEFAULT_GNN_VALUE_CHECKPOINT_DIR"
+  fi
+elif [ "$VALUE_ARCH" != "transformer" ]; then
+  printf 'Unsupported value architecture: %s\n' "$VALUE_ARCH" >&2
+  exit 1
+fi
 
 if [ ! -x "$PYTHON" ]; then
   printf 'Python not found or not executable: %s\n' "$PYTHON" >&2
@@ -189,6 +213,7 @@ printf 'Input CSV: %s\n' "$INPUT"
 printf 'Output dir: %s\n' "$OUTPUT_DIR"
 printf 'Limit puzzles: %s\n' "$LIMIT_PUZZLES"
 printf 'Top puzzles by rating: %s\n' "$TOP_PUZZLES_BY_RATING"
+printf 'Value arch: %s\n' "$VALUE_ARCH"
 printf 'Trainer log every: %s\n' "$LOG_EVERY"
 printf 'DataLoader workers: %s\n' "$NUM_WORKERS"
 printf 'Prefetch factor: %s\n' "$PREFETCH_FACTOR"
@@ -281,6 +306,7 @@ if [ "$SKIP_VALUE" -eq 0 ]; then
   set -- \
     env PYTORCH_ENABLE_MPS_FALLBACK=1 \
     "$PYTHON" "$ROOT/soduku/train_value_transformer.py" \
+    --arch "$VALUE_ARCH" \
     --dataset "$VALUE_TRAIN_DATASET" \
     --raw-dir "$VALUE_RAW_DIR" \
     --export-dir "$VALUE_EXPORT_DIR" \

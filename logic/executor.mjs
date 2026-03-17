@@ -49,6 +49,74 @@ function formatSudokuToken(event, index) {
   return `${head} undo ${cell}=${event.value} depth=${event.depth}`;
 }
 
+function describeSudokuModelArtifacts(modelInfo = {}) {
+  const selectedModelId =
+    modelInfo.selectedModelId === "transformer" || modelInfo.selectedModelId === "gnn"
+      ? modelInfo.selectedModelId
+      : "auto";
+  const loadedModelId =
+    modelInfo.loadedModelId === "transformer" || modelInfo.loadedModelId === "gnn"
+      ? modelInfo.loadedModelId
+      : null;
+  const loadedModelLabel =
+    typeof modelInfo.loadedModelLabel === "string" && modelInfo.loadedModelLabel
+      ? modelInfo.loadedModelLabel
+      : "";
+  const loadedModelArtifactId =
+    typeof modelInfo.loadedModelArtifactId === "string" && modelInfo.loadedModelArtifactId
+      ? modelInfo.loadedModelArtifactId
+      : "";
+
+  const activeModelId = loadedModelId ?? selectedModelId;
+  const activeModelLabel =
+    loadedModelLabel ||
+    (activeModelId === "gnn"
+      ? "local value gnn"
+      : activeModelId === "transformer"
+        ? "local value transformer"
+        : "local value model");
+
+  const badge =
+    activeModelId === "gnn"
+      ? "gnn + verifier"
+      : activeModelId === "transformer"
+        ? "transformer + verifier"
+        : "model + verifier";
+
+  const runtime =
+    activeModelId === "gnn"
+      ? "structured ONNX GNN policy + exact JS/WASM runtime"
+      : activeModelId === "transformer"
+        ? "structured ONNX transformer policy + exact JS/WASM runtime"
+        : "structured ONNX value policy + exact JS/WASM runtime";
+
+  let artifact = "soduku/models/extreme-value-gnn or extreme-value";
+  if (selectedModelId === "gnn") {
+    artifact = "soduku/models/extreme-value-gnn or hard-value-gnn";
+  } else if (selectedModelId === "transformer") {
+    artifact = "soduku/models/extreme-value or hard-value-structured";
+  }
+  if (loadedModelArtifactId) {
+    artifact = `soduku/models/${loadedModelArtifactId}`;
+  }
+
+  const call = "rank_candidates(board, focus, history_ops) -> ordered PLACE candidates";
+
+  return {
+    badge,
+    runtime,
+    artifact,
+    call,
+    modelLabel: activeModelLabel,
+    loadingLabel:
+      selectedModelId === "gnn"
+        ? "local value gnn"
+        : selectedModelId === "transformer"
+          ? "local value transformer"
+          : "local value model",
+  };
+}
+
 export function buildTicTacToeExecutorArtifacts(board, analysis, locked) {
   const prompt = [
     "Need the safest reply for O.",
@@ -104,34 +172,32 @@ export function buildTicTacToeExecutorArtifacts(board, analysis, locked) {
   };
 }
 
-export function buildSudokuExecutorArtifacts(initialBoard, result, stepIndex) {
+export function buildSudokuExecutorArtifacts(initialBoard, result, stepIndex, modelInfo = {}) {
+  const modelArtifacts = describeSudokuModelArtifacts(modelInfo);
   const prompt = [
     `Solve 9x9 Sudoku with ${countClues(initialBoard)} clues.`,
     result
-      ? "Runtime: local value model + exact browser-side verifier."
-      : "Runtime: loading local value model + exact browser-side verifier.",
+      ? `Runtime: ${modelArtifacts.modelLabel} + exact browser-side verifier.`
+      : `Runtime: loading ${modelArtifacts.loadingLabel} + exact browser-side verifier.`,
     "Strategy: MRV picks the cell, the model ranks legal values, the exact runtime backtracks on contradiction.",
     `Preview row 1: ${renderSudokuRow(initialBoard[0])}`,
   ].join("\n");
 
   const tool = {
     name: "guided_solve()",
-    badge: "model + verifier",
-    runtime: "structured ONNX policy + exact JS/WASM runtime",
-    artifact: "soduku/models/extreme-value or hard-value-structured",
-    call: "rank_candidates(state) -> exact_place_or_backtrack",
+    badge: modelArtifacts.badge,
+    runtime: modelArtifacts.runtime,
+    artifact: modelArtifacts.artifact,
+    call: modelArtifacts.call,
   };
 
   const program = [
     "{",
     "  load_grid",
     "  select_mrv_cell",
-    "  emit_focus",
-    "  encode_structured_state",
+    "  enumerate_legal_values",
     "  model_rank_legal_values",
-    "  exact_place",
-    "  exact_check_constraints",
-    "  exact_backtrack_if_needed",
+    "  exact_place_or_backtrack",
     "  halt_when_full",
     "}",
   ].join("\n");

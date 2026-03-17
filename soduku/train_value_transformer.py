@@ -7,7 +7,8 @@ from pathlib import Path
 from torch.utils.data import DataLoader
 
 from structured_transformer_common import (
-    StructuredSudokuTransformer,
+    SUPPORTED_MODEL_ARCHITECTURES,
+    build_structured_model,
     default_device,
     export_model,
     load_structured_dataset_bundle,
@@ -15,14 +16,21 @@ from structured_transformer_common import (
     train_model,
 )
 
+DEFAULT_DATASET = Path("soduku/training/hard-value-dataset.json")
+DEFAULT_RAW_DIR = Path("soduku/training/hard-value-structured")
+DEFAULT_EXPORT_DIR = Path("soduku/models/hard-value-structured")
+DEFAULT_GNN_RAW_DIR = Path("soduku/training/hard-value-gnn")
+DEFAULT_GNN_EXPORT_DIR = Path("soduku/models/hard-value-gnn")
+
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Train and export a structured Sudoku hard-set PLACE-value transformer."
+        description="Train and export a structured Sudoku hard-set PLACE-value model."
     )
-    parser.add_argument("--dataset", type=Path, default=Path("soduku/training/hard-value-dataset.json"))
-    parser.add_argument("--raw-dir", type=Path, default=Path("soduku/training/hard-value-structured"))
-    parser.add_argument("--export-dir", type=Path, default=Path("soduku/models/hard-value-structured"))
+    parser.add_argument("--arch", choices=SUPPORTED_MODEL_ARCHITECTURES, default="transformer")
+    parser.add_argument("--dataset", type=Path, default=DEFAULT_DATASET)
+    parser.add_argument("--raw-dir", type=Path, default=DEFAULT_RAW_DIR)
+    parser.add_argument("--export-dir", type=Path, default=DEFAULT_EXPORT_DIR)
     parser.add_argument("--epochs", type=int, default=24)
     parser.add_argument("--batch-size", type=int, default=128)
     parser.add_argument("--lr", type=float, default=8e-4)
@@ -42,8 +50,15 @@ def main() -> None:
     set_seed(args.seed)
 
     dataset_path = args.dataset.resolve()
-    raw_dir = args.raw_dir.resolve()
-    export_dir = args.export_dir.resolve()
+    raw_dir_arg = args.raw_dir
+    export_dir_arg = args.export_dir
+    if args.arch == "gnn":
+        if raw_dir_arg == DEFAULT_RAW_DIR:
+            raw_dir_arg = DEFAULT_GNN_RAW_DIR
+        if export_dir_arg == DEFAULT_EXPORT_DIR:
+            export_dir_arg = DEFAULT_GNN_EXPORT_DIR
+    raw_dir = raw_dir_arg.resolve()
+    export_dir = export_dir_arg.resolve()
     checkpoint_dir = args.checkpoint_dir.resolve() if args.checkpoint_dir else None
     resume_from_checkpoint = (
         args.resume_from_checkpoint.resolve() if args.resume_from_checkpoint else None
@@ -99,13 +114,13 @@ def main() -> None:
     print(
         "training structured value model on "
         f"{device} with train={bundle.train_count} eval={bundle.eval_count} "
-        f"format={bundle.metadata['format']} batch_size={args.batch_size} "
+        f"format={bundle.metadata['format']} arch={args.arch} batch_size={args.batch_size} "
         f"log_every={args.log_every} num_workers={args.num_workers} "
         f"prebatched={bundle.prebatched}",
         flush=True,
     )
 
-    model = StructuredSudokuTransformer(num_labels=len(bundle.label_names))
+    model = build_structured_model(num_labels=len(bundle.label_names), arch=args.arch)
     model, metrics = train_model(
         model=model,
         train_loader=train_loader,
@@ -140,8 +155,8 @@ def main() -> None:
     )
 
     print(
-        f"exported structured value model to {export_dir} with accuracy={metrics['accuracy']:.4f} "
-        f"and train_loss={metrics['train_loss']:.4f}",
+        f"exported structured {args.arch} value model to {export_dir} "
+        f"with accuracy={metrics['accuracy']:.4f} and train_loss={metrics['train_loss']:.4f}",
         flush=True,
     )
 

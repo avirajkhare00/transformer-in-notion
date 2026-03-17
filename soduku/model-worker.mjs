@@ -19,13 +19,24 @@ async function yieldToBrowser() {
   await new Promise((resolve) => setTimeout(resolve, 0));
 }
 
-function postProgress({ phase, completed = null, total = null, message }) {
+function postProgress({
+  phase,
+  completed = null,
+  total = null,
+  message,
+  modelId = null,
+  modelLabel = null,
+  modelArtifactId = null,
+}) {
   self.postMessage({
     type: "progress",
     phase,
     completed,
     total,
     message,
+    modelId,
+    modelLabel,
+    modelArtifactId,
   });
 }
 
@@ -49,6 +60,9 @@ function postGuidedMetrics({
   referenceStats = null,
   traceLength = 0,
   referenceTraceLength = 0,
+  modelId = null,
+  modelLabel = null,
+  modelArtifactId = null,
 }) {
   self.postMessage({
     type: "event-batch",
@@ -63,10 +77,13 @@ function postGuidedMetrics({
     referenceStats,
     traceLength,
     referenceTraceLength,
+    modelId,
+    modelLabel,
+    modelArtifactId,
   });
 }
 
-async function runGuidedSolve(puzzle) {
+async function runGuidedSolve(puzzle, modelSelectionId = "auto") {
   const startedAt = performance.now();
   const initialBoard = parseSudoku(puzzle);
   const reference = solveSudokuWithTrace(initialBoard, { strategy: "mrv" });
@@ -80,6 +97,7 @@ async function runGuidedSolve(puzzle) {
     traceLength: reference.trace.length,
     referenceTraceLength: reference.trace.length,
     referenceStats: reference.stats,
+    selectedModelId: modelSelectionId,
   });
 
   postProgress({
@@ -88,12 +106,15 @@ async function runGuidedSolve(puzzle) {
     total: 1,
     message: "Loading local PLACE-value model.",
   });
-  await warmHardSudokuValueModel();
+  const loadedModel = await warmHardSudokuValueModel(modelSelectionId);
   postProgress({
     phase: "warm-models",
     completed: 1,
     total: 1,
-    message: "Local value model is warm. Starting guided solve.",
+    message: `Loaded ${loadedModel.modelLabel} from ${loadedModel.modelArtifactId}. Starting guided solve.`,
+    modelId: loadedModel.modelId,
+    modelLabel: loadedModel.modelLabel,
+    modelArtifactId: loadedModel.modelArtifactId,
   });
 
   let tokenCount = 0;
@@ -123,6 +144,9 @@ async function runGuidedSolve(puzzle) {
           elapsedMs,
           referenceStats: reference.stats,
           referenceTraceLength: reference.trace.length,
+          modelId: loadedModel.modelId,
+          modelLabel: loadedModel.modelLabel,
+          modelArtifactId: loadedModel.modelArtifactId,
         });
         pendingEvents = [];
         await yieldToBrowser();
@@ -136,7 +160,7 @@ async function runGuidedSolve(puzzle) {
         historyWindow: HARD_OP_HISTORY_WINDOW,
       });
       const predictions = filterLegalValuePredictions(
-        await predictHardSudokuPlaceValue(context, 9),
+        await predictHardSudokuPlaceValue(context, 9, modelSelectionId),
         focus
       );
 
@@ -163,6 +187,9 @@ async function runGuidedSolve(puzzle) {
           elapsedMs,
           referenceStats: reference.stats,
           referenceTraceLength: reference.trace.length,
+          modelId: loadedModel.modelId,
+          modelLabel: loadedModel.modelLabel,
+          modelArtifactId: loadedModel.modelArtifactId,
         });
         pendingEvents = [];
         await yieldToBrowser();
@@ -196,6 +223,9 @@ async function runGuidedSolve(puzzle) {
     referenceStats: reference.stats,
     traceLength: guided.trace.length,
     referenceTraceLength: reference.trace.length,
+    modelId: loadedModel.modelId,
+    modelLabel: loadedModel.modelLabel,
+    modelArtifactId: loadedModel.modelArtifactId,
   });
 
   self.postMessage({
@@ -212,6 +242,9 @@ async function runGuidedSolve(puzzle) {
     guidedStats: guided.stats,
     referenceStats: reference.stats,
     referenceTraceLength: reference.trace.length,
+    modelId: loadedModel.modelId,
+    modelLabel: loadedModel.modelLabel,
+    modelArtifactId: loadedModel.modelArtifactId,
   });
 }
 
@@ -221,7 +254,7 @@ self.onmessage = (message) => {
     return;
   }
 
-  void runGuidedSolve(data.puzzle).catch((error) => {
+  void runGuidedSolve(data.puzzle, data.modelId).catch((error) => {
     self.postMessage({
       type: "error",
       message: error instanceof Error ? error.message : String(error),

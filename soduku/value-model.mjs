@@ -6,33 +6,106 @@ import {
   topK,
 } from "./structured-onnx.mjs";
 
-const MODEL_URLS = [
-  new URL("./models/extreme-value/onnx/model_quantized.onnx", import.meta.url),
-  new URL("./models/hard-value-structured/onnx/model_quantized.onnx", import.meta.url),
-];
+const MODEL_REGISTRY = Object.freeze({
+  auto: [
+    {
+      modelId: "gnn",
+      modelLabel: "local value gnn",
+      modelArtifactId: "extreme-value-gnn",
+      modelUrl: new URL("./models/extreme-value-gnn/onnx/model_quantized.onnx", import.meta.url),
+    },
+    {
+      modelId: "gnn",
+      modelLabel: "local value gnn",
+      modelArtifactId: "hard-value-gnn",
+      modelUrl: new URL("./models/hard-value-gnn/onnx/model_quantized.onnx", import.meta.url),
+    },
+    {
+      modelId: "transformer",
+      modelLabel: "local value transformer",
+      modelArtifactId: "extreme-value",
+      modelUrl: new URL("./models/extreme-value/onnx/model_quantized.onnx", import.meta.url),
+    },
+    {
+      modelId: "transformer",
+      modelLabel: "local value transformer",
+      modelArtifactId: "hard-value-structured",
+      modelUrl: new URL("./models/hard-value-structured/onnx/model_quantized.onnx", import.meta.url),
+    },
+  ],
+  transformer: [
+    {
+      modelId: "transformer",
+      modelLabel: "local value transformer",
+      modelArtifactId: "extreme-value",
+      modelUrl: new URL("./models/extreme-value/onnx/model_quantized.onnx", import.meta.url),
+    },
+    {
+      modelId: "transformer",
+      modelLabel: "local value transformer",
+      modelArtifactId: "hard-value-structured",
+      modelUrl: new URL("./models/hard-value-structured/onnx/model_quantized.onnx", import.meta.url),
+    },
+  ],
+  gnn: [
+    {
+      modelId: "gnn",
+      modelLabel: "local value gnn",
+      modelArtifactId: "extreme-value-gnn",
+      modelUrl: new URL("./models/extreme-value-gnn/onnx/model_quantized.onnx", import.meta.url),
+    },
+    {
+      modelId: "gnn",
+      modelLabel: "local value gnn",
+      modelArtifactId: "hard-value-gnn",
+      modelUrl: new URL("./models/hard-value-gnn/onnx/model_quantized.onnx", import.meta.url),
+    },
+  ],
+});
 
-let sessionPromise = null;
+const sessionPromiseByUrl = new Map();
 
-async function loadSession() {
-  if (!sessionPromise) {
-    sessionPromise = (async () => {
+function normalizeModelSelection(modelSelectionId) {
+  return MODEL_REGISTRY[modelSelectionId] ? modelSelectionId : "auto";
+}
+
+async function getOrCreateSession(candidate) {
+  const cacheKey = candidate.modelUrl.href;
+  if (!sessionPromiseByUrl.has(cacheKey)) {
+    const sessionPromise = (async () => {
       const ort = await getOrtRuntime();
       ort.env.wasm.numThreads = 1;
-      let lastError = null;
-      for (const modelUrl of MODEL_URLS) {
-        try {
-          return await ort.InferenceSession.create(modelUrl.href, {
-            executionProviders: ["wasm"],
-            graphOptimizationLevel: "all",
-          });
-        } catch (error) {
-          lastError = error;
-        }
-      }
-      throw lastError ?? new Error("Unable to load a structured value model.");
-    })();
+      return ort.InferenceSession.create(candidate.modelUrl.href, {
+        executionProviders: ["wasm"],
+        graphOptimizationLevel: "all",
+      });
+    })().catch((error) => {
+      sessionPromiseByUrl.delete(cacheKey);
+      throw error;
+    });
+    sessionPromiseByUrl.set(cacheKey, sessionPromise);
   }
-  return sessionPromise;
+  return sessionPromiseByUrl.get(cacheKey);
+}
+
+async function loadSession(modelSelectionId = "auto") {
+  const selectionId = normalizeModelSelection(modelSelectionId);
+  let lastError = null;
+  for (const candidate of MODEL_REGISTRY[selectionId]) {
+    try {
+      const session = await getOrCreateSession(candidate);
+      return {
+        session,
+        requestedModelId: selectionId,
+        modelId: candidate.modelId,
+        modelLabel: candidate.modelLabel,
+        modelArtifactId: candidate.modelArtifactId,
+      };
+    } catch (error) {
+      lastError = error;
+    }
+  }
+  throw lastError ?? new Error("Unable to load a structured value model.");
 }
 
 function normalizeLogits(logitsData, batchSize) {
@@ -54,17 +127,18 @@ function decodeLogits(batchLogits, topKLimit) {
   );
 }
 
-export async function warmHardSudokuValueModel() {
-  await loadSession();
+export async function warmHardSudokuValueModel(modelSelectionId = "auto") {
+  return loadSession(modelSelectionId);
 }
 
 export async function predictHardSudokuPlaceValues(
   contexts,
   topKLimit = 9,
   batchSize = 256,
-  onProgress = null
+  onProgress = null,
+  modelSelectionId = "auto"
 ) {
-  const session = await loadSession();
+  const { session } = await loadSession(modelSelectionId);
   const ort = await getOrtRuntime();
   const inputs = Array.isArray(contexts) ? contexts : [contexts];
   const allPredictions = [];
@@ -92,7 +166,17 @@ export async function predictHardSudokuPlaceValues(
   return allPredictions;
 }
 
-export async function predictHardSudokuPlaceValue(context, topKLimit = 9) {
-  const [predictions] = await predictHardSudokuPlaceValues([context], topKLimit, 1);
+export async function predictHardSudokuPlaceValue(
+  context,
+  topKLimit = 9,
+  modelSelectionId = "auto"
+) {
+  const [predictions] = await predictHardSudokuPlaceValues(
+    [context],
+    topKLimit,
+    1,
+    null,
+    modelSelectionId
+  );
   return predictions;
 }

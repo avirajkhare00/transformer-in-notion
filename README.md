@@ -52,7 +52,7 @@ A PSVM keeps only the transitions that carry semantic weight for the task. That 
 
 ## Current focus
 
-The repo currently centers on two browser-local tasks and one CLI invoice task:
+The repo currently centers on two browser-local game tasks and two browser-local invoice/document tasks:
 
 - [sudoku.html](/Users/avirajkhare/hack2/transformers/transformer-in-notion/sudoku.html)
   Exact 9x9 Sudoku solve with:
@@ -73,6 +73,7 @@ The repo currently centers on two browser-local tasks and one CLI invoice task:
   - explicit rejection of account-statement style documents with running balances
   - a browser demo at [receipt.html](/Users/avirajkhare/hack2/transformers/transformer-in-notion/receipt.html)
   - a broader voucher extraction demo at [tally.html](/Users/avirajkhare/hack2/transformers/transformer-in-notion/tally.html)
+  - a Tally-style schema/runtime split for voucher families, field candidates, and structured output
 
 The main Sudoku page is the current source of truth for the end-to-end architecture.
 
@@ -139,6 +140,8 @@ What is working now:
 - packed tensor-shard training path for structured Sudoku models
 - PSVM-style OCR receipt total extraction and candidate ranking under `invoice/`
 - synthetic OCR receipt dataset export and local total-selector training
+- Tally-style voucher-family classification and schema-aligned field extraction under `invoice/`
+- a browser demo for Tally-shaped OCR extraction at `tally.html`
 
 What is not claimed yet:
 
@@ -179,6 +182,8 @@ Then open:
 
 - `http://localhost:8000/sudoku.html`
 - `http://localhost:8000/weiqi/`
+- `http://localhost:8000/receipt.html`
+- `http://localhost:8000/tally.html`
 
 ## Sudoku training
 
@@ -221,7 +226,11 @@ This pipeline does:
 - [soduku/value-model.mjs](/Users/avirajkhare/hack2/transformers/transformer-in-notion/soduku/value-model.mjs) - structured value-model loading and `Auto / Transformer / GNN` routing
 - [soduku/structured-onnx.mjs](/Users/avirajkhare/hack2/transformers/transformer-in-notion/soduku/structured-onnx.mjs) - ONNX Runtime setup for structured state tensors
 - [invoice/psvm.mjs](/Users/avirajkhare/hack2/transformers/transformer-in-notion/invoice/psvm.mjs) - exact invoice arithmetic PSVM
+- [invoice/tally_schema.mjs](/Users/avirajkhare/hack2/transformers/transformer-in-notion/invoice/tally_schema.mjs) - voucher families, core shared fields, and industry extensions
+- [invoice/tally_psvm.mjs](/Users/avirajkhare/hack2/transformers/transformer-in-notion/invoice/tally_psvm.mjs) - voucher-family classifier and schema-aligned field extractor
 - [invoice/total_psvm.mjs](/Users/avirajkhare/hack2/transformers/transformer-in-notion/invoice/total_psvm.mjs) - exact OCR receipt total candidate extractor and teacher ranker
+- [tally.html](/Users/avirajkhare/hack2/transformers/transformer-in-notion/tally.html) - browser Tally extraction demo
+- [tally-app.mjs](/Users/avirajkhare/hack2/transformers/transformer-in-notion/tally-app.mjs) - browser UI for voucher-family and field-candidate inspection
 - [invoice/export_total_dataset.mjs](/Users/avirajkhare/hack2/transformers/transformer-in-notion/invoice/export_total_dataset.mjs) - synthetic OCR receipt dataset generator
 - [invoice/train_total_selector.py](/Users/avirajkhare/hack2/transformers/transformer-in-notion/invoice/train_total_selector.py) - local transformer trainer for `TOTAL` vs `NOT_TOTAL`
 - [scripts/predict_receipt_total.py](/Users/avirajkhare/hack2/transformers/transformer-in-notion/scripts/predict_receipt_total.py) - local inference over extracted receipt candidates

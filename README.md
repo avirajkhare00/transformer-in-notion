@@ -153,6 +153,12 @@ The invoice lane now follows the same repo thesis as Sudoku:
 
 That means the model is not asked to invent the receipt total end-to-end. It only scores legal candidates extracted by the runtime. See [invoice/README.md](/Users/avirajkhare/hack2/transformers/transformer-in-notion/invoice/README.md) for the dataset, trainer, and CLI flow.
 
+In short:
+
+- AI/ML view: a constrained candidate-ranking problem over extracted money spans
+- layman view: collect all amount-looking numbers, then pick the one that most looks like the final total
+- main limitation: this is invoice/receipt-shaped, not a general parser for arbitrary tables or account statements
+
 ## Local development
 
 Serve the repo root with any static file server:

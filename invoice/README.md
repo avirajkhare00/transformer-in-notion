@@ -57,6 +57,77 @@ not:
 
 The current OCR-total lane is intentionally invoice/receipt-shaped. It expects one payable or final document total. Bank/account statements with running balances are rejected instead of forcing a guess.
 
+## How It Works In AI/ML Terms
+
+The OCR-total path is a constrained ranking problem, not free-form generation.
+
+Pipeline:
+
+1. Normalize the source into OCR rows.
+   - Plain text uses approximate row and character positions.
+   - `pdftotext -tsv` keeps real page coordinates.
+2. Extract every legal money candidate from the rows.
+   - Each candidate is an amount already present in the document.
+3. Build a structured context string for each candidate.
+   - lexical cues: `total`, `amount due`, `subtotal`, `gst`, `paid`
+   - row context: previous line, current line, next line
+   - layout cues: right-edge position, vertical position, cue-before-amount gap
+   - document context: top amounts, tail excerpt, document type
+4. Score each candidate.
+   - `Teacher` mode uses deterministic heuristic weights.
+   - `Local model` uses a small transformer trained as a binary selector: `TOTAL` vs `NOT_TOTAL`.
+5. Rank all legal candidates and emit the top one.
+   - The runtime returns one existing amount from the OCR, not a newly generated string.
+
+So the learning problem is:
+
+`candidate context -> probability(this candidate is the final total)`
+
+not:
+
+`full OCR text -> invent a number`
+
+This is why it fits the repo's PSVM pattern:
+
+`code generates legal branches -> model ranks branches -> code emits answer`
+
+## How It Works In Plain English
+
+Think of it as a smart multiple-choice test.
+
+1. The code scans the OCR text and collects every number that looks like money.
+2. For each number, it looks at nearby words and layout clues.
+   - Is the line saying `TOTAL`?
+   - Is the amount at the far right?
+   - Is it near the bottom?
+   - Is it on a tax line or subtotal line instead?
+3. The system scores all those candidate amounts.
+4. It returns the best-scoring amount.
+
+So it does not "calculate a total from scratch" and it does not "hallucinate a number." It chooses one number that already exists in the OCR text.
+
+## Current Limitations
+
+- It is built for invoices and receipts that have one final payable total.
+- Bank/account statements are rejected because they contain running balances, not one payable total.
+- Plain OCR text is weaker than `pdftotext -tsv` because plain text loses true page boundaries and real geometry.
+- Multi-page documents are supported only loosely today.
+  - The system can rank candidates across the whole document.
+  - It does not yet have a hard "prefer the last page final total" rule.
+- It does not prove totals by arithmetic.
+  - If a document has `subtotal + tax = total`, that relationship is useful, but the current ranker does not fully verify it.
+- OCR quality still matters.
+  - Bad OCR can break amount extraction, cue words, or row structure.
+- The browser demo does not parse PDFs directly.
+  - You need to paste OCR text or pasted `pdftotext -tsv` output.
+
+Best current practice:
+
+- use structured `pdftotext -tsv` when possible
+- use invoice/receipt-shaped documents
+- avoid feeding account statements or long generic tabular reports
+- treat the result as a ranked selection system, not a universal document parser
+
 ## Local Training Flow
 
 Generate the arithmetic next-op dataset:

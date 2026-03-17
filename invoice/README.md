@@ -57,6 +57,8 @@ not:
 
 The current OCR-total lane is intentionally invoice/receipt-shaped. It expects one payable or final document total. Bank/account statements with running balances are rejected instead of forcing a guess.
 
+The first Tally-oriented schema draft for broader voucher extraction now lives in `invoice/tally_schema.mjs`. It defines voucher families, a shared field surface, industry extensions, and explicit reject semantics for statement-like documents.
+
 ## How It Works In AI/ML Terms
 
 The OCR-total path is a constrained ranking problem, not free-form generation.

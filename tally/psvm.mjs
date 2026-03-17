@@ -1175,8 +1175,8 @@ function mapParsedReceiptLineItem(item) {
   };
 }
 
-function buildTallyRecord(state) {
-  const selected = state.selectedFields;
+export function buildTallyRecord(state, selectedFields = state.selectedFields) {
+  const selected = selectedFields;
 
   return {
     voucherFamily: state.voucherFamily,

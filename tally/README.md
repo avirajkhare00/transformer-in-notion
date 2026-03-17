@@ -8,18 +8,23 @@ It follows the same repo rule as Sudoku and the invoice total selector:
 
 `code owns legality, the model only scores ambiguity`
 
-Today this lane is deterministic-first. The PSVM creates legal voucher and field choices from noisy OCR, applies schema and accounting constraints, and emits a structured record. A learned field-ranker can be added on top of the same candidate surface later.
+Today this lane is deterministic-first, with an optional tiny local BERT field selector on top of the same legal candidate surface. The PSVM still creates the legal voucher and field choices, applies schema and accounting constraints, and emits the structured record.
 
 ## Files
 
 - `schema.mjs` - voucher families, shared core fields, and industry extensions
 - `psvm.mjs` - voucher-family classifier and schema-aligned field extractor
+- `model-common.mjs` - shared field-candidate context builder and selection helpers
+- `model.mjs` - browser-local transformer inference over legal Tally candidates
 - `worker.mjs` - browser worker for the Tally extraction demo
 - `demo-samples.mjs` - sample OCR presets for the Tally extraction demo
+- `export_field_dataset.mjs` - synthetic Tally field-candidate dataset generator
+- `train_field_selector.py` - tiny BERT trainer/exporter for Tally field selection
+- `model.test.mjs` - model-selection logic coverage on the demo presets
 - `schema.test.mjs` - voucher schema coverage
 - `psvm.test.mjs` - extraction PSVM coverage
 - `../tally.html` - browser demo for voucher-family classification and Tally-shaped output
-- `app.mjs` - browser UI wiring for voucher-family and field-candidate inspection
+- `app.mjs` - basic browser UI for OCR/TSV input, summary fields, and emitted JSON
 
 ## How It Works In AI/ML Terms
 
@@ -48,11 +53,11 @@ Pipeline:
    - GSTINs, dates, invoice numbers, totals
    - parser-assisted totals and line items when the layout matches known invoice shapes
 5. Rank and select candidates.
-   - today this is deterministic heuristic scoring
-   - later the same surface can support a learned field selector
+   - `Runtime` mode uses the deterministic heuristic order from the PSVM
+   - `Local model` mode uses a tiny BERT text classifier over the same legal candidates
 6. Emit a Tally-shaped record or reject the document.
 
-So the core learning problem, once a model is added, is:
+So the core learning problem in the model path is:
 
 `field candidate context -> probability(this candidate is the right value for this schema field)`
 
@@ -85,7 +90,8 @@ So it is not trying to magically rewrite garbage OCR into perfect accounting dat
 - Line-item extraction is still partial. Scalar document fields are stronger than arbitrary table reconstruction.
 - Voucher-type coverage is broad but not complete. New Tally mechanisms should be added as schema and extractor extensions, not guessed.
 - Industry support is extension-based today. Pharma, medical, trading, and stockist fields are modeled, but real customer layouts will still need tuning.
-- There is no trained field-ranking model yet. The current browser demo is deterministic-first.
+- The local model is still lightweight. It is a tiny transformer trained on synthetic candidate contexts, not a large document foundation model.
+- PDF conversion is not supported in the browser demo. You need to paste OCR text or `pdftotext -tsv`.
 - The output is Tally-shaped JSON, not native Tally import XML.
 
 ## Browser Demo
@@ -100,13 +106,11 @@ Then visit:
 
 - `http://localhost:8000/tally.html`
 
-The page accepts pasted OCR text or pasted `pdftotext -tsv` output. It shows:
+The page accepts pasted OCR text or pasted `pdftotext -tsv` output. PDF upload is rejected on purpose in this version. The basic demo shows:
 
-- ranked voucher families
+- run summary
 - selected scalar fields
 - emitted Tally-shaped record JSON
-- grouped field candidates
-- PSVM trace and readable log
 
 ## Best Current Use
 

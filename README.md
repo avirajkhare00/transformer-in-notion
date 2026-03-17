@@ -78,7 +78,7 @@ The repo currently centers on two browser-local game tasks and two browser-local
   - voucher-family classification and schema selection
   - schema-aligned field candidate extraction from OCR/layout
   - shared invoice fields plus industry extensions for pharma, medical, trading, and stockist flows
-  - deterministic-first PSVM emission of Tally-shaped records
+  - deterministic-first PSVM emission of Tally-shaped records, with an optional tiny local transformer for field selection
   - a browser demo at [tally.html](/Users/avirajkhare/hack2/transformers/transformer-in-notion/tally.html)
 
 The main Sudoku page is the current source of truth for the end-to-end architecture.
@@ -183,7 +183,7 @@ In short:
 
 - AI/ML view: constrained information extraction over voucher families and field candidates
 - layman view: detect the document type, look for the likely invoice fields, and fill a Tally-shaped record
-- main limitation: deterministic today, with partial table understanding and explicit rejection of unsupported statement-like documents
+- main limitation: the local model is still small and synthetic-data-trained, the table understanding is partial, and the demo expects pasted OCR/TSV rather than direct PDF conversion
 
 ## Local development
 

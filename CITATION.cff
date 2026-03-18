@@ -1,0 +1,24 @@
+cff-version: 1.2.0
+title: Transformer Runtime Lab
+message: "If you use this repository, please cite the software artifact."
+type: software
+authors:
+  - family-names: Khare
+    given-names: Aviraj
+    affiliation: Independent Researcher, Satna, Madhya Pradesh, India
+repository-code: "https://github.com/avirajkhare00/transformer-in-notion"
+license: Apache-2.0
+version: 0.1.0
+date-released: 2026-03-18
+abstract: >-
+  Browser-local exact execution with problem-shaped virtual machines, including
+  exact runtimes, local model guidance, and interactive artifacts for Sudoku,
+  invoice total extraction, Tally-style voucher extraction, and related tasks.
+preferred-citation:
+  type: article
+  authors:
+    - family-names: Khare
+      given-names: Aviraj
+  title: Problem-Shaped Virtual Machines for Exact Local Transformer Execution
+  year: 2026
+  url: "https://github.com/avirajkhare00/transformer-in-notion/blob/main/docs/paper-idea-problem-shaped-vms.pdf"

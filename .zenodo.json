@@ -1,0 +1,22 @@
+{
+  "title": "Transformer Runtime Lab",
+  "description": "Browser-local exact execution with problem-shaped virtual machines, including exact runtimes, local model guidance, and interactive artifacts for Sudoku, invoice total extraction, Tally-style voucher extraction, and Weiqi.",
+  "upload_type": "software",
+  "access_right": "open",
+  "license": "apache-2.0",
+  "language": "eng",
+  "creators": [
+    {
+      "name": "Khare, Aviraj",
+      "affiliation": "Independent Researcher, Satna, Madhya Pradesh, India",
+      "type": "ProjectMember"
+    }
+  ],
+  "keywords": [
+    "problem-shaped virtual machines",
+    "local transformers",
+    "browser computing",
+    "exact search",
+    "document extraction"
+  ]
+}

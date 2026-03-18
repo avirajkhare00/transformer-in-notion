@@ -41,6 +41,9 @@ git push origin v0.1.0
    - [paper.md](/Users/avirajkhare/hack2/transformers/transformer-in-notion/paper.md)
 6. Regenerate [paper.pdf](/Users/avirajkhare/hack2/transformers/transformer-in-notion/paper.pdf) if metadata changes.
 
+Zenodo-specific setup notes are in
+[zenodo-archival-guide.md](/Users/avirajkhare/hack2/transformers/transformer-in-notion/docs/zenodo-archival-guide.md).
+
 ## Suggested release description
 
 Use wording close to:

@@ -1,12 +1,12 @@
 import { buildPlainTextReceiptSource, collapseWhitespace } from "../invoice/ocr_layout.mjs";
 
-const MONEY_TOKEN_PATTERN = /(?:₹\s*)?(?:Rs\.?\s*)?[0-9][0-9,]*\.\d{2}/i;
-const MONEY_TOKEN_GLOBAL_PATTERN = /(?:₹\s*)?(?:Rs\.?\s*)?[0-9][0-9,]*\.\d{2}/g;
+const MONEY_TOKEN_PATTERN = /(?:₹\s*)?(?:Rs\.?\s*)?[0-9][0-9,]*(?:\.\d{1,2})?/i;
+const MONEY_TOKEN_GLOBAL_PATTERN = /(?:₹\s*)?(?:Rs\.?\s*)?[0-9][0-9,]*(?:\.\d{1,2})?/g;
 const LEADING_SERIAL_PATTERN = /^\s*(\d{1,4})(?:[.)-]|\s+)/;
 const HEADER_TOKEN_LIMIT = 64;
 const HEADER_SCORE_THRESHOLD = 8;
 const FOOTER_LEAD_PATTERN =
-  /^(?:taxable|sub\s*total|grand\s*total|total(?:\s+amount)?|amount\s+(?:due|payable)|round\s*off|roundoff|igst|cgst|sgst|cess|tcs|rupees|inr|bank|declaration|terms|payment\s+term|e&oe|authorised|authorized)/i;
+  /^(?:taxable|sub\s*total|grand\s*total|final amount|net amount|net payable|total(?:\s+amount)?|amount\s+(?:due|payable)|round\s*off|roundoff|tax(?:\s+\d+(?:\.\d+)?%)?|igst|cgst|sgst|cess|tcs|rupees|inr|bank|declaration|terms|payment\s+term|e&oe|authorised|authorized)/i;
 const HEADER_REPEAT_PATTERN =
   /\b(?:description|product|goods|item|particulars)\b/i;
 
@@ -69,6 +69,15 @@ function parseMoneyToCents(value) {
   return Number(whole) * 100 + Number(fraction.padEnd(2, "0"));
 }
 
+function looksLikeMoneyToken(value) {
+  const text = String(value ?? "").trim();
+  if (!text) {
+    return false;
+  }
+
+  return /₹|Rs\.?/i.test(text) || (/\d/.test(text) && (text.includes(",") || text.includes(".") || /^\d{4,}$/.test(text)));
+}
+
 function extractHsnValue(value) {
   const match = collapseWhitespace(String(value ?? "")).match(/\b\d{4,8}\b/);
   return match?.[0] ?? null;
@@ -102,6 +111,9 @@ function extractLeadingSerialText(text) {
 function extractMoneyTokens(words) {
   return sortWords(words)
     .map((word, index) => {
+      if (!looksLikeMoneyToken(word.text)) {
+        return null;
+      }
       const amountCents = parseMoneyToCents(word.text);
       if (amountCents == null) {
         return null;
@@ -226,7 +238,7 @@ function collectHeaderAnchors(rows) {
       if (cleaned === "rate" || cleaned === "price" || cleaned === "value") {
         ratePositions.push(x);
       }
-      if (cleaned === "amount" || cleaned === "amt" || cleaned === "gross") {
+      if (cleaned === "amount" || cleaned === "amt" || cleaned === "gross" || cleaned === "total") {
         amountPositions.push(x);
       }
       if (cleaned === "mrp") {
@@ -577,6 +589,30 @@ function extractFallbackQuantity(sortedWords, serialIndex, hsnIndex, firstMoneyI
   };
 }
 
+function findWordIndexInColumn(sortedWords, column, matcher) {
+  if (!column) {
+    return null;
+  }
+
+  for (let index = 0; index < sortedWords.length; index += 1) {
+    const word = sortedWords[index];
+    const x = wordCenterX(word);
+    if (column.left != null && x < column.left) {
+      continue;
+    }
+    if (column.right != null && x >= column.right) {
+      continue;
+    }
+
+    const cleaned = cleanToken(word.text ?? "");
+    if (matcher(cleaned)) {
+      return index;
+    }
+  }
+
+  return null;
+}
+
 function parseItemRow(row, header, currentItem) {
   const rowText = collapseWhitespace(row.text ?? "");
   if (!rowText) {
@@ -606,7 +642,13 @@ function parseItemRow(row, header, currentItem) {
     amountToken?.index ?? null,
     excludedHsnValues,
   );
+  const quantityColumn = header.columns.find((column) => column.key === "quantity");
   const quantityFromCell = parseQuantityWithUnit(cells.quantity, header.defaultUnit);
+  const quantityCellIndex = findWordIndexInColumn(
+    sortedWords,
+    quantityColumn,
+    (cleaned) => parseDecimalValue(cleaned) != null,
+  );
   const fallbackQuantity = extractFallbackQuantity(
     sortedWords,
     leadingSerial != null ? 0 : null,
@@ -623,7 +665,7 @@ function parseItemRow(row, header, currentItem) {
       hasLeadingSerial: leadingSerial != null,
       hsnIndex: hsnToken?.index ?? null,
       percentIndex: percentTokens[0]?.index ?? null,
-      quantityIndex: fallbackQuantity.index ?? null,
+      quantityIndex: quantityCellIndex ?? fallbackQuantity.index ?? null,
       unitPriceIndex: unitPriceToken?.index ?? null,
       amountIndex: amountToken?.index ?? null,
     }) ||
@@ -668,7 +710,7 @@ function parseItemRow(row, header, currentItem) {
   if (!hasNewItemSignal) {
     const continuationText = collapseWhitespace(
       sortedWords
-        .filter((word) => !MONEY_TOKEN_PATTERN.test(word.text))
+        .filter((word) => !looksLikeMoneyToken(word.text))
         .map((word) => word.text)
         .join(" "),
     );

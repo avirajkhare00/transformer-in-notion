@@ -84,3 +84,22 @@ test("model selection logic preserves explicit statement rejection", () => {
   assert.equal(record.voucherFamily, "account_statement");
   assert.match(record.rejectionReason ?? "", /ledger-oriented PSVM/i);
 });
+
+test("model selection logic can align the implicit weak-label sample", () => {
+  const state = buildTallyExtractionState(getPreset("implicit-sales-core").source);
+  const selection = buildSelectionFromExpectedValues(state, {
+    "document.number": "7782",
+    "document.date": "11/07/25",
+    "seller.name": "KAPOOR & SONS",
+    "buyer.name": "R K ENTERPRISES",
+    "amounts.grand_total_cents": 1180000,
+  });
+  const record = buildTallyRecord(state, selection.selectedFields);
+
+  assert.equal(record.voucherFamily, "sales_invoice");
+  assert.equal(record.document.number, "7782");
+  assert.equal(record.document.date, "11/07/25");
+  assert.equal(record.seller.name, "KAPOOR & SONS");
+  assert.equal(record.buyer.name, "R K ENTERPRISES");
+  assert.equal(record.amounts.grandTotalCents, 1180000);
+});

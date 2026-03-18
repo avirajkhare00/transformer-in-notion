@@ -117,6 +117,19 @@ const SEED_PRESET_EXPECTED = Object.freeze({
       "amounts.grand_total_cents": 16576000,
     },
   },
+  "implicit-sales-core": {
+    familyId: "sales_invoice",
+    fields: {
+      "document.number": "7782",
+      "document.date": "11/07/25",
+      "document.place_of_supply": "Gujarat",
+      "seller.name": "KAPOOR & SONS",
+      "seller.gstin": "24ABCDE1111F1Z3",
+      "buyer.name": "R K ENTERPRISES",
+      "buyer.gstin": "24AAAAA2222G1Z4",
+      "amounts.grand_total_cents": 1180000,
+    },
+  },
 });
 
 function parseArgs(argv) {

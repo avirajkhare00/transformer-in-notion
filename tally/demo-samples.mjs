@@ -64,6 +64,34 @@ Zodiac Energy Ltd
 `.trim(),
   },
   {
+    id: "implicit-sales-core",
+    label: "Implicit Labels",
+    description:
+      "A weak-label sales invoice where invoice number, date, buyer, and total are present but not written in standard Tally-style labels.",
+    format: "text",
+    familyOverride: "auto",
+    industryOverride: "auto",
+    source: `
+#7782      11/07/25
+
+KAPOOR & SONS
+24ABCDE1111F1Z3
+
+Client:
+R K ENTERPRISES
+24AAAAA2222G1Z4
+
+Supply: Gujarat
+
+Item        Qty   Price   Total
+Tiles       200   50      10000
+
+Tax 18%              1800
+
+Final Amount         11800
+`.trim(),
+  },
+  {
     id: "account-statement",
     label: "Account Statement",
     description:

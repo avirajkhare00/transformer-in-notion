@@ -6,3 +6,5 @@ __pycache__/
 wasm/sudoku-executor/target/
 *.csv
 soduku/train_data/
+.fastembed_cache/
+soduku/checkpoints/

@@ -38,6 +38,11 @@ export const TALLY_HARNESS_FAILURE_CLASSES = Object.freeze({
     label: "Layout Drift",
     description: "Blocks and rows are reordered or wrapped in ways that drift from the training templates.",
   },
+  implicit_field: {
+    id: "implicit_field",
+    label: "Implicit Field",
+    description: "Key fields exist but only under weak labels, shorthand headers, or unlabeled structure.",
+  },
 });
 
 const FIELD_MARGIN_THRESHOLD = 6;
@@ -117,6 +122,36 @@ const BASE_CASES = Object.freeze([
         unit: "nos",
         unitPriceCents: 2960000,
         amountCents: 14800000,
+      },
+    ],
+  },
+]);
+
+const EXPLICIT_FAILURE_CASES = Object.freeze([
+  {
+    id: "implicit-field-shorthand-sales",
+    presetId: "implicit-sales-core",
+    label: "Implicit Field / Shorthand Sales",
+    failureClass: "implicit_field",
+    variant: "shorthand_header",
+    voucherFamily: "sales_invoice",
+    shouldSupport: true,
+    fields: {
+      "document.number": "7782",
+      "document.date": "11/07/25",
+      "document.place_of_supply": "Gujarat",
+      "seller.name": "KAPOOR & SONS",
+      "seller.gstin": "24ABCDE1111F1Z3",
+      "buyer.name": "R K ENTERPRISES",
+      "buyer.gstin": "24AAAAA2222G1Z4",
+      "amounts.grand_total_cents": 1180000,
+    },
+    lineItems: [
+      {
+        description: "Tiles",
+        quantity: 200,
+        unitPriceCents: 5000,
+        amountCents: 1000000,
       },
     ],
   },
@@ -428,6 +463,22 @@ export function buildTallyAdversarialHarness(options = {}) {
     );
   });
 
+  for (const failureCase of EXPLICIT_FAILURE_CASES) {
+    const preset = getPresetById(failureCase.presetId);
+    cases.push({
+      id: failureCase.id,
+      label: failureCase.label,
+      baseCaseId: failureCase.presetId,
+      failureClass: failureCase.failureClass,
+      variant: failureCase.variant,
+      source: preset.source,
+      voucherFamily: failureCase.voucherFamily,
+      shouldSupport: failureCase.shouldSupport,
+      fields: { ...failureCase.fields },
+      lineItems: failureCase.lineItems.map((item) => ({ ...item })),
+    });
+  }
+
   return cases;
 }
 
@@ -635,4 +686,3 @@ export function evaluateTallyAdversarialHarness(options = {}) {
     },
   };
 }
-

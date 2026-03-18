@@ -189,7 +189,7 @@ There is now an adversarial harness for that exact gap:
 
 - `node scripts/evaluate_tally_harness.mjs`
 - reports candidate recall, top-1 accuracy, instability, and line-item recall by failure class
-- useful classes today: `candidate_missing`, `layout_drift`, `ocr_corruption`, `numeric_ambiguity`, `ranking_ambiguity`, `structural_inconsistency`
+- useful classes today: `candidate_missing`, `implicit_field`, `layout_drift`, `ocr_corruption`, `numeric_ambiguity`, `ranking_ambiguity`, `structural_inconsistency`
 
 ## Local development
 

@@ -8,18 +8,31 @@ const GSTIN_PATTERN = /\b\d{2}[A-Z]{5}\d{4}[A-Z][0-9A-Z]Z[0-9A-Z]\b/g;
 const GSTIN_VALUE_PATTERN = /\b\d{2}[A-Z]{5}\d{4}[A-Z][0-9A-Z]Z[0-9A-Z]\b/;
 const DATE_VALUE_PATTERN =
   /^(?:\d{1,2}\/\d{1,2}\/\d{2,4}|\d{1,2}-[A-Za-z]{3}-\d{2,4}|\d{1,2}\s+[A-Za-z]{3,9}\s+\d{2,4})$/;
+const INLINE_DATE_PATTERN =
+  /\b(?:\d{1,2}\/\d{1,2}\/\d{2,4}|\d{1,2}-[A-Za-z]{3}-\d{2,4}|\d{1,2}\s+[A-Za-z]{3,9}\s+\d{2,4})\b/i;
 const COMPANY_SUFFIX_PATTERN = /\b(?:LLP|LTD\.?|LIMITED|PRIVATE LIMITED|PVT\.?\s+LTD\.?)\b/i;
 const MONEY_TOKEN_PATTERN = /(?:₹\s*)?(?:Rs\.?\s*)?[0-9][0-9,]*\.\d{2}/;
+const LOOSE_MONEY_TOKEN_PATTERN = /(?:₹\s*)?(?:Rs\.?\s*)?[0-9][0-9,]*(?:\.\d{1,2})?/;
 const PARTY_HEADING_PATTERN =
-  /\b(?:buyer|bill to|sold to|consignee|ship to|supplier|seller|from)\b/i;
+  /\b(?:buyer|bill to|sold to|consignee|ship to|supplier|seller|from|client|customer|vendor)\b/i;
 const PARTY_METADATA_PATTERN =
-  /\b(?:gstin|gst no|uin|invoice|date|ack|e-way|amount|total|subtotal|tax|place of supply|state|phone|email|bank|branch|declaration)\b/i;
+  /\b(?:gstin|gst no|uin|invoice|date|ack|e-way|amount|total|subtotal|tax|place of supply|state|supply|phone|email|bank|branch|declaration)\b/i;
 const STATEMENT_HEADER_PATTERN =
   /\b(?:account statement|bank statement|statement of account|mini statement|ledger statement)\b/i;
 const STATEMENT_BALANCE_PATTERN =
   /\b(?:opening balance|closing balance|available balance|ledger balance|running balance)\b/i;
 const STATEMENT_COLUMN_PATTERN =
   /\b(?:debit|credit|withdrawal|deposit|narration|transaction|txn|cheque|utr|imps|neft|upi|balance)\b/i;
+const DOCUMENT_NUMBER_HASH_PATTERN = /#\s*([A-Z0-9][A-Z0-9/-]{0,39})\b/i;
+const GRAND_TOTAL_CUE_PATTERN =
+  /\b(?:grand\s*total|final amount|net amount|net payable|amount due|amount payable|balance due|total(?:\s+amount)?)\b/i;
+const SUBTOTAL_CUE_PATTERN = /\bsub\s*total\b/i;
+const TAXABLE_CUE_PATTERN = /\btaxable\b/i;
+const DISCOUNT_CUE_PATTERN = /\b(?:discount|disc\.?)\b/i;
+const ROUND_OFF_CUE_PATTERN = /\bround\s*off\b/i;
+const TAX_LINE_CUE_PATTERN = /\b(?:igst|cgst|sgst|cess|tax(?:\s+\d+(?:\.\d+)?%)?)\b/i;
+const TABLE_LINE_CUE_PATTERN =
+  /\b(?:item|description|goods|qty|quantity|rate|price|hsn|sac|amount|gross|units?)\b/i;
 const UNKNOWN_FAMILY_THRESHOLD = 1;
 
 export const TALLY_EXTRACTION_PSVM_OPS = Object.freeze([
@@ -130,14 +143,44 @@ function countPatternMatches(text, pattern) {
   return [...text.matchAll(regex)].length;
 }
 
+function parseLooseMoneyToCents(value) {
+  const text = String(value ?? "").trim();
+  if (!text) {
+    return null;
+  }
+
+  const normalized = text
+    .replace(/^Rs\.?\s*/i, "")
+    .replace(/₹/g, "")
+    .replace(/,/g, "")
+    .replace(/\s+/g, "");
+
+  if (!/^\d+(?:\.\d{1,2})?$/.test(normalized)) {
+    return null;
+  }
+
+  const [whole, fraction = ""] = normalized.split(".");
+  return Number(whole) * 100 + Number(fraction.padEnd(2, "0"));
+}
+
+function normalizeDocumentNumberValue(value) {
+  return cleanFieldCandidate(value).replace(/^#\s*/, "").replace(/[.:]+$/, "");
+}
+
+function extractInlineDate(value) {
+  const match = String(value ?? "").match(INLINE_DATE_PATTERN);
+  return match?.[0] ?? null;
+}
+
 function findHeadingRole(line) {
-  if (/\b(?:consignee|ship to)\b/i.test(line)) {
+  const text = collapseWhitespace(line);
+  if (/^(?:consignee|ship to)\b/i.test(text)) {
     return "consignee";
   }
-  if (/\b(?:buyer|bill to|sold to)\b/i.test(line)) {
+  if (/^(?:buyer|bill to|sold to|client|customer|party)\b/i.test(text)) {
     return "buyer";
   }
-  if (/\b(?:supplier|seller|from)\b/i.test(line)) {
+  if (/^(?:supplier|seller|from|vendor)\b/i.test(text)) {
     return "seller";
   }
   return null;
@@ -204,6 +247,30 @@ function isLikelyPartyName(line) {
   return /[A-Za-z]{2}/.test(text);
 }
 
+function findNearbyPartyName(lines, lineIndex) {
+  const offsets = [-1, 1, -2, 2];
+
+  for (const offset of offsets) {
+    const candidateIndex = lineIndex + offset;
+    if (candidateIndex < 0 || candidateIndex >= lines.length) {
+      continue;
+    }
+
+    const text = collapseWhitespace(lines[candidateIndex]);
+    if (!isLikelyPartyName(text)) {
+      continue;
+    }
+
+    return {
+      lineIndex: candidateIndex,
+      text,
+      distance: Math.abs(offset),
+    };
+  }
+
+  return null;
+}
+
 function isCompanyNameCandidate(line) {
   const text = collapseWhitespace(line);
   if (!text || text.length > 90) {
@@ -238,6 +305,71 @@ function scoreCompanyNameCandidate(text, lineIndex, lineCount, role) {
   }
 
   return score;
+}
+
+function collectImplicitDocumentNumberCandidates(lines) {
+  const candidates = [];
+  const topWindow = Math.min(lines.length, 6);
+
+  for (let index = 0; index < topWindow; index += 1) {
+    const text = collapseWhitespace(lines[index]);
+    if (!text || /\b(?:invoice|voucher|bill|ack|gst|date)\b/i.test(text)) {
+      continue;
+    }
+
+    const match = text.match(DOCUMENT_NUMBER_HASH_PATTERN);
+    if (!match) {
+      continue;
+    }
+
+    const normalizedValue = normalizeDocumentNumberValue(match[1]);
+    if (!/^[A-Z0-9][A-Z0-9/-]{0,39}$/i.test(normalizedValue)) {
+      continue;
+    }
+
+    candidates.push(
+      createCandidate("document.number", normalizedValue, {
+        normalizedValue,
+        displayValue: match[0].replace(/\s+/g, ""),
+        score: 43 - index,
+        source: "implicit_header",
+        lineIndex: index,
+        lineText: text,
+        reason: "matched top-header document number token",
+      }),
+    );
+  }
+
+  return candidates;
+}
+
+function collectImplicitDateCandidates(lines) {
+  const candidates = [];
+  const topWindow = Math.min(lines.length, 6);
+
+  for (let index = 0; index < topWindow; index += 1) {
+    const text = collapseWhitespace(lines[index]);
+    if (!text) {
+      continue;
+    }
+
+    const inlineDate = extractInlineDate(text);
+    if (!inlineDate) {
+      continue;
+    }
+
+    candidates.push(
+      createCandidate("document.date", inlineDate, {
+        score: 42 - index,
+        source: "implicit_header",
+        lineIndex: index,
+        lineText: text,
+        reason: "matched top-header inline date",
+      }),
+    );
+  }
+
+  return candidates;
 }
 
 function collectLabeledValueCandidates(lines, labelPatterns, validator, options = {}) {
@@ -317,6 +449,7 @@ function scoreVoucherFamily(lines, text, voucherFamily) {
   const hasDebitAndCredit = /\bdebit\b/i.test(text) && /\bcredit\b/i.test(text);
   const hasBalanceCue = STATEMENT_BALANCE_PATTERN.test(text);
   const statementColumnMatches = countPatternMatches(text, STATEMENT_COLUMN_PATTERN);
+  const gstinMatchCount = countPatternMatches(text, GSTIN_PATTERN);
 
   switch (voucherFamily) {
     case "proforma_invoice":
@@ -340,7 +473,13 @@ function scoreVoucherFamily(lines, text, voucherFamily) {
         score += 12;
         reasons.push("contains invoice header");
       }
-      if (/\b(?:GSTIN|IGST|CGST|SGST|amount payable|place of supply)\b/i.test(text)) {
+      if (
+        /\b(?:GSTIN|IGST|CGST|SGST|amount payable|place of supply|final amount|net amount|client|customer)\b/i.test(
+          text,
+        ) ||
+        /^Supply\s*:/im.test(text) ||
+        gstinMatchCount >= 2
+      ) {
         score += 4;
         reasons.push("contains invoice/GST field cues");
       }
@@ -685,6 +824,7 @@ function addDocumentCandidates(candidateMap, lines, text) {
       }),
     ),
   );
+  pushCandidates(candidateMap, "document.number", collectImplicitDocumentNumberCandidates(lines));
 
   pushCandidates(
     candidateMap,
@@ -704,6 +844,7 @@ function addDocumentCandidates(candidateMap, lines, text) {
       }),
     ),
   );
+  pushCandidates(candidateMap, "document.date", collectImplicitDateCandidates(lines));
 
   pushCandidates(
     candidateMap,
@@ -748,7 +889,7 @@ function addDocumentCandidates(candidateMap, lines, text) {
     "document.place_of_supply",
     collectLabeledValueCandidates(
       lines,
-      [/Place of Supply/i, /State Name/i],
+      [/Place of Supply/i, /^Supply\s*:/i, /State Name/i],
       (value) => /^[A-Za-z][A-Za-z\s().-]{1,60}$/.test(value),
       { inlineScore: 48, projectedScore: 40 },
     ).map((candidate) =>
@@ -860,6 +1001,21 @@ function addPartyCandidates(candidateMap, lines) {
           reason: role ? `GSTIN near ${assignedRole} section` : "GSTIN assigned by top-to-bottom fallback",
         }),
       );
+
+      const nearbyName = findNearbyPartyName(lines, index);
+      if (nearbyName) {
+        pushCandidate(
+          candidateMap,
+          `${assignedRole}.name`,
+          createCandidate(`${assignedRole}.name`, nearbyName.text, {
+            score: 42 - Math.min(nearbyName.distance, 2),
+            source: "party_proximity",
+            lineIndex: nearbyName.lineIndex,
+            lineText: nearbyName.text,
+            reason: `nearest name around ${assignedRole} GSTIN`,
+          }),
+        );
+      }
     }
   }
 }
@@ -881,6 +1037,9 @@ function scoreCueAmountCandidate(candidate, cuePattern, options = {}) {
   if (candidate.pageRightBucket === "edge" || candidate.pageRightBucket === "far_right") {
     score += 2;
   }
+  if (candidate.pageBottomBucket === "bottom") {
+    score += 2;
+  }
   if (candidate.lineItemCue) {
     score -= 5;
   }
@@ -888,9 +1047,133 @@ function scoreCueAmountCandidate(candidate, cuePattern, options = {}) {
   return score;
 }
 
+function bucketPageRight(ratio) {
+  if (!Number.isFinite(ratio)) {
+    return "unknown";
+  }
+  if (ratio >= 0.95) {
+    return "edge";
+  }
+  if (ratio >= 0.86) {
+    return "far_right";
+  }
+  if (ratio >= 0.72) {
+    return "right";
+  }
+  if (ratio >= 0.45) {
+    return "mid";
+  }
+  return "left";
+}
+
+function bucketPageBottom(ratio) {
+  if (!Number.isFinite(ratio)) {
+    return "unknown";
+  }
+  if (ratio >= 0.82) {
+    return "bottom";
+  }
+  if (ratio >= 0.55) {
+    return "mid";
+  }
+  return "top";
+}
+
+function isLikelyLineItemAmountRow(words, lineText) {
+  const numericWordCount = words.filter((word) => parseLooseMoneyToCents(word.text) != null).length;
+  const hasAlphaWord = words.some((word) => /[A-Za-z]{2}/.test(word.text ?? ""));
+  if (TABLE_LINE_CUE_PATTERN.test(lineText)) {
+    return true;
+  }
+  return numericWordCount >= 3 && hasAlphaWord;
+}
+
+function extractLooseAmountCandidates(source) {
+  const normalizedSource = normalizeTallySource(source);
+  const candidates = [];
+
+  for (const row of normalizedSource.rows) {
+    const sortedWords = [...(row.words ?? [])].sort((left, right) => (left.xMin ?? 0) - (right.xMin ?? 0));
+    const lineText = collapseWhitespace(row.text ?? "");
+    if (!lineText) {
+      continue;
+    }
+
+    const lineItemCue = isLikelyLineItemAmountRow(sortedWords, lineText);
+    for (let wordIndex = 0; wordIndex < sortedWords.length; wordIndex += 1) {
+      const word = sortedWords[wordIndex];
+      const rawText = String(word.text ?? "").trim();
+      if (!rawText || rawText.includes("/") || rawText.endsWith("%")) {
+        continue;
+      }
+      if (!LOOSE_MONEY_TOKEN_PATTERN.test(rawText)) {
+        continue;
+      }
+
+      const amountCents = parseLooseMoneyToCents(rawText);
+      if (amountCents == null) {
+        continue;
+      }
+
+      const leftWords = sortedWords.slice(0, wordIndex).map((entry) => entry.text ?? "");
+      const rightWords = sortedWords.slice(wordIndex + 1).map((entry) => entry.text ?? "");
+      const amountRightRatio =
+        typeof word.xMax === "number" && typeof row.pageWidth === "number" && row.pageWidth > 0
+          ? word.xMax / row.pageWidth
+          : null;
+      const pageBottomRatio =
+        typeof row.yMax === "number" && typeof row.pageHeight === "number" && row.pageHeight > 0
+          ? row.yMax / row.pageHeight
+          : (row.rowIndex + 1) / Math.max(normalizedSource.rows.length, 1);
+
+      candidates.push({
+        amountText: rawText,
+        amountCents,
+        lineIndex: row.rowIndex ?? null,
+        lineText,
+        leftText: collapseWhitespace(leftWords.join(" ")),
+        rightText: collapseWhitespace(rightWords.join(" ")),
+        amountIsRightmostWord: wordIndex === sortedWords.length - 1,
+        pageRightBucket: bucketPageRight(amountRightRatio),
+        pageBottomBucket: bucketPageBottom(pageBottomRatio),
+        lineItemCue,
+      });
+    }
+  }
+
+  return candidates;
+}
+
+function mergeAmountCandidates(...groups) {
+  const merged = new Map();
+
+  for (const group of groups) {
+    for (const candidate of group ?? []) {
+      const key = [candidate.lineIndex ?? -1, candidate.amountCents ?? -1, candidate.amountText ?? ""].join(":");
+      const previous = merged.get(key);
+      if (!previous) {
+        merged.set(key, candidate);
+        continue;
+      }
+
+      const previousSignals = [previous.leftText, previous.pageRightBucket, previous.pageBottomBucket].filter(Boolean)
+        .length;
+      const nextSignals = [candidate.leftText, candidate.pageRightBucket, candidate.pageBottomBucket].filter(Boolean)
+        .length;
+
+      if (nextSignals > previousSignals) {
+        merged.set(key, { ...previous, ...candidate });
+      }
+    }
+  }
+
+  return [...merged.values()];
+}
+
 function addAmountCandidates(candidateMap, source) {
   let amountCandidates = [];
   let rankedTotalCandidates = [];
+  let looseAmountCandidates = [];
 
   try {
     amountCandidates = extractReceiptAmountCandidates(source);
@@ -903,6 +1186,14 @@ function addAmountCandidates(candidateMap, source) {
   } catch {
     rankedTotalCandidates = [];
   }
+
+  try {
+    looseAmountCandidates = extractLooseAmountCandidates(source);
+  } catch {
+    looseAmountCandidates = [];
+  }
+
+  const combinedAmountCandidates = mergeAmountCandidates(amountCandidates, looseAmountCandidates);
 
   for (const candidate of rankedTotalCandidates.slice(0, 6)) {
     pushCandidate(
@@ -920,17 +1211,18 @@ function addAmountCandidates(candidateMap, source) {
     );
   }
 
-  for (const candidate of amountCandidates) {
+  for (const candidate of combinedAmountCandidates) {
     const lineText = candidate.lineText ?? "";
+    const leftText = candidate.leftText ?? "";
 
-    if (/\btaxable\b/i.test(lineText) || /\btaxable\b/i.test(candidate.leftText ?? "")) {
+    if (TAXABLE_CUE_PATTERN.test(lineText) || TAXABLE_CUE_PATTERN.test(leftText)) {
       pushCandidate(
         candidateMap,
         "amounts.taxable_amount_cents",
         createCandidate("amounts.taxable_amount_cents", candidate.amountCents, {
           normalizedValue: candidate.amountCents,
           displayValue: candidate.amountText,
-          score: scoreCueAmountCandidate(candidate, /\btaxable\b/i, { baseScore: 52 }),
+          score: scoreCueAmountCandidate(candidate, TAXABLE_CUE_PATTERN, { baseScore: 52 }),
           source: "amount_cue",
           lineIndex: candidate.lineIndex,
           lineText: candidate.lineText,
@@ -939,14 +1231,14 @@ function addAmountCandidates(candidateMap, source) {
       );
     }
 
-    if (/\bsub\s*total\b/i.test(lineText) || /\bsub\s*total\b/i.test(candidate.leftText ?? "")) {
+    if (SUBTOTAL_CUE_PATTERN.test(lineText) || SUBTOTAL_CUE_PATTERN.test(leftText)) {
       pushCandidate(
         candidateMap,
         "amounts.subtotal_cents",
         createCandidate("amounts.subtotal_cents", candidate.amountCents, {
           normalizedValue: candidate.amountCents,
           displayValue: candidate.amountText,
-          score: scoreCueAmountCandidate(candidate, /\bsub\s*total\b/i, { baseScore: 48 }),
+          score: scoreCueAmountCandidate(candidate, SUBTOTAL_CUE_PATTERN, { baseScore: 48 }),
           source: "amount_cue",
           lineIndex: candidate.lineIndex,
           lineText: candidate.lineText,
@@ -955,14 +1247,14 @@ function addAmountCandidates(candidateMap, source) {
       );
     }
 
-    if (/\b(?:discount|disc\.?)\b/i.test(lineText)) {
+    if (DISCOUNT_CUE_PATTERN.test(lineText)) {
       pushCandidate(
         candidateMap,
         "amounts.discount_cents",
         createCandidate("amounts.discount_cents", candidate.amountCents, {
           normalizedValue: candidate.amountCents,
           displayValue: candidate.amountText,
-          score: scoreCueAmountCandidate(candidate, /\b(?:discount|disc\.?)\b/i, { baseScore: 46 }),
+          score: scoreCueAmountCandidate(candidate, DISCOUNT_CUE_PATTERN, { baseScore: 46 }),
           source: "amount_cue",
           lineIndex: candidate.lineIndex,
           lineText: candidate.lineText,
@@ -971,18 +1263,53 @@ function addAmountCandidates(candidateMap, source) {
       );
     }
 
-    if (/\bround\s*off\b/i.test(lineText)) {
+    if (ROUND_OFF_CUE_PATTERN.test(lineText)) {
       pushCandidate(
         candidateMap,
         "amounts.round_off_cents",
         createCandidate("amounts.round_off_cents", candidate.amountCents, {
           normalizedValue: candidate.amountCents,
           displayValue: candidate.amountText,
-          score: scoreCueAmountCandidate(candidate, /\bround\s*off\b/i, { baseScore: 46 }),
+          score: scoreCueAmountCandidate(candidate, ROUND_OFF_CUE_PATTERN, { baseScore: 46 }),
           source: "amount_cue",
           lineIndex: candidate.lineIndex,
           lineText: candidate.lineText,
           reason: "matched round-off cue",
+        }),
+      );
+    }
+
+    if (GRAND_TOTAL_CUE_PATTERN.test(lineText) || GRAND_TOTAL_CUE_PATTERN.test(leftText)) {
+      pushCandidate(
+        candidateMap,
+        "amounts.grand_total_cents",
+        createCandidate("amounts.grand_total_cents", candidate.amountCents, {
+          normalizedValue: candidate.amountCents,
+          displayValue: candidate.amountText,
+          score: scoreCueAmountCandidate(candidate, GRAND_TOTAL_CUE_PATTERN, { baseScore: 58 }),
+          source: "amount_cue",
+          lineIndex: candidate.lineIndex,
+          lineText: candidate.lineText,
+          reason: "matched grand-total cue",
+        }),
+      );
+    } else if (
+      !candidate.lineItemCue &&
+      candidate.amountCents >= 100000 &&
+      candidate.amountIsRightmostWord &&
+      (candidate.pageBottomBucket === "bottom" || candidate.pageRightBucket === "edge")
+    ) {
+      pushCandidate(
+        candidateMap,
+        "amounts.grand_total_cents",
+        createCandidate("amounts.grand_total_cents", candidate.amountCents, {
+          normalizedValue: candidate.amountCents,
+          displayValue: candidate.amountText,
+          score: scoreCueAmountCandidate(candidate, GRAND_TOTAL_CUE_PATTERN, { baseScore: 30 }),
+          source: "weak_amount_fallback",
+          lineIndex: candidate.lineIndex,
+          lineText: candidate.lineText,
+          reason: "unlabeled bottom/right amount candidate",
         }),
       );
     }
@@ -1047,6 +1374,26 @@ function addAmountCandidates(candidateMap, source) {
           lineIndex: candidate.lineIndex,
           lineText: candidate.lineText,
           reason: "matched CESS cue",
+        }),
+      );
+    }
+
+    if (
+      TAX_LINE_CUE_PATTERN.test(lineText) &&
+      !/\b(?:igst|cgst|sgst|cess)\b/i.test(lineText) &&
+      !candidate.lineItemCue
+    ) {
+      pushCandidate(
+        candidateMap,
+        "amounts.taxable_amount_cents",
+        createCandidate("amounts.taxable_amount_cents", candidate.amountCents, {
+          normalizedValue: candidate.amountCents,
+          displayValue: candidate.amountText,
+          score: scoreCueAmountCandidate(candidate, TAX_LINE_CUE_PATTERN, { baseScore: 22 }),
+          source: "weak_tax_fallback",
+          lineIndex: candidate.lineIndex,
+          lineText: candidate.lineText,
+          reason: "generic tax line amount",
         }),
       );
     }

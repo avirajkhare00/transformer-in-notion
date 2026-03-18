@@ -67,6 +67,7 @@ Pipeline:
    - optional industry extensions for pharma, medical, trading, and stockist flows
 4. Generate legal candidates for each field.
    - nearby label/value spans
+   - weak-label and implicit header spans like `#7782`, `Client`, `Supply:`, and `Final Amount`
    - GSTINs, dates, invoice numbers, totals
    - row-aware table parsing for line items, including multiline descriptions and common industry columns
 5. Rank and select candidates.
@@ -153,6 +154,7 @@ The harness is organized by failure class instead of document type:
 - `numeric_ambiguity`
 - `ocr_corruption`
 - `layout_drift`
+- `implicit_field`
 
 This is the current intended regression surface for parser work. If candidate recall is low, model changes should not be the first response.
 

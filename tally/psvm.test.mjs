@@ -64,6 +64,26 @@ Date Narration Debit Credit Balance
 04/01/2026 Closing Balance 33,750.00
 `;
 
+const IMPLICIT_FIELD_SAMPLE = `
+#7782      11/07/25
+
+KAPOOR & SONS
+24ABCDE1111F1Z3
+
+Client:
+R K ENTERPRISES
+24AAAAA2222G1Z4
+
+Supply: Gujarat
+
+Item        Qty   Price   Total
+Tiles       200   50      10000
+
+Tax 18%              1800
+
+Final Amount         11800
+`;
+
 test("voucher classifier prefers proforma over generic invoice families", () => {
   const classification = classifyTallyVoucherFamily(PROFORMA_SAMPLE);
   assert.equal(classification.selectedFamily.voucherFamily, "proforma_invoice");
@@ -117,4 +137,26 @@ test("statement-like OCR is classified as unsupported instead of guessed as an i
   assert.match(result.result.rejectionReason, /ledger-oriented PSVM/i);
   assert.equal(result.result.amounts.grandTotalCents, null);
   assert.ok(!("document.number" in result.state.fieldCandidates));
+});
+
+test("tally PSVM surfaces implicit header fields and weak-label totals", () => {
+  const state = buildTallyExtractionState(IMPLICIT_FIELD_SAMPLE);
+  assert.equal(state.voucherFamily, "sales_invoice");
+  assert.equal(state.selectedFields["document.number"], "7782");
+  assert.equal(state.selectedFields["document.date"], "11/07/25");
+  assert.equal(state.selectedFields["document.place_of_supply"], "Gujarat");
+  assert.equal(state.selectedFields["seller.name"], "KAPOOR & SONS");
+  assert.equal(state.selectedFields["buyer.name"], "R K ENTERPRISES");
+  assert.equal(state.selectedFields["amounts.grand_total_cents"], 1180000);
+
+  const result = runTallyExtractionPsvm(IMPLICIT_FIELD_SAMPLE);
+  assert.equal(result.result.document.number, "7782");
+  assert.equal(result.result.document.date, "11/07/25");
+  assert.equal(result.result.seller.gstin, "24ABCDE1111F1Z3");
+  assert.equal(result.result.buyer.gstin, "24AAAAA2222G1Z4");
+  assert.equal(result.result.amounts.grandTotalCents, 1180000);
+  assert.equal(result.result.lineItems[0].description, "Tiles");
+  assert.equal(result.result.lineItems[0].quantity, 200);
+  assert.equal(result.result.lineItems[0].unitPriceCents, 5000);
+  assert.equal(result.result.lineItems[0].amountCents, 1000000);
 });

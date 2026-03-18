@@ -38,14 +38,25 @@ test("baseline harness controls still evaluate as supported with field recall", 
   assert.equal(report.lineItemSummary.candidateRecall.rate, 1);
 });
 
+test("implicit-field harness case keeps the weak-label values in the legal candidate set", () => {
+  const cases = buildTallyAdversarialHarness({ seed: 31, includeBaseline: true });
+  const implicitCase = cases.find((entry) => entry.id === "implicit-field-shorthand-sales");
+  assert.ok(implicitCase);
+
+  const report = evaluateTallyHarnessCase(implicitCase);
+  assert.equal(report.familyMatch, true);
+  assert.equal(report.scalarSummary.candidateRecall.rate, 1);
+  assert.equal(report.lineItemSummary.candidateRecall.rate, 1);
+});
+
 test("harness evaluation returns aggregate metrics by failure class", () => {
   const evaluation = evaluateTallyAdversarialHarness({ seed: 31, includeBaseline: true });
 
   assert.ok(evaluation.summary.caseCount >= 14);
   assert.ok("candidate_missing" in evaluation.summary.byFailureClass);
+  assert.ok("implicit_field" in evaluation.summary.byFailureClass);
   assert.ok("ocr_corruption" in evaluation.summary.byFailureClass);
   assert.ok("layout_drift" in evaluation.summary.byFailureClass);
   assert.ok(typeof evaluation.summary.byFailureClass.candidate_missing.scalarCandidateRecall === "number");
   assert.ok(Array.isArray(evaluation.caseReports));
 });
-

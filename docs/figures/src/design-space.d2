@@ -1,0 +1,66 @@
+direction: right
+
+classes: {
+  card: {
+    shape: rectangle
+    style: {
+      fill: "#f8fafc"
+      stroke: "#94a3b8"
+      font-size: 28
+      bold: false
+    }
+  }
+  risk: {
+    shape: rectangle
+    style: {
+      fill: "#fef2f2"
+      stroke: "#dc2626"
+      font-size: 28
+    }
+  }
+  fit: {
+    shape: rectangle
+    style: {
+      fill: "#ecfdf5"
+      stroke: "#16a34a"
+      font-size: 28
+    }
+  }
+  broad: {
+    shape: rectangle
+    style: {
+      fill: "#eff6ff"
+      stroke: "#2563eb"
+      font-size: 28
+    }
+  }
+}
+
+oneshot: {
+  class: risk
+  label: "TOO COARSE\n\nGuess\n\nOne-shot prediction\nInput -> final answer\n\nStrengths\n- simple interface\n- low system complexity\n\nWeaknesses\n- hides intermediate state\n- hard to verify or debug\n- illegal outputs are easy"
+}
+
+psvm: {
+  class: fit
+  label: "RIGHT-SIZED\n\nGuide\n\nPSVM middle ground\nInput -> exact state -> valid options -> ranked choice\n\nStrengths\n- exact runtime keeps correctness\n- model helps only with ambiguity\n- trace is inspectable\n\nWeaknesses\n- requires task-specific design\n- still needs strong candidate coverage"
+}
+
+fullvm: {
+  class: broad
+  label: "TOO BROAD\n\nEmulate\n\nFull VM emulation\nInput -> broad machine trace\n\nStrengths\n- very general target\n- can model full execution\n\nWeaknesses\n- too much irrelevant machine detail\n- longer traces\n- more context and decoding risk"
+}
+
+oneshot -> psvm: "narrow toward task fit" {
+  style: {
+    stroke: "#475569"
+    font-size: 22
+  }
+}
+
+psvm -> fullvm: "expand toward machine detail" {
+  style: {
+    stroke: "#475569"
+    font-size: 22
+  }
+}

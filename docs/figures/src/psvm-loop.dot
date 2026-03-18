@@ -1,0 +1,88 @@
+digraph PSVMLoop {
+  graph [
+    rankdir=TB,
+    splines=polyline,
+    nodesep=0.45,
+    ranksep=0.65,
+    pad=0.15,
+    bgcolor="white",
+    fontname="Helvetica"
+  ];
+
+  node [
+    shape=box,
+    style="rounded,filled",
+    fontname="Helvetica",
+    fontsize=16,
+    margin="0.18,0.12",
+    color="#64748b",
+    fillcolor="#f8fafc"
+  ];
+
+  edge [
+    color="#334155",
+    penwidth=1.6,
+    arrowsize=0.8,
+    fontname="Helvetica",
+    fontsize=12
+  ];
+
+  subgraph cluster_legend {
+    label="Reading guide";
+    color="#cbd5e1";
+    penwidth=1.2;
+    style="rounded";
+
+    legend_runtime [label="Blue: exact runtime", color="#4f46e5", fillcolor="#eef2ff"];
+    legend_model [label="Green: learned guide", color="#16a34a", fillcolor="#ecfdf5"];
+    legend_trace [label="Orange: trace record", color="#c2410c", fillcolor="#fff7ed"];
+
+    { rank=same; legend_runtime legend_model legend_trace; }
+  }
+
+  bridge [
+    label="The same loop can be written as a fixed trace.\nThe runtime executes; the model only ranks the ambiguous step.",
+    color="#cbd5e1",
+    fillcolor="#ffffff",
+    fontsize=14
+  ];
+
+  subgraph cluster_flow {
+    label="PSVM execution loop";
+    color="#cbd5e1";
+    penwidth=1.2;
+    style="rounded";
+
+    task  [label="Task\ninstance"];
+    state [label="Exact\nstate", color="#4f46e5", fillcolor="#eef2ff"];
+    valid [label="Valid\noptions", color="#4f46e5", fillcolor="#eef2ff"];
+    score [label="Model scores\noptions", color="#16a34a", fillcolor="#ecfdf5"];
+    apply [label="Verify +\napply", color="#4f46e5", fillcolor="#eef2ff"];
+    next  [label="New state\n+ trace"];
+
+    { rank=same; task state valid score apply next; }
+
+    task -> state -> valid -> score -> apply -> next;
+    next -> state [label="repeat", constraint=false, minlen=2];
+  }
+
+  subgraph cluster_trace {
+    label="Trace grows by one record";
+    color="#fdba74";
+    penwidth=1.2;
+    style="rounded";
+
+    trace_s     [label="S_t", color="#c2410c", fillcolor="#fff7ed"];
+    trace_v     [label="V(S_t)", color="#c2410c", fillcolor="#fff7ed"];
+    trace_a     [label="a_t*", color="#c2410c", fillcolor="#fff7ed"];
+    trace_snext [label="S_(t+1)", color="#c2410c", fillcolor="#fff7ed"];
+
+    { rank=same; trace_s trace_v trace_a trace_snext; }
+
+    trace_s -> trace_v -> trace_a -> trace_snext;
+  }
+
+  legend_model -> bridge [style=invis];
+  bridge -> state [style=invis];
+  next -> trace_snext [style=invis];
+}

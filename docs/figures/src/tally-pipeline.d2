@@ -1,0 +1,83 @@
+direction: right
+
+classes: {
+  exact_box: {
+    shape: rectangle
+    style: {
+      fill: "#eef2ff"
+      stroke: "#4f46e5"
+      font-size: 20
+    }
+  }
+  model_box: {
+    shape: rectangle
+    style: {
+      fill: "#ecfdf5"
+      stroke: "#16a34a"
+      font-size: 20
+    }
+  }
+  input_box: {
+    shape: rectangle
+    style: {
+      fill: "#f8fafc"
+      stroke: "#64748b"
+      font-size: 20
+    }
+  }
+}
+
+ocr: {
+  class: input_box
+  label: "OCR or\nlayout text"
+}
+
+exact: {
+  label: "Exact extraction + validation"
+  direction: right
+  style: {
+    fill: "#eef2ff"
+    stroke: "#818cf8"
+  }
+
+  family: {
+    class: exact_box
+    label: "Voucher\nfamily"
+  }
+
+  schema: {
+    class: exact_box
+    label: "Schema\nselection"
+  }
+
+  candidates: {
+    class: exact_box
+    label: "Legal field\ncandidates"
+  }
+
+  resolver: {
+    class: exact_box
+    label: "Resolver"
+  }
+
+  record: {
+    class: exact_box
+    label: "Tally-shaped\nrecord"
+  }
+}
+
+guide: {
+  label: "Learned ranking"
+  direction: right
+  style: {
+    fill: "#ecfdf5"
+    stroke: "#4ade80"
+  }
+
+  ranker: {
+    class: model_box
+    label: "Local ranker"
+  }
+}
+
+ocr -> exact.family -> exact.schema -> exact.candidates -> guide.ranker -> exact.resolver -> exact.record

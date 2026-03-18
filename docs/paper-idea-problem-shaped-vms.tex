@@ -39,12 +39,9 @@
 \setlength{\emergencystretch}{3em} % prevent overfull lines
 \providecommand{\tightlist}{%
   \setlength{\itemsep}{0pt}\setlength{\parskip}{0pt}}
+\usepackage{graphicx}
 \usepackage{float}
-\usepackage{tikz}
-\usepackage{pgfplots}
-\usetikzlibrary{arrows.meta,positioning,shapes.geometric,fit,calc}
-\usepgfplotslibrary{groupplots}
-\pgfplotsset{compat=1.18}
+\graphicspath{{figures/out/}}
 \usepackage{bookmark}
 \IfFileExists{xurl.sty}{\usepackage{xurl}}{} % add URL line breaks if available
 \urlstyle{same}
@@ -191,55 +188,7 @@ machine}.
 
 \begin{figure}[H]
 \centering
-\resizebox{\linewidth}{!}{%
-\begin{tikzpicture}[
-  box/.style={draw, rounded corners=6pt, align=left, text width=0.27\linewidth, minimum height=5.6cm, inner sep=8pt, line width=0.8pt},
-  chip/.style={draw=none, rounded corners=4pt, font=\bfseries\small, inner xsep=8pt, inner ysep=4pt},
-  note/.style={font=\small\itshape},
-]
-\node[box, fill=red!4] (oneshot) {
-  \tikz{\node[chip, fill=red!18] {Guess};}\\[5pt]
-  \textbf{One-shot prediction}\\[4pt]
-  Input $\rightarrow$ final answer\\[6pt]
-  \textit{Strengths}\\
-  - simple interface\\
-  - low system complexity\\[4pt]
-  \textit{Weaknesses}\\
-  - hides intermediate state\\
-  - hard to verify or debug\\
-  - illegal outputs are easy
-};
-\node[box, fill=green!6, right=1.0cm of oneshot] (psvm) {
-  \tikz{\node[chip, fill=green!18!white] {Guide};}\\[5pt]
-  \textbf{PSVM middle ground}\\[4pt]
-  Input $\rightarrow$ exact state $\rightarrow$ valid options $\rightarrow$ ranked choice\\[6pt]
-  \textit{Strengths}\\
-  - exact runtime keeps correctness\\
-  - model helps only with ambiguity\\
-  - trace is inspectable\\[4pt]
-  \textit{Weaknesses}\\
-  - requires task-specific design\\
-  - still needs good candidate coverage
-};
-\node[box, fill=blue!4, right=1.0cm of psvm] (fullvm) {
-  \tikz{\node[chip, fill=blue!18] {Emulate};}\\[5pt]
-  \textbf{Full VM emulation}\\[4pt]
-  Input $\rightarrow$ broad machine trace\\[6pt]
-  \textit{Strengths}\\
-  - very general target\\
-  - can model full execution\\[4pt]
-  \textit{Weaknesses}\\
-  - too much irrelevant machine detail\\
-  - longer traces\\
-  - more context and decoding risk
-};
-\draw[-{Latex[length=3mm]}, thick] (oneshot.east) -- (psvm.west);
-\draw[-{Latex[length=3mm]}, thick] (fullvm.west) -- (psvm.east);
-\node[note, above=0.2cm of oneshot.north] {too coarse};
-\node[note, above=0.2cm of psvm.north] {right-sized};
-\node[note, above=0.2cm of fullvm.north] {too broad};
-\end{tikzpicture}
-}
+\includegraphics[width=\linewidth]{design-space.pdf}
 \caption{PSVMs sit between one-shot answer prediction and full-machine emulation.}
 \label{fig:design-space}
 \end{figure}
@@ -395,41 +344,7 @@ The intended execution loop is:
 
 \begin{figure}[H]
 \centering
-\resizebox{\linewidth}{!}{%
-\begin{tikzpicture}[
-  nodebox/.style={draw, rounded corners=6pt, align=center, text width=2.45cm, minimum height=1.15cm, fill=gray!6, line width=0.8pt},
-  exact/.style={nodebox, fill=blue!6},
-  model/.style={nodebox, fill=green!8},
-  tracebox/.style={draw, rounded corners=4pt, align=center, minimum width=2.3cm, minimum height=0.75cm, fill=orange!8, line width=0.7pt},
-  lane/.style={draw, rounded corners=8pt, inner sep=7pt, line width=0.9pt},
-]
-\node[nodebox] (task) {Task\\instance};
-\node[exact, right=0.8cm of task] (state) {Exact\\state};
-\node[exact, right=0.8cm of state] (valid) {Valid\\options};
-\node[model, right=0.8cm of valid] (score) {Model scores\\options};
-\node[exact, right=0.8cm of score] (apply) {Runtime verifies\\and applies};
-\node[nodebox, right=0.8cm of apply] (newstate) {New state\\+ trace};
-\node[tracebox, below=1.45cm of state] (trace1) {$S_t$};
-\node[tracebox, right=0.35cm of trace1] (trace2) {$V(S_t)$};
-\node[tracebox, right=0.35cm of trace2] (trace3) {$a_t^*$};
-\node[tracebox, right=0.35cm of trace3] (trace4) {$S_{t+1}$};
-\node[font=\bfseries\small, above=0.12cm of trace2.north] {trace grows by one record};
-\node[lane, fit=(state) (valid) (apply), fill=blue!3, draw=blue!55] (exactlane) {};
-\node[lane, fit=(score), fill=green!4, draw=green!45!black] (modellane) {};
-\node[font=\bfseries\small, above=0.1cm of exactlane.north] {Exact runtime};
-\node[font=\bfseries\small, above=0.1cm of modellane.north] {Learned guide};
-\draw[-{Latex[length=3mm]}, thick] (task) -- (state);
-\draw[-{Latex[length=3mm]}, thick] (state) -- (valid);
-\draw[-{Latex[length=3mm]}, thick] (valid) -- (score);
-\draw[-{Latex[length=3mm]}, thick] (score) -- (apply);
-\draw[-{Latex[length=3mm]}, thick] (apply) -- (newstate);
-\draw[-{Latex[length=3mm]}, thick, bend left=24] (newstate.north) to node[above, font=\small] {repeat} (state.north);
-\draw[-{Latex[length=2.5mm]}, thick, orange!70!black] (state.south) -- (trace1.north);
-\draw[-{Latex[length=2.5mm]}, thick, orange!70!black] (valid.south) -- (trace2.north);
-\draw[-{Latex[length=2.5mm]}, thick, orange!70!black] (score.south) -- (trace3.north);
-\draw[-{Latex[length=2.5mm]}, thick, orange!70!black] (newstate.south) -- (trace4.north);
-\end{tikzpicture}
-}
+\includegraphics[width=\linewidth]{psvm-loop.pdf}
 \caption{The PSVM execution loop. Code owns state and verification; the model only ranks valid options.}
 \label{fig:psvm-loop}
 \end{figure}
@@ -628,30 +543,7 @@ estimates over exact PSVM states.
 
 \begin{figure}[H]
 \centering
-\begin{tikzpicture}
-\begin{groupplot}[
-  group style={group size=3 by 1, horizontal sep=1.4cm},
-  width=0.27\textwidth,
-  height=5.2cm,
-  ybar,
-  ymin=0,
-  enlarge x limits=0.35,
-  symbolic x coords={Imitation,Regret},
-  xtick=data,
-  xticklabel style={font=\small, rotate=20, anchor=east},
-  nodes near coords,
-  every node near coord/.append style={font=\scriptsize},
-  ylabel style={font=\small},
-  title style={font=\small\bfseries},
-]
-\nextgroupplot[title={Branch decisions}, ylabel={count}]
-\addplot[fill=blue!45] coordinates {(Imitation,7523) (Regret,5133)};
-\nextgroupplot[title={Backtracks}, ylabel={count}]
-\addplot[fill=orange!65] coordinates {(Imitation,86376) (Regret,57057)};
-\nextgroupplot[title={Wall time}, ylabel={seconds}]
-\addplot[fill=green!55!black] coordinates {(Imitation,96.99) (Regret,64.94)};
-\end{groupplot}
-\end{tikzpicture}
+\includegraphics[width=0.98\linewidth]{sudoku-benchmark.pdf}
 \caption{Sudoku benchmark on the hard preset \texttt{Forum hardest 1106 · r365}. Only the learned branch-ordering policy changes.}
 \label{fig:sudoku-benchmark}
 \end{figure}
@@ -688,32 +580,7 @@ failures from ranking failures and resolver failures.
 
 \begin{figure}[H]
 \centering
-\resizebox{\linewidth}{!}{%
-\begin{tikzpicture}[
-  nodebox/.style={draw, rounded corners=6pt, align=center, text width=2.1cm, minimum height=1.05cm, fill=gray!6, line width=0.8pt},
-  exact/.style={nodebox, fill=blue!6},
-  model/.style={nodebox, fill=green!8},
-  lane/.style={draw, rounded corners=8pt, inner sep=7pt, line width=0.9pt},
-]
-\node[nodebox] (ocr) {OCR or\\layout text};
-\node[exact, right=0.45cm of ocr] (family) {Voucher\\family};
-\node[exact, right=0.45cm of family] (schema) {Schema\\selection};
-\node[exact, right=0.45cm of schema] (candidates) {Legal field\\candidates};
-\node[model, right=0.45cm of candidates] (ranker) {Local ranker};
-\node[exact, right=0.45cm of ranker] (resolver) {Resolver};
-\node[exact, right=0.45cm of resolver] (record) {Tally-shaped\\record};
-\node[lane, fit=(family) (schema) (candidates) (resolver) (record), fill=blue!3, draw=blue!55] (exactlane) {};
-\node[lane, fit=(ranker), fill=green!4, draw=green!45!black] (modellane) {};
-\node[font=\bfseries\small, above=0.1cm of exactlane.north] {Exact extraction and validation};
-\node[font=\bfseries\small, above=0.1cm of modellane.north] {Learned ranking};
-\draw[-{Latex[length=3mm]}, thick] (ocr) -- (family);
-\draw[-{Latex[length=3mm]}, thick] (family) -- (schema);
-\draw[-{Latex[length=3mm]}, thick] (schema) -- (candidates);
-\draw[-{Latex[length=3mm]}, thick] (candidates) -- (ranker);
-\draw[-{Latex[length=3mm]}, thick] (ranker) -- (resolver);
-\draw[-{Latex[length=3mm]}, thick] (resolver) -- (record);
-\end{tikzpicture}
-}
+\includegraphics[width=\linewidth]{tally-pipeline.pdf}
 \caption{Tally PSVM pipeline. The model ranks candidates; exact code keeps schema checks and final record emission.}
 \label{fig:tally-pipeline}
 \end{figure}

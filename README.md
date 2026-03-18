@@ -222,6 +222,19 @@ Then open:
 - `http://localhost:8000/receipt.html`
 - `http://localhost:8000/tally.html`
 
+## Minimal smoke test
+
+For a quick local verification before exploring the demos:
+
+```bash
+node --test tally/schema.test.mjs tally/psvm.test.mjs tally/model.test.mjs
+node --test invoice/receipt.test.mjs invoice/total_psvm.test.mjs
+node --check tally/app.mjs tally/worker.mjs
+```
+
+That path checks the Tally and invoice PSVM lanes without requiring model
+retraining or a browser session.
+
 ## Sudoku training
 
 The structured Sudoku training path lives under the legacy `soduku/` directory name.

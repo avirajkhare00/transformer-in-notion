@@ -3,7 +3,16 @@
 ## Purpose
 
 This document tracks the material needed for the full research-paper track on
-arXiv.
+arXiv. Unlike the JOSS software paper, this submission should carry the broader
+PSVM thesis, architecture, and cross-domain evidence.
+
+## Current status
+
+- arXiv path: ready to submit
+- JOSS path: deferred until the repository has a longer public development
+  history
+- software artifact DOI: `10.5281/zenodo.19087723`
+- software release: `v0.1.1`
 
 Primary manuscript:
 
@@ -25,9 +34,9 @@ Companion spec:
 - Affiliation:
   `Independent Researcher, Satna, Madhya Pradesh, India`
 - Primary category:
-  likely `cs.AI` or `cs.LG`
+  recommended `cs.AI`
 - Secondary categories:
-  likely `cs.SE`, `cs.PL`, or `cs.IR`
+  likely `cs.LG`, `cs.SE`, or `cs.PL`
 
 ## Abstract source
 
@@ -39,12 +48,23 @@ Use the abstract from:
 
 - arXiv should carry the broad research claim and experiments
 - the JOSS paper should stay software-centered and shorter
-- the arXiv paper should cite the repository and, once available, the JOSS DOI
+- the arXiv paper should cite the repository Zenodo archive DOI
+- the companion PSVM spec can be linked as supplementary context, but the main
+  arXiv submission should stay centered on the implementation/systems paper
 
-## Before submission
+## Submission package
+
+Use these files for manual submission:
+
+- source manuscript: [paper-idea-problem-shaped-vms.tex](/Users/avirajkhare/hack2/transformers/transformer-in-notion/docs/paper-idea-problem-shaped-vms.tex)
+- generated PDF for visual verification: [paper-idea-problem-shaped-vms.pdf](/Users/avirajkhare/hack2/transformers/transformer-in-notion/docs/paper-idea-problem-shaped-vms.pdf)
+- companion spec, optional as supporting material: [psvm-yellow-paper.pdf](/Users/avirajkhare/hack2/transformers/transformer-in-notion/docs/psvm-yellow-paper.pdf)
+
+## Concrete next steps
 
 - confirm author name and affiliation are final
+- choose the final arXiv category set, with `cs.AI` as the default primary
 - verify all figures and tables are original or properly attributed
-- add a related-work matrix to the manuscript
-- add a limitations / non-claims section if not already present
-- make sure README links to the paper and spec remain current
+- make sure the TeX source still builds to the checked-in PDF
+- submit the full PSVM paper on arXiv
+- update the repository README with the arXiv identifier after submission

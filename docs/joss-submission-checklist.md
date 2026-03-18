@@ -1,5 +1,15 @@
 # JOSS Submission Checklist
 
+## Current status
+
+- submitted to JOSS on 18 March 2026
+- rejected at pre-review in `openjournals/joss-reviews#10227`
+- immediate blocker: repository public-development history was too new for
+  JOSS's scope/significance expectations
+- paper issue also noted: missing `Research impact statement` section, now fixed
+- practical next window: re-evaluate after at least six months of public repo
+  history, not before September 2026
+
 ## Paper package
 
 - [x] JOSS paper source at [paper.md](/Users/avirajkhare/hack2/transformers/transformer-in-notion/paper.md)
@@ -17,7 +27,7 @@
 - [x] short citation section in [README.md](/Users/avirajkhare/hack2/transformers/transformer-in-notion/README.md)
 - [x] multiple working examples: Sudoku, invoice, Tally, Weiqi
 
-## Still worth tightening before JOSS submission
+## Still worth tightening before JOSS resubmission
 
 - [x] add explicit versioned release for the submission artifact
 - [x] archive the release with Zenodo DOI `10.5281/zenodo.19087723`
@@ -47,7 +57,7 @@ That broader argument belongs in the arXiv paper:
 
 ## Immediate next steps
 
-1. run a clean-start install check
-2. document a minimal automated smoke path
-3. do one final prose pass after the release metadata is frozen
-4. submit the JOSS paper using the archived release and DOI
+1. keep the repository active in public with releases, issues, and pull requests
+2. keep the JOSS paper current with software changes, but do not resubmit yet
+3. use the arXiv path for the broader research paper now
+4. revisit JOSS only after the repository has a longer public history

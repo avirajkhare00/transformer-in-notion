@@ -114,6 +114,17 @@ for future work on local exact AI, hybrid symbolic-neural execution, structured
 decoding with verification, and human-interpretable model guidance
 [@khare2026paper].
 
+# Research impact statement
+
+This repository lowers the barrier to studying exact, verifier-backed local AI
+systems as software rather than only as paper claims. It gives one public
+artifact in which exact runtimes, local model interfaces, browser deployment,
+and regression tests can be inspected together across multiple task families.
+That makes it easier for other researchers and engineers to reproduce the PSVM
+pattern, compare exact-only and learned-guided behavior, and extend the stack
+to additional narrow exact tasks without starting from a closed or task-specific
+prototype.
+
 # AI usage disclosure
 
 Generative AI tools were used during parts of the software development,

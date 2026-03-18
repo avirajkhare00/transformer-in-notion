@@ -46,6 +46,8 @@ If you want the broader research-paper framing rather than the software-paper
 framing, use:
 
 - [docs/paper-idea-problem-shaped-vms.pdf](/Users/avirajkhare/hack2/transformers/transformer-in-notion/docs/paper-idea-problem-shaped-vms.pdf)
+- [docs/arxiv-submission-package.md](/Users/avirajkhare/hack2/transformers/transformer-in-notion/docs/arxiv-submission-package.md)
+- [docs/joss-resubmission-plan.md](/Users/avirajkhare/hack2/transformers/transformer-in-notion/docs/joss-resubmission-plan.md)
 
 ## Why this approach
 

@@ -35,6 +35,7 @@ const TAX_LINE_CUE_PATTERN = /\b(?:igst|cgst|sgst|cess|tax(?:\s+\d+(?:\.\d+)?%)?
 const TABLE_LINE_CUE_PATTERN =
   /\b(?:item|description|goods|qty|quantity|rate|price|hsn|sac|amount|gross|units?)\b/i;
 const UNKNOWN_FAMILY_THRESHOLD = 1;
+const JSONISH_FIELD_PATTERN = /^"?[A-Za-z_][A-Za-z0-9_ -]*"?\s*:\s*/;
 
 export const TALLY_EXTRACTION_PSVM_OPS = Object.freeze([
   "CLASSIFY_VOUCHER_FAMILY",
@@ -91,11 +92,30 @@ function normalizeTallySource(source) {
 }
 
 function createCandidate(fieldId, value, options = {}) {
+  let candidateValue = value;
+  let normalizedValue = options.normalizedValue ?? value;
+  let displayValue = options.displayValue ?? String(value);
+
+  if (typeof value === "string") {
+    const cleanedValue = cleanCandidateText(fieldId, value);
+    if (!cleanedValue) {
+      return null;
+    }
+
+    candidateValue = cleanedValue;
+    if (options.normalizedValue === undefined) {
+      normalizedValue = cleanedValue;
+    }
+    if (options.displayValue === undefined) {
+      displayValue = cleanedValue;
+    }
+  }
+
   return {
     fieldId,
-    value,
-    normalizedValue: options.normalizedValue ?? value,
-    displayValue: options.displayValue ?? String(value),
+    value: candidateValue,
+    normalizedValue,
+    displayValue,
     score: options.score ?? 0,
     source: options.source ?? "heuristic",
     lineIndex: Number.isInteger(options.lineIndex) ? options.lineIndex : null,
@@ -138,6 +158,82 @@ function sortCandidates(candidates) {
 
 function cleanFieldCandidate(value) {
   return collapseWhitespace(String(value).replace(/^[:\s-]+/, ""));
+}
+
+function looksLikeStructuredNoise(text) {
+  const value = collapseWhitespace(text);
+  if (!value) {
+    return false;
+  }
+
+  if (/^[\[{]/.test(value) || /^[\]}]$/.test(value)) {
+    return true;
+  }
+
+  if (/^"[^"]+"\s*:/.test(value)) {
+    return true;
+  }
+
+  if (/^[A-Za-z_][A-Za-z0-9_ -]*\s*:\s*[{[]/.test(value)) {
+    return true;
+  }
+
+  return false;
+}
+
+function stripStructuredLabelPrefix(text) {
+  let current = collapseWhitespace(text);
+
+  for (let step = 0; step < 3; step += 1) {
+    const next = current.replace(JSONISH_FIELD_PATTERN, "");
+    if (next === current) {
+      break;
+    }
+    current = collapseWhitespace(next).replace(/^"+|"+$/g, "");
+  }
+
+  return current;
+}
+
+function cleanCandidateText(fieldId, value) {
+  let text = collapseWhitespace(String(value ?? ""));
+  if (!text) {
+    return null;
+  }
+
+  text = text.replace(/^[\[{]+/, "").replace(/[\]}]+$/, "").trim();
+  text = stripStructuredLabelPrefix(text);
+  text = text
+    .replace(/^"+|"+$/g, "")
+    .replace(/^[:\s,-]+/, "")
+    .replace(/[,\s]+$/, "")
+    .replace(/^"+|"+$/g, "")
+    .trim();
+
+  if (!text) {
+    return null;
+  }
+
+  if (fieldId.endsWith(".gstin")) {
+    const match = text.match(GSTIN_PATTERN);
+    return match?.[0] ?? null;
+  }
+
+  if (fieldId === "document.date") {
+    return extractInlineDate(text) ?? text;
+  }
+
+  if (fieldId === "document.number") {
+    return normalizeDocumentNumberValue(text);
+  }
+
+  if (fieldId.endsWith(".name") || fieldId.startsWith("document.")) {
+    if (looksLikeStructuredNoise(text)) {
+      return null;
+    }
+  }
+
+  return text;
 }
 
 function countPatternMatches(text, pattern) {
@@ -233,7 +329,7 @@ function nextNonEmptyLine(lines, startIndex) {
 }
 
 function isLikelyPartyName(line) {
-  const text = collapseWhitespace(line);
+  const text = cleanCandidateText("seller.name", line) ?? collapseWhitespace(line);
   if (!text || text.length > 90) {
     return false;
   }
@@ -274,8 +370,11 @@ function findNearbyPartyName(lines, lineIndex) {
 }
 
 function isCompanyNameCandidate(line) {
-  const text = collapseWhitespace(line);
+  const text = cleanCandidateText("seller.name", line) ?? collapseWhitespace(line);
   if (!text || text.length > 90) {
+    return false;
+  }
+  if (looksLikeStructuredNoise(text)) {
     return false;
   }
   if (!COMPANY_SUFFIX_PATTERN.test(text)) {

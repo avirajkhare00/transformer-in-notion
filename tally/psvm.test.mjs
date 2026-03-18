@@ -84,6 +84,19 @@ Tax 18%              1800
 Final Amount         11800
 `;
 
+const JSONISH_OCR_SAMPLE = `
+TAX INVOICE
+Seller
+"name": "MAHAVIR ENERGY SYSTEMS",
+"gstin": "24AAACZ1284C1ZN",
+Buyer
+"name": "Nimoto Solar Pvt Ltd",
+"gstin": "27AADCN3773B1ZM",
+CGST 36,000.00
+SGST 36,000.00
+Final Amount 4,72,000.00
+`;
+
 test("voucher classifier prefers proforma over generic invoice families", () => {
   const classification = classifyTallyVoucherFamily(PROFORMA_SAMPLE);
   assert.equal(classification.selectedFamily.voucherFamily, "proforma_invoice");
@@ -159,4 +172,20 @@ test("tally PSVM surfaces implicit header fields and weak-label totals", () => {
   assert.equal(result.result.lineItems[0].quantity, 200);
   assert.equal(result.result.lineItems[0].unitPriceCents, 5000);
   assert.equal(result.result.lineItems[0].amountCents, 1000000);
+});
+
+test("tally PSVM sanitizes JSON-like OCR fragments instead of emitting polluted fields", () => {
+  const state = buildTallyExtractionState(JSONISH_OCR_SAMPLE);
+  assert.equal(state.selectedFields["seller.name"], "MAHAVIR ENERGY SYSTEMS");
+  assert.equal(state.selectedFields["seller.gstin"], "24AAACZ1284C1ZN");
+  assert.equal(state.selectedFields["buyer.name"], "Nimoto Solar Pvt Ltd");
+  assert.equal(state.selectedFields["buyer.gstin"], "27AADCN3773B1ZM");
+  assert.equal(state.selectedFields["taxes.cgst_cents"], 3600000);
+  assert.equal(state.selectedFields["taxes.sgst_cents"], 3600000);
+  assert.equal(state.selectedFields["amounts.grand_total_cents"], 47200000);
+
+  const result = runTallyExtractionPsvm(JSONISH_OCR_SAMPLE);
+  assert.equal(result.result.seller.name, "MAHAVIR ENERGY SYSTEMS");
+  assert.equal(result.result.buyer.name, "Nimoto Solar Pvt Ltd");
+  assert.equal(result.result.amounts.grandTotalCents, 47200000);
 });

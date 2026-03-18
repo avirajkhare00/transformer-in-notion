@@ -145,3 +145,21 @@ test("resolver keeps taxable amount when subtotal and grand total are present wi
   assert.equal(resolution.selectedFields["amounts.subtotal_cents"], 16576000);
   assert.equal(resolution.selectedFields["amounts.grand_total_cents"], 16576000);
 });
+
+test("resolver keeps split-tax evidence instead of blanking the entire tax block", () => {
+  const state = buildState("sales_invoice");
+  state.fieldCandidates = {
+    "seller.gstin": [createCandidate("seller.gstin", "24AAMFJ7876R1Z8", 0.99)],
+    "buyer.gstin": [createCandidate("buyer.gstin", "27AADCN3773B1ZM", 0.98)],
+    "document.place_of_supply": [createCandidate("document.place_of_supply", "Maharashtra", 0.88)],
+    "taxes.cgst_cents": [createCandidate("taxes.cgst_cents", 3600000, 0.55)],
+    "taxes.sgst_cents": [createCandidate("taxes.sgst_cents", 3600000, 0.55)],
+    "amounts.grand_total_cents": [createCandidate("amounts.grand_total_cents", 47200000, 0.92)],
+  };
+
+  const resolution = resolveTallyFieldSelection(state, state.fieldCandidates, { topK: 2 });
+
+  assert.equal(resolution.selectedFields["taxes.cgst_cents"], 3600000);
+  assert.equal(resolution.selectedFields["taxes.sgst_cents"], 3600000);
+  assert.ok(["resolver", "top1_fallback"].includes(resolution.resolverDebug.selectionMode));
+});

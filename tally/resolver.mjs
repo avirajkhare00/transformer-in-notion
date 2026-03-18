@@ -10,6 +10,21 @@ const NON_NULL_AMOUNT_FIELDS = new Set([
   "amounts.subtotal_cents",
   "amounts.grand_total_cents",
 ]);
+const GRAND_TOTAL_CUE_PATTERN =
+  /\b(?:grand\s*total|final amount|net amount|net payable|amount due|amount payable|balance due|total(?:\s+amount)?)\b/i;
+const TAX_CUE_PATTERN = /\b(?:igst|cgst|sgst|cess)\b/i;
+const TABLE_CUE_PATTERN = /\b(?:qty|quantity|rate|price|hsn|sac|amount|gross|units?)\b/i;
+const COVERAGE_FIELDS = Object.freeze([
+  "seller.name",
+  "seller.gstin",
+  "buyer.name",
+  "buyer.gstin",
+  "amounts.grand_total_cents",
+  "taxes.igst_cents",
+  "taxes.cgst_cents",
+  "taxes.sgst_cents",
+  "taxes.cess_cents",
+]);
 
 const RESOLVER_FIELD_ORDER = Object.freeze([
   "seller.gstin",
@@ -159,15 +174,25 @@ function getCandidateScore(candidate) {
     return Number.NEGATIVE_INFINITY;
   }
 
+  let score = 0;
   if (typeof candidate.rankingScore === "number") {
-    return candidate.rankingScore * SCORE_SCALE;
+    score = candidate.rankingScore * SCORE_SCALE;
+  } else if (typeof candidate.selectedScore === "number") {
+    score = candidate.selectedScore * SCORE_SCALE + Math.min((candidate.score ?? 0) / 24, 6);
+  } else {
+    score = typeof candidate.score === "number" ? candidate.score : 0;
   }
 
-  if (typeof candidate.selectedScore === "number") {
-    return candidate.selectedScore * SCORE_SCALE + Math.min((candidate.score ?? 0) / 24, 6);
+  const lineText = collapseWhitespace(candidate.lineText ?? "");
+  if (candidate.fieldId === "amounts.grand_total_cents" && lineText) {
+    if (TAX_CUE_PATTERN.test(lineText) && !GRAND_TOTAL_CUE_PATTERN.test(lineText)) {
+      score -= PENALTY_MEDIUM;
+    } else if (TABLE_CUE_PATTERN.test(lineText) && !GRAND_TOTAL_CUE_PATTERN.test(lineText)) {
+      score -= PENALTY_LOW;
+    }
   }
 
-  return typeof candidate.score === "number" ? candidate.score : 0;
+  return score;
 }
 
 function createNullCandidate(fieldId, field) {
@@ -342,6 +367,71 @@ function addMoneyDeltaPenalty(collector, code, observed, expectedValues, message
   );
 }
 
+function hasCandidateValue(state, fieldId, predicate = null) {
+  const candidates = state.fieldCandidates?.[fieldId] ?? [];
+  return candidates.some((candidate) => {
+    if (candidate.value === null || candidate.value === undefined) {
+      return false;
+    }
+    return typeof predicate === "function" ? predicate(candidate.value, candidate) : true;
+  });
+}
+
+function countCoverage(selection) {
+  return COVERAGE_FIELDS.reduce(
+    (count, fieldId) => count + (selection[fieldId] !== null && selection[fieldId] !== undefined ? 1 : 0),
+    0,
+  );
+}
+
+function buildIndependentConfig(state, rankedFieldCandidates, baseSelectedFields) {
+  const selectedCandidates = {};
+  let candidateScore = 0;
+
+  for (const fieldId of RESOLVER_FIELD_ORDER) {
+    const candidate = rankedFieldCandidates[fieldId]?.[0] ?? null;
+    if (!candidate) {
+      continue;
+    }
+    selectedCandidates[fieldId] = candidate;
+    candidateScore += getCandidateScore(candidate);
+  }
+
+  const constraintScore = evaluateResolverConstraints(state, baseSelectedFields);
+  return {
+    fullSelection: baseSelectedFields,
+    selectedCandidates,
+    candidateScore,
+    totalScore: candidateScore - constraintScore.totalPenalty,
+    constraintScore,
+  };
+}
+
+function shouldPreferTop1Config(bestConfig, top1Config) {
+  const bestCoverage = countCoverage(bestConfig.fullSelection);
+  const top1Coverage = countCoverage(top1Config.fullSelection);
+
+  if (top1Config.totalScore >= bestConfig.totalScore) {
+    return true;
+  }
+
+  if (
+    top1Coverage > bestCoverage &&
+    top1Config.totalScore >= bestConfig.totalScore - PENALTY_MEDIUM
+  ) {
+    return true;
+  }
+
+  if (
+    bestConfig.constraintScore.highViolationCount > top1Config.constraintScore.highViolationCount &&
+    top1Config.totalScore >= bestConfig.totalScore - PENALTY_MEDIUM
+  ) {
+    return true;
+  }
+
+  return false;
+}
+
 function evaluateResolverConstraints(state, selection) {
   const collector = createPenaltyCollector();
 
@@ -407,15 +497,63 @@ function evaluateResolverConstraints(state, selection) {
   const hasCgst = typeof cgstAmount === "number" && cgstAmount > 0;
   const hasSgst = typeof sgstAmount === "number" && sgstAmount > 0;
   const hasSplitTax = hasCgst || hasSgst;
+  const hasSelectedTaxAmount = hasIgst || hasCgst || hasSgst || (typeof cessAmount === "number" && cessAmount > 0);
   const hasTaxCandidateEvidence = [
     "taxes.igst_cents",
     "taxes.cgst_cents",
     "taxes.sgst_cents",
     "taxes.cess_cents",
   ].some((fieldId) => (state.fieldCandidates?.[fieldId]?.length ?? 0) > 0);
-  const hasTaxEvidence = hasIgst || hasCgst || hasSgst || (typeof cessAmount === "number" && cessAmount > 0) || hasTaxCandidateEvidence;
+  const hasTaxEvidence = hasSelectedTaxAmount || hasTaxCandidateEvidence;
   const hasDiscountEvidence = typeof discountAmount === "number" && Math.abs(discountAmount) > MONEY_TOLERANCE_CENTS;
   const hasRoundOffEvidence = typeof roundOffAmount === "number" && Math.abs(roundOffAmount) > MONEY_TOLERANCE_CENTS;
+
+  if (!sellerName && hasCandidateValue(state, "seller.name")) {
+    collector.add(
+      "seller_name_dropped",
+      "medium",
+      PENALTY_MEDIUM,
+      "Resolver dropped seller name even though a candidate existed.",
+    );
+  }
+
+  if (!sellerGstin && hasCandidateValue(state, "seller.gstin")) {
+    collector.add(
+      "seller_gstin_dropped",
+      "medium",
+      PENALTY_MEDIUM + PENALTY_LOW,
+      "Resolver dropped seller GSTIN even though a candidate existed.",
+    );
+  }
+
+  if (!buyerName && !buyerGstin && (hasCandidateValue(state, "buyer.name") || hasCandidateValue(state, "buyer.gstin"))) {
+    collector.add(
+      "buyer_identity_dropped",
+      "medium",
+      PENALTY_MEDIUM + PENALTY_LOW,
+      "Resolver dropped buyer identity even though buyer candidates existed.",
+    );
+  }
+
+  if (!buyerGstin && hasCandidateValue(state, "buyer.gstin")) {
+    collector.add(
+      "buyer_gstin_dropped",
+      "medium",
+      PENALTY_MEDIUM,
+      "Resolver dropped buyer GSTIN even though a candidate existed.",
+    );
+  }
+
+  if (!hasSelectedTaxAmount && ["taxes.igst_cents", "taxes.cgst_cents", "taxes.sgst_cents", "taxes.cess_cents"].some((fieldId) =>
+    hasCandidateValue(state, fieldId, (value) => typeof value === "number" && value > 0),
+  )) {
+    collector.add(
+      "tax_block_dropped",
+      "medium",
+      PENALTY_MEDIUM + PENALTY_LOW,
+      "Resolver dropped the full tax block even though tax candidates existed.",
+    );
+  }
 
   if (hasIgst && hasSplitTax) {
     collector.add(
@@ -460,9 +598,25 @@ function evaluateResolverConstraints(state, selection) {
     if (hasSplitTax) {
       collector.add(
         "interstate_prefers_igst",
-        "high",
-        PENALTY_HIGH,
+        "medium",
+        PENALTY_MEDIUM + PENALTY_LOW,
         "Inter-state invoices should prefer IGST over CGST/SGST.",
+        {
+          sellerStateCode,
+          buyerStateCode,
+          placeStateCode,
+        },
+      );
+    }
+    if (
+      hasSplitTax &&
+      hasCandidateValue(state, "taxes.igst_cents", (value) => typeof value === "number" && value > 0)
+    ) {
+      collector.add(
+        "interstate_ignored_igst_candidate",
+        "medium",
+        PENALTY_MEDIUM + PENALTY_LOW,
+        "Resolver ignored an available IGST candidate for an inter-state invoice.",
         {
           sellerStateCode,
           buyerStateCode,
@@ -473,8 +627,8 @@ function evaluateResolverConstraints(state, selection) {
     if (!hasIgst && hasSplitTax) {
       collector.add(
         "interstate_missing_igst",
-        "medium",
-        PENALTY_MEDIUM,
+        "low",
+        PENALTY_LOW,
         "Inter-state invoices should normally surface an IGST amount.",
         {
           sellerStateCode,
@@ -490,6 +644,26 @@ function evaluateResolverConstraints(state, selection) {
         "medium",
         PENALTY_MEDIUM,
         "Intra-state invoices should prefer CGST and SGST over IGST.",
+        {
+          sellerStateCode,
+          buyerStateCode,
+          placeStateCode,
+        },
+      );
+    }
+    if (
+      hasIgst &&
+      !hasSplitTax &&
+      [
+        "taxes.cgst_cents",
+        "taxes.sgst_cents",
+      ].every((fieldId) => hasCandidateValue(state, fieldId, (value) => typeof value === "number" && value > 0))
+    ) {
+      collector.add(
+        "intrastate_ignored_split_tax_candidates",
+        "medium",
+        PENALTY_MEDIUM,
+        "Resolver ignored available CGST/SGST candidates for an intra-state invoice.",
         {
           sellerStateCode,
           buyerStateCode,
@@ -642,6 +816,7 @@ function buildBeamConfigurations(state, rankedFieldCandidates, options = {}) {
     fieldDefinitions,
     fieldIds,
     fullConfigs,
+    top1Config: buildIndependentConfig(state, rankedFieldCandidates, baseSelectedFields),
     truncated,
     topK,
     maxConfigs,
@@ -649,17 +824,27 @@ function buildBeamConfigurations(state, rankedFieldCandidates, options = {}) {
 }
 
 export function resolveTallyFieldSelection(state, rankedFieldCandidates, options = {}) {
+  const hasStateFieldCandidates =
+    Boolean(state.fieldCandidates) && Object.keys(state.fieldCandidates).length > 0;
+  const resolverState =
+    state.fieldCandidates === rankedFieldCandidates || hasStateFieldCandidates
+      ? state
+      : {
+          ...state,
+          fieldCandidates: rankedFieldCandidates,
+        };
   const {
     baseSelectedFields,
     fieldDefinitions,
     fieldIds,
     fullConfigs,
+    top1Config,
     truncated,
     topK,
     maxConfigs,
-  } = buildBeamConfigurations(state, rankedFieldCandidates, options);
+  } = buildBeamConfigurations(resolverState, rankedFieldCandidates, options);
 
-  const bestConfig = fullConfigs[0] ?? {
+  let bestConfig = fullConfigs[0] ?? {
     fullSelection: baseSelectedFields,
     selectedCandidates: {},
     totalScore: 0,
@@ -669,6 +854,11 @@ export function resolveTallyFieldSelection(state, rankedFieldCandidates, options
       violations: [],
     },
   };
+  let selectionMode = "resolver";
+  if (shouldPreferTop1Config(bestConfig, top1Config)) {
+    bestConfig = top1Config;
+    selectionMode = "top1_fallback";
+  }
   const secondConfig = fullConfigs[1] ?? null;
   const selectedFields = {
     ...baseSelectedFields,
@@ -711,6 +901,7 @@ export function resolveTallyFieldSelection(state, rankedFieldCandidates, options
       totalPenalty: bestConfig.constraintScore.totalPenalty,
       highViolationCount: bestConfig.constraintScore.highViolationCount,
       violations: bestConfig.constraintScore.violations,
+      selectionMode,
       alternatives: fullConfigs.slice(0, 3).map((config, index) => ({
         rank: index + 1,
         score: config.totalScore,

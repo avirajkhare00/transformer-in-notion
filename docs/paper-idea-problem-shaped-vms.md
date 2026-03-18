@@ -1,5 +1,6 @@
 ---
 header-includes:
+  - '\usepackage{float}'
   - '\usepackage{tikz}'
   - '\usepackage{pgfplots}'
   - '\usetikzlibrary{arrows.meta,positioning,shapes.geometric,fit,calc}'
@@ -113,7 +114,7 @@ The practical question is:
 That machine is what this note calls a **problem-shaped virtual machine**.
 
 ```{=latex}
-\begin{figure}[t]
+\begin{figure}[H]
 \centering
 \resizebox{\linewidth}{!}{%
 \begin{tikzpicture}[
@@ -272,7 +273,7 @@ The intended execution loop is:
 `task instance -> exact state -> valid options -> model scores options -> exact runtime verifies and applies -> new state -> trace grows`
 
 ```{=latex}
-\begin{figure}[t]
+\begin{figure}[H]
 \centering
 \resizebox{\linewidth}{!}{%
 \begin{tikzpicture}[
@@ -453,7 +454,7 @@ free-running next-op generation, but better value estimates over exact PSVM
 states.
 
 ```{=latex}
-\begin{figure}[t]
+\begin{figure}[H]
 \centering
 \begin{tikzpicture}
 \begin{groupplot}[
@@ -514,7 +515,7 @@ visible by separating candidate-missing failures from ranking failures and
 resolver failures.
 
 ```{=latex}
-\begin{figure}[t]
+\begin{figure}[H]
 \centering
 \resizebox{\linewidth}{!}{%
 \begin{tikzpicture}[

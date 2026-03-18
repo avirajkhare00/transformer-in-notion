@@ -39,6 +39,7 @@
 \setlength{\emergencystretch}{3em} % prevent overfull lines
 \providecommand{\tightlist}{%
   \setlength{\itemsep}{0pt}\setlength{\parskip}{0pt}}
+\usepackage{float}
 \usepackage{tikz}
 \usepackage{pgfplots}
 \usetikzlibrary{arrows.meta,positioning,shapes.geometric,fit,calc}
@@ -188,7 +189,7 @@ The practical question is:
 That machine is what this note calls a \textbf{problem-shaped virtual
 machine}.
 
-\begin{figure}[t]
+\begin{figure}[H]
 \centering
 \resizebox{\linewidth}{!}{%
 \begin{tikzpicture}[
@@ -392,7 +393,7 @@ The intended execution loop is:
 
 \texttt{task\ instance\ -\textgreater{}\ exact\ state\ -\textgreater{}\ valid\ options\ -\textgreater{}\ model\ scores\ options\ -\textgreater{}\ exact\ runtime\ verifies\ and\ applies\ -\textgreater{}\ new\ state\ -\textgreater{}\ trace\ grows}
 
-\begin{figure}[t]
+\begin{figure}[H]
 \centering
 \resizebox{\linewidth}{!}{%
 \begin{tikzpicture}[
@@ -625,7 +626,7 @@ That is exactly the behavior this paper wants from the learned
 component: not free-running next-op generation, but better value
 estimates over exact PSVM states.
 
-\begin{figure}[t]
+\begin{figure}[H]
 \centering
 \begin{tikzpicture}
 \begin{groupplot}[
@@ -685,7 +686,7 @@ quality and candidate recall matter more than model size. The
 adversarial harness makes that visible by separating candidate-missing
 failures from ranking failures and resolver failures.
 
-\begin{figure}[t]
+\begin{figure}[H]
 \centering
 \resizebox{\linewidth}{!}{%
 \begin{tikzpicture}[

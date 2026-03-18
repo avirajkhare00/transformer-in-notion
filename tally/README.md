@@ -14,6 +14,7 @@ Today this lane is deterministic-first, with an optional tiny local BERT field s
 
 - `schema.mjs` - voucher families, shared core fields, and industry extensions
 - `psvm.mjs` - voucher-family classifier and schema-aligned field extractor
+- `resolver.mjs` - constraint-guided field resolver over top-ranked scalar candidates
 - `table_parser.mjs` - OCR-row table parser for repeatable line items and industry columns
 - `harness.mjs` - adversarial failure-mode harness for candidate recall, ranking accuracy, and instability
 - `model-common.mjs` - shared field-candidate context builder and selection helpers
@@ -70,10 +71,15 @@ Pipeline:
    - weak-label and implicit header spans like `#7782`, `Client`, `Supply:`, and `Final Amount`
    - GSTINs, dates, invoice numbers, totals
    - row-aware table parsing for line items, including multiline descriptions and common industry columns
-5. Rank and select candidates.
-   - `Runtime` mode uses the deterministic heuristic order from the PSVM
+5. Rank field candidates.
+   - `Runtime` mode uses deterministic heuristic scores from the PSVM
    - `Local model` mode uses a tiny BERT text classifier over the same legal candidates
-6. Emit a Tally-shaped record or reject the document.
+6. Resolve the best consistent scalar field set.
+   - bounded top-k search over the ranked candidates
+   - mutual exclusion for IGST vs CGST/SGST
+   - GST state-regime checks from GSTIN and place of supply
+   - subtotal / tax / grand-total consistency when enough evidence exists
+7. Emit a Tally-shaped record or reject the document.
 
 So the core learning problem in the model path is:
 
@@ -96,8 +102,9 @@ Think of it as a document clerk with a checklist.
    - buyer and seller names
    - subtotal, tax, and total
    - line items, quantities, rates, amounts, and some industry fields when a table is visible
-4. It picks the strongest candidates and fills a Tally-shaped record.
-5. If the document looks like a statement or the OCR is too weak, it rejects instead of forcing a wrong invoice output.
+4. It ranks likely values for each field.
+5. It runs a small resolver to keep the final field set globally consistent.
+6. If the document looks like a statement or the OCR is too weak, it rejects instead of forcing a wrong invoice output.
 
 So it is not trying to magically rewrite garbage OCR into perfect accounting data. It is using a voucher-type checklist and only filling values it can defend.
 

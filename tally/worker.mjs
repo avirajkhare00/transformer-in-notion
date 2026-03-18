@@ -67,17 +67,32 @@ function fieldSortOrder(fieldId) {
   return index === -1 ? DISPLAY_FIELD_ORDER.length : index;
 }
 
+function fieldValueMatches(fieldId, left, right) {
+  if (left === null || left === undefined || right === null || right === undefined) {
+    return left === right;
+  }
+
+  if (fieldId.endsWith("_cents")) {
+    return Number(left) === Number(right);
+  }
+
+  return String(left).trim().toUpperCase() === String(right).trim().toUpperCase();
+}
+
 function buildSelectedFieldEntries(selectedFields, fieldCandidates) {
   return Object.entries(selectedFields)
     .filter(([fieldId, value]) => fieldId !== "document.voucher_family" && value !== null && value !== undefined)
     .map(([fieldId, value]) => {
-      const topCandidate = fieldCandidates[fieldId]?.[0] ?? null;
+      const matchedCandidate =
+        fieldCandidates[fieldId]?.find((candidate) =>
+          fieldValueMatches(fieldId, candidate.value, value),
+        ) ?? null;
       return {
         fieldId,
         value,
-        displayValue: formatFieldValue(fieldId, value, topCandidate),
-        source: topCandidate?.source ?? "runtime",
-        modelScore: topCandidate?.selectedScore ?? null,
+        displayValue: formatFieldValue(fieldId, value, matchedCandidate),
+        source: matchedCandidate?.source ?? "runtime",
+        modelScore: matchedCandidate?.selectedScore ?? null,
       };
     })
     .sort((left, right) => {
@@ -100,6 +115,7 @@ function buildTeacherPayload(parsedSource) {
       execution.state.fieldCandidates,
     ),
     modelStats: null,
+    resolverStats: execution.state.resolverStats ?? null,
   };
 }
 
@@ -116,6 +132,7 @@ async function buildModelPayload(parsedSource) {
       selection.rankedFieldCandidates,
     ),
     modelStats: selection.modelStats,
+    resolverStats: selection.resolverDebug,
   };
 }
 
@@ -158,6 +175,7 @@ async function handleRun(data) {
       result: execution.result,
       selectedFieldEntries: execution.selectedFieldEntries,
       modelStats: execution.modelStats,
+      resolverStats: execution.resolverStats,
     });
   } catch (error) {
     self.postMessage({

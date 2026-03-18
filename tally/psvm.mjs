@@ -3,6 +3,7 @@ import { parseReceiptText } from "../invoice/receipt.mjs";
 import { buildTallyVoucherSchema, TALLY_VOUCHER_FAMILIES } from "./schema.mjs";
 import { extractReceiptAmountCandidates, rankReceiptTotalCandidates } from "../invoice/total_psvm.mjs";
 import { extractTallyLineItems, mergeTallyLineItems } from "./table_parser.mjs";
+import { resolveTallyFieldSelection } from "./resolver.mjs";
 
 const GSTIN_PATTERN = /\b\d{2}[A-Z]{5}\d{4}[A-Z][0-9A-Z]Z[0-9A-Z]\b/g;
 const GSTIN_VALUE_PATTERN = /\b\d{2}[A-Z]{5}\d{4}[A-Z][0-9A-Z]Z[0-9A-Z]\b/;
@@ -39,6 +40,7 @@ export const TALLY_EXTRACTION_PSVM_OPS = Object.freeze([
   "CLASSIFY_VOUCHER_FAMILY",
   "SELECT_SCHEMA",
   "EXTRACT_FIELD_CANDIDATES",
+  "RESOLVE_FIELDS",
   "EMIT_TALLY_RECORD",
   "HALT",
 ]);
@@ -1406,26 +1408,6 @@ function candidateMapToObject(candidateMap) {
   );
 }
 
-function flattenSchemaFields(schema) {
-  return Object.values(schema.fields).flat();
-}
-
-function buildSelectedFieldMap(schema, fieldCandidates, voucherFamily) {
-  const selectedFields = {
-    "document.voucher_family": voucherFamily,
-  };
-
-  for (const field of flattenSchemaFields(schema)) {
-    if (field.repeatable || field.id === "document.voucher_family") {
-      continue;
-    }
-
-    selectedFields[field.id] = fieldCandidates[field.id]?.[0]?.value ?? null;
-  }
-
-  return selectedFields;
-}
-
 function mapParsedReceiptLineItem(item) {
   return {
     index: item.index,
@@ -1714,9 +1696,7 @@ export function buildTallyExtractionState(source, options = {}) {
   }
 
   const fieldCandidates = candidateMapToObject(candidateMap);
-  const selectedFields = buildSelectedFieldMap(schema, fieldCandidates, voucherFamily);
-
-  return {
+  const baseState = {
     source: classification.source,
     pageCount: classification.pageCount,
     rows: classification.rows,
@@ -1729,7 +1709,16 @@ export function buildTallyExtractionState(source, options = {}) {
     lineItems,
     tableParse,
     fieldCandidates,
-    selectedFields,
+  };
+  const resolution = resolveTallyFieldSelection(baseState, fieldCandidates, {
+    topK: 2,
+  });
+
+  return {
+    ...baseState,
+    selectedFields: resolution.selectedFields,
+    selectedCandidateList: resolution.selectedCandidateList,
+    resolverStats: resolution.resolverDebug,
   };
 }
 
@@ -1743,6 +1732,7 @@ function buildTallyExtractionProgramFromState(state) {
     "CLASSIFY_VOUCHER_FAMILY",
     "SELECT_SCHEMA",
     "EXTRACT_FIELD_CANDIDATES",
+    "RESOLVE_FIELDS",
     "EMIT_TALLY_RECORD",
     "HALT",
   ];
@@ -1788,6 +1778,13 @@ export function runTallyExtractionPsvm(source, options = {}) {
             fieldId,
             topCandidate: candidates[0]?.displayValue ?? null,
           })),
+        snapshot,
+      },
+      {
+        op: "RESOLVE_FIELDS",
+        chosenConfigScore: state.resolverStats?.chosenConfigScore ?? null,
+        violationCount: state.resolverStats?.violations?.length ?? 0,
+        margin: state.resolverStats?.margin ?? null,
         snapshot,
       },
       {

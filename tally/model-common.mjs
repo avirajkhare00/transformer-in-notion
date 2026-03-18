@@ -1,6 +1,8 @@
 export const TALLY_FIELD_SELECTOR_MODEL_ID = "tally-field-selector";
 export const TALLY_FIELD_SELECTOR_LABELS = Object.freeze(["NOT_SELECTED", "SELECTED"]);
 
+import { resolveTallyFieldSelection } from "./resolver.mjs";
+
 function collapseWhitespace(value) {
   return String(value ?? "").replace(/\s+/g, " ").trim();
 }
@@ -139,25 +141,11 @@ export function applyTallyFieldPredictions(state, examples, predictions) {
     rankedFieldCandidates[fieldId] = sortRankedCandidates(candidates);
   }
 
-  const selectedFields = {
-    "document.voucher_family": state.voucherFamily,
-  };
-  const selectedCandidateList = [];
-
-  for (const field of flattenTallySchemaFields(state.schema)) {
-    if (field.repeatable || field.id === "document.voucher_family") {
-      continue;
-    }
-
-    const topCandidate = rankedFieldCandidates[field.id]?.[0] ?? null;
-    selectedFields[field.id] = topCandidate?.value ?? null;
-    if (topCandidate) {
-      selectedCandidateList.push({
-        fieldId: field.id,
-        candidate: topCandidate,
-      });
-    }
-  }
+  const resolution = resolveTallyFieldSelection(state, rankedFieldCandidates, {
+    topK: 2,
+  });
+  const selectedFields = resolution.selectedFields;
+  const selectedCandidateList = resolution.selectedCandidateList;
 
   const selectedScores = selectedCandidateList
     .map((entry) => entry.candidate.selectedScore)
@@ -167,6 +155,7 @@ export function applyTallyFieldPredictions(state, examples, predictions) {
     selectedFields,
     rankedFieldCandidates,
     selectedCandidateList,
+    resolverDebug: resolution.resolverDebug,
     modelStats: {
       predictionCount: predictions.length,
       averageSelectedScore:
@@ -177,6 +166,9 @@ export function applyTallyFieldPredictions(state, examples, predictions) {
       lowConfidenceFields: selectedCandidateList
         .filter((entry) => (entry.candidate.selectedScore ?? 0) < 0.6)
         .map((entry) => entry.fieldId),
+      resolverMargin: resolution.resolverDebug.margin,
+      resolverViolationCount: resolution.resolverDebug.violations.length,
+      resolverLowConfidence: resolution.resolverDebug.lowConfidence,
     },
   };
 }

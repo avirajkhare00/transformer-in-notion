@@ -77,6 +77,7 @@ The repo currently centers on two browser-local game tasks and two browser-local
   Tally-style voucher extraction with:
   - voucher-family classification and schema selection
   - schema-aligned field candidate extraction from OCR/layout
+  - constraint-guided resolver over top-ranked scalar field candidates
   - shared invoice fields plus industry extensions for pharma, medical, trading, and stockist flows
   - deterministic-first PSVM emission of Tally-shaped records, with an optional tiny local transformer for field selection
   - a browser demo at [tally.html](/Users/avirajkhare/hack2/transformers/transformer-in-notion/tally.html)
@@ -175,13 +176,13 @@ See [invoice/README.md](/Users/avirajkhare/hack2/transformers/transformer-in-not
 
 The Tally lane follows a broader document-extraction PSVM:
 
-`OCR/layout -> voucher family -> schema -> legal field candidates -> exact runtime emits Tally-shaped record`
+`OCR/layout -> voucher family -> schema -> legal field candidates -> local ranker -> resolver -> exact runtime emits Tally-shaped record`
 
 That means the system is not trying to hallucinate a full accounting document from raw OCR text. It first narrows the document family, then only fills fields that the selected voucher schema allows. See [tally/README.md](/Users/avirajkhare/hack2/transformers/transformer-in-notion/tally/README.md) for the schema, browser demo, and current limitations.
 
 In short:
 
-- AI/ML view: constrained information extraction over voucher families and field candidates
+- AI/ML view: constrained information extraction over voucher families and field candidates, with a small deterministic resolver for global consistency
 - layman view: detect the document type, look for the likely invoice fields, and fill a Tally-shaped record
 - main limitation: the local model is still small and synthetic-data-trained, the demo expects pasted OCR/TSV rather than direct PDF conversion, and arbitrary table-heavy layouts still need more parser/constraint coverage
 

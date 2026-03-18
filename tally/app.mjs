@@ -159,6 +159,12 @@ function renderResult(result) {
     createStatCard("Fields", String(result.selectedFieldCount)),
     createStatCard("Line items", String(result.lineItemCount)),
     createStatCard("Elapsed", `${result.elapsedMs} ms`),
+    result.resolverStats?.margin != null
+      ? createStatCard("Resolver margin", result.resolverStats.margin.toFixed(1))
+      : "",
+    result.resolverStats
+      ? createStatCard("Violations", String(result.resolverStats.violations?.length ?? 0))
+      : "",
     result.modelStats?.averageSelectedScore != null
       ? createStatCard(
           "Avg score",

@@ -258,9 +258,10 @@ This pipeline does:
 - [invoice/export_total_dataset.mjs](/Users/avirajkhare/hack2/transformers/transformer-in-notion/invoice/export_total_dataset.mjs) - synthetic OCR receipt dataset generator
 - [invoice/train_total_selector.py](/Users/avirajkhare/hack2/transformers/transformer-in-notion/invoice/train_total_selector.py) - local transformer trainer for `TOTAL` vs `NOT_TOTAL`
 - [scripts/predict_receipt_total.py](/Users/avirajkhare/hack2/transformers/transformer-in-notion/scripts/predict_receipt_total.py) - local inference over extracted receipt candidates
+- [docs/paper-idea-problem-shaped-vms.md](/Users/avirajkhare/hack2/transformers/transformer-in-notion/docs/paper-idea-problem-shaped-vms.md) - implementation and systems paper draft for the PSVM thesis
+- [docs/psvm-yellow-paper.md](/Users/avirajkhare/hack2/transformers/transformer-in-notion/docs/psvm-yellow-paper.md) - companion yellow-paper-style spec for PSVM runtime and trace semantics
 - [soduku/structured_transformer_common.py](/Users/avirajkhare/hack2/transformers/transformer-in-notion/soduku/structured_transformer_common.py) - shared structured transformer/GNN training/export utilities
 - [soduku/meta.md](/Users/avirajkhare/hack2/transformers/transformer-in-notion/soduku/meta.md) - meta pattern and runtime philosophy
-- [docs/paper-idea-problem-shaped-vms.md](/Users/avirajkhare/hack2/transformers/transformer-in-notion/docs/paper-idea-problem-shaped-vms.md) - paper note for PSVMs
 - [weiqi/psvm5x5.mjs](/Users/avirajkhare/hack2/transformers/transformer-in-notion/weiqi/psvm5x5.mjs) - exact Weiqi PSVM
 
 ## Design summary

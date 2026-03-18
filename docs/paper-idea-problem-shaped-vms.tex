@@ -66,25 +66,54 @@ X: \texttt{@avirajkhare00} (\texttt{x.com/avirajkhare00})
 
 \subsection{Abstract}\label{abstract}
 
-Small local transformers are poorly matched to exact tasks when the only
-choices are one-shot answer prediction or full general-purpose machine
+Small local transformers are poorly matched to exact tasks when the
+formulation is either one-shot answer prediction or full machine
 emulation. One-shot prediction hides the intermediate state transitions
-that exact computation depends on. Full-machine execution preserves far
-more semantics than most narrow tasks actually need: memory plumbing,
-broad instruction surfaces, and control flow that is irrelevant to the
-application. This note argues for an intermediate target:
-\textbf{problem-shaped virtual machines (PSVMs)}. A PSVM is the smallest
-executable substrate whose legal actions match the real state
-transitions of a task family. The exact runtime remains the source of
-truth: it defines legality, emits canonical traces, verifies proposed
-actions, and owns rollback or failure handling. The model learns only
-to evaluate the ambiguous frontier of execution. This repository already contains
-several pieces of that stack, including exact browser-local Sudoku
-runtimes, worker-driven trace streaming, structured model training
-paths, and a small invoice-calculation PSVM. The strongest current claim
-is not that the model can replace the runtime, but that the smallest
-sound VM for a task is a better local training target than either direct
-answer prediction or full machine emulation.
+that exact computation depends on, while full-machine traces preserve
+large amounts of irrelevant machine detail. This paper argues for an
+intermediate target: \textbf{problem-shaped virtual machines (PSVMs)},
+where the instruction surface is trimmed to the true legal transitions
+of a task family. In a PSVM system, the exact runtime remains the source
+of truth: it defines legal actions, emits canonical state records,
+verifies proposed steps, and handles rollback or failure. The learned
+component is not asked to replace execution, but to score ambiguity by
+ranking legal branches or estimating value over exact PSVM states. We
+describe this design pattern through browser-local prototypes for Sudoku
+and document extraction, including exact runtimes, structured training
+pipelines, local inference, and live execution traces. The central claim
+is modest but strong: for narrow exact tasks, models are better used as
+decision heuristics inside a task-shaped executable substrate than as
+free-running solvers or emulators of broad virtual machines.
+
+\subsection{Paper Type and Scope}\label{paper-type-and-scope}
+
+This document should be read as an \textbf{implementation and systems
+paper}, not as a finished empirical benchmark paper and not as a
+normative universal VM spec. Its strongest contribution is a
+repository-backed architecture and design argument:
+
+\begin{itemize}
+\tightlist
+\item
+  shape the machine to the task
+\item
+  keep symbolic truth in exact code
+\item
+  train the model on the narrow ambiguous frontier of execution
+\end{itemize}
+
+The companion normative document for machine and trace semantics is
+\texttt{docs/psvm-yellow-paper.md}. That spec is intentionally narrower:
+it defines the common execution contract for PSVM runtimes, canonical
+traces, verifier behavior, and model/runtime interfaces without
+claiming that all task families should share one universal machine.
+
+\subsection{AI Assistance Disclosure}\label{ai-assistance-disclosure}
+
+This paper was drafted and edited with AI assistance. The author
+directed the scope, selected the claims, validated the implementation
+references against the repository, and is responsible for the final
+wording, technical judgments, and positioning.
 
 \subsection{One-Sentence Thesis}\label{one-sentence-thesis}
 

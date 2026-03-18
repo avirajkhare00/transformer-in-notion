@@ -97,6 +97,19 @@ SGST 36,000.00
 Final Amount 4,72,000.00
 `;
 
+const KEY_VALUE_FIELD_RULE_SAMPLE = `
+TAX INVOICE
+"invoice_no": "29",
+"date": "23-May-25",
+"seller_name": "MAHAVIR ENERGY SYSTEMS",
+"seller_gstin": "24AAACZ1284C1ZN",
+"buyer_name": "Nimoto Solar Pvt Ltd",
+"buyer_gstin": "27AADCN3773B1ZM",
+"place_of_supply": "Maharashtra",
+IGST: 72,000.00
+Final Amount: 4,72,000.00
+`;
+
 test("voucher classifier prefers proforma over generic invoice families", () => {
   const classification = classifyTallyVoucherFamily(PROFORMA_SAMPLE);
   assert.equal(classification.selectedFamily.voucherFamily, "proforma_invoice");
@@ -187,5 +200,27 @@ test("tally PSVM sanitizes JSON-like OCR fragments instead of emitting polluted 
   const result = runTallyExtractionPsvm(JSONISH_OCR_SAMPLE);
   assert.equal(result.result.seller.name, "MAHAVIR ENERGY SYSTEMS");
   assert.equal(result.result.buyer.name, "Nimoto Solar Pvt Ltd");
+  assert.equal(result.result.amounts.grandTotalCents, 47200000);
+});
+
+test("tally PSVM uses reusable key-value field rules for OCR lines without headings", () => {
+  const state = buildTallyExtractionState(KEY_VALUE_FIELD_RULE_SAMPLE);
+  assert.equal(state.selectedFields["document.number"], "29");
+  assert.equal(state.selectedFields["document.date"], "23-May-25");
+  assert.equal(state.selectedFields["seller.name"], "MAHAVIR ENERGY SYSTEMS");
+  assert.equal(state.selectedFields["seller.gstin"], "24AAACZ1284C1ZN");
+  assert.equal(state.selectedFields["buyer.name"], "Nimoto Solar Pvt Ltd");
+  assert.equal(state.selectedFields["buyer.gstin"], "27AADCN3773B1ZM");
+  assert.equal(state.selectedFields["document.place_of_supply"], "Maharashtra");
+  assert.equal(state.selectedFields["taxes.igst_cents"], 7200000);
+  assert.equal(state.selectedFields["amounts.grand_total_cents"], 47200000);
+
+  const result = runTallyExtractionPsvm(KEY_VALUE_FIELD_RULE_SAMPLE);
+  assert.equal(result.result.document.number, "29");
+  assert.equal(result.result.document.date, "23-May-25");
+  assert.equal(result.result.seller.name, "MAHAVIR ENERGY SYSTEMS");
+  assert.equal(result.result.buyer.gstin, "27AADCN3773B1ZM");
+  assert.equal(result.result.document.placeOfSupply, "Maharashtra");
+  assert.equal(result.result.taxes.igstCents, 7200000);
   assert.equal(result.result.amounts.grandTotalCents, 47200000);
 });

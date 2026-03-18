@@ -36,6 +36,32 @@ const TABLE_LINE_CUE_PATTERN =
   /\b(?:item|description|goods|qty|quantity|rate|price|hsn|sac|amount|gross|units?)\b/i;
 const UNKNOWN_FAMILY_THRESHOLD = 1;
 const JSONISH_FIELD_PATTERN = /^"?[A-Za-z_][A-Za-z0-9_ -]*"?\s*:\s*/;
+const PARTY_NAME_KEY_ALIASES = Object.freeze(["NAME", "PARTY NAME", "COMPANY NAME", "LEGAL NAME", "TRADE NAME"]);
+const GSTIN_KEY_ALIASES = Object.freeze(["GSTIN", "GST NO", "GSTIN UIN", "GST UIN", "UIN"]);
+const DOCUMENT_NUMBER_KEY_ALIASES = Object.freeze([
+  "INVOICE NO",
+  "INVOICE NUMBER",
+  "VOUCHER NO",
+  "VOUCHER NUMBER",
+  "PI NO",
+  "BILL NO",
+  "DOCUMENT NUMBER",
+]);
+const DOCUMENT_DATE_KEY_ALIASES = Object.freeze([
+  "DATE",
+  "DOCUMENT DATE",
+  "INVOICE DATE",
+  "ACK DATE",
+  "VOUCHER DATE",
+  "DATED",
+]);
+const PLACE_OF_SUPPLY_KEY_ALIASES = Object.freeze(["PLACE OF SUPPLY", "SUPPLY", "STATE NAME"]);
+const CURRENCY_KEY_ALIASES = Object.freeze(["CURRENCY"]);
+const PARTY_ROLE_KEYWORDS = Object.freeze({
+  seller: ["SELLER", "SUPPLIER", "VENDOR", "FROM", "ISSUER"],
+  buyer: ["BUYER", "CUSTOMER", "CLIENT", "BILL TO", "SOLD TO", "PARTY"],
+  consignee: ["CONSIGNEE", "SHIP TO"],
+});
 
 export const TALLY_EXTRACTION_PSVM_OPS = Object.freeze([
   "CLASSIFY_VOUCHER_FAMILY",
@@ -234,6 +260,179 @@ function cleanCandidateText(fieldId, value) {
   }
 
   return text;
+}
+
+function normalizeFieldRuleKey(value) {
+  return collapseWhitespace(String(value ?? ""))
+    .replace(/[_/-]+/g, " ")
+    .replace(/[^A-Za-z0-9 ]+/g, " ")
+    .toUpperCase();
+}
+
+function createKeyValueFieldRule(options) {
+  return Object.freeze({
+    ...options,
+    keys: Object.freeze((options.keys ?? []).map((key) => normalizeFieldRuleKey(key))),
+  });
+}
+
+function buildExplicitRoleFieldRules(role) {
+  const keywords = PARTY_ROLE_KEYWORDS[role] ?? [];
+  return [
+    createKeyValueFieldRule({
+      fieldId: `${role}.name`,
+      keys: keywords.map((keyword) => `${keyword} NAME`),
+      normalize: (value) => cleanCandidateText(`${role}.name`, value),
+      validate: (value) => isLikelyPartyName(value),
+      score: 58,
+      reason: `matched explicit ${role} name key-value`,
+    }),
+    createKeyValueFieldRule({
+      fieldId: `${role}.gstin`,
+      keys: keywords.flatMap((keyword) => [`${keyword} GSTIN`, `${keyword} GST NO`, `${keyword} GSTIN UIN`]),
+      normalize: (value) => cleanCandidateText(`${role}.gstin`, value),
+      validate: (value) => GSTIN_VALUE_PATTERN.test(value),
+      score: 58,
+      reason: `matched explicit ${role} GSTIN key-value`,
+    }),
+  ];
+}
+
+const PARTY_KEY_VALUE_FIELD_RULES = Object.freeze([
+  ...buildExplicitRoleFieldRules("seller"),
+  ...buildExplicitRoleFieldRules("buyer"),
+  ...buildExplicitRoleFieldRules("consignee"),
+  createKeyValueFieldRule({
+    fieldId: ({ role }) => (role ? `${role}.name` : null),
+    contextRoles: ["seller", "buyer", "consignee"],
+    keys: PARTY_NAME_KEY_ALIASES,
+    normalize: (value, context) => cleanCandidateText(`${context.role}.name`, value),
+    validate: (value) => isLikelyPartyName(value),
+    score: 54,
+    reason: "matched contextual party name key-value",
+  }),
+  createKeyValueFieldRule({
+    fieldId: ({ role }) => (role ? `${role}.gstin` : null),
+    contextRoles: ["seller", "buyer", "consignee"],
+    keys: GSTIN_KEY_ALIASES,
+    normalize: (value, context) => cleanCandidateText(`${context.role}.gstin`, value),
+    validate: (value) => GSTIN_VALUE_PATTERN.test(value),
+    score: 54,
+    reason: "matched contextual GSTIN key-value",
+  }),
+]);
+
+const DOCUMENT_KEY_VALUE_FIELD_RULES = Object.freeze([
+  createKeyValueFieldRule({
+    fieldId: "document.number",
+    keys: DOCUMENT_NUMBER_KEY_ALIASES,
+    normalize: (value) => cleanCandidateText("document.number", value),
+    validate: (value) => /^[A-Z0-9][A-Z0-9/-]{0,39}$/i.test(value),
+    score: 56,
+    reason: "matched document number key-value",
+  }),
+  createKeyValueFieldRule({
+    fieldId: "document.date",
+    keys: DOCUMENT_DATE_KEY_ALIASES,
+    normalize: (value) => extractInlineDate(value) ?? cleanCandidateText("document.date", value),
+    validate: (value) => DATE_VALUE_PATTERN.test(value),
+    score: 54,
+    reason: "matched document date key-value",
+  }),
+  createKeyValueFieldRule({
+    fieldId: "document.place_of_supply",
+    keys: PLACE_OF_SUPPLY_KEY_ALIASES,
+    normalize: (value) => cleanCandidateText("document.place_of_supply", value),
+    validate: (value) => /^[A-Za-z][A-Za-z\s().-]{1,60}$/.test(value),
+    score: 50,
+    reason: "matched place-of-supply key-value",
+  }),
+  createKeyValueFieldRule({
+    fieldId: "document.currency",
+    keys: CURRENCY_KEY_ALIASES,
+    normalize: (value) => cleanCandidateText("document.currency", value)?.toUpperCase(),
+    validate: (value) => /^[A-Z]{3}$/.test(value),
+    score: 46,
+    reason: "matched currency key-value",
+  }),
+]);
+
+function extractKeyValuePayload(line) {
+  const text = collapseWhitespace(line);
+  if (!text || !text.includes(":")) {
+    return null;
+  }
+
+  const match = text.match(/^"?([A-Za-z_][A-Za-z0-9_ ./-]{0,48})"?\s*:\s*(.+)$/);
+  if (!match) {
+    return null;
+  }
+
+  const rawValue = collapseWhitespace(match[2]).replace(/[,\]}]+$/, "").trim();
+  if (!rawValue) {
+    return null;
+  }
+
+  return {
+    key: normalizeFieldRuleKey(match[1]),
+    originalKey: collapseWhitespace(match[1]),
+    rawValue,
+    lineText: text,
+  };
+}
+
+function resolveKeyValueFieldRuleMatches(line, rules, context = {}) {
+  const payload = extractKeyValuePayload(line);
+  if (!payload) {
+    return [];
+  }
+
+  const matches = [];
+  for (const rule of rules) {
+    if (!rule.keys.includes(payload.key)) {
+      continue;
+    }
+    if (rule.contextRoles && (!context.role || !rule.contextRoles.includes(context.role))) {
+      continue;
+    }
+
+    const fieldId =
+      typeof rule.fieldId === "function" ? rule.fieldId(context, payload) : rule.fieldId;
+    if (!fieldId) {
+      continue;
+    }
+
+    const normalizedValue = rule.normalize ? rule.normalize(payload.rawValue, context, payload) : payload.rawValue;
+    if (normalizedValue == null || normalizedValue === "") {
+      continue;
+    }
+    if (rule.validate && !rule.validate(normalizedValue, context, payload)) {
+      continue;
+    }
+
+    const candidate = createCandidate(fieldId, normalizedValue, {
+      score: rule.score,
+      source: "field_rule",
+      lineIndex: context.lineIndex,
+      lineText: payload.lineText,
+      reason: `${rule.reason} (${payload.originalKey})`,
+    });
+
+    if (candidate) {
+      matches.push({
+        fieldId,
+        candidate,
+      });
+    }
+  }
+
+  return matches;
+}
+
+function pushResolvedFieldRuleMatches(candidateMap, matches) {
+  for (const match of matches) {
+    pushCandidate(candidateMap, match.fieldId, match.candidate);
+  }
 }
 
 function countPatternMatches(text, pattern) {
@@ -907,6 +1106,15 @@ function addParserCandidates(candidateMap, parsedReceipt, parsedLineItems = []) 
 }
 
 function addDocumentCandidates(candidateMap, lines, text) {
+  for (let index = 0; index < lines.length; index += 1) {
+    pushResolvedFieldRuleMatches(
+      candidateMap,
+      resolveKeyValueFieldRuleMatches(lines[index], DOCUMENT_KEY_VALUE_FIELD_RULES, {
+        lineIndex: index,
+      }),
+    );
+  }
+
   pushCandidates(
     candidateMap,
     "document.number",
@@ -1067,6 +1275,13 @@ function addPartyCandidates(candidateMap, lines) {
     }
 
     const role = inferPartyRoleForLine(index, headingMarkers, lines.length);
+    pushResolvedFieldRuleMatches(
+      candidateMap,
+      resolveKeyValueFieldRuleMatches(lines[index], PARTY_KEY_VALUE_FIELD_RULES, {
+        lineIndex: index,
+        role,
+      }),
+    );
     if (isLikelyPartyName(text) && (isCompanyNameCandidate(text) || role)) {
       const assignedRole = role ?? (index <= Math.max(6, Math.floor(lines.length * 0.25)) ? "seller" : null);
       if (assignedRole) {

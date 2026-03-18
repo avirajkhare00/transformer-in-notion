@@ -2,6 +2,7 @@ import { buildPlainTextReceiptSource, collapseWhitespace } from "../invoice/ocr_
 import { parseReceiptText } from "../invoice/receipt.mjs";
 import { buildTallyVoucherSchema, TALLY_VOUCHER_FAMILIES } from "./schema.mjs";
 import { extractReceiptAmountCandidates, rankReceiptTotalCandidates } from "../invoice/total_psvm.mjs";
+import { extractTallyLineItems, mergeTallyLineItems } from "./table_parser.mjs";
 
 const GSTIN_PATTERN = /\b\d{2}[A-Z]{5}\d{4}[A-Z][0-9A-Z]Z[0-9A-Z]\b/g;
 const GSTIN_VALUE_PATTERN = /\b\d{2}[A-Z]{5}\d{4}[A-Z][0-9A-Z]Z[0-9A-Z]\b/;
@@ -468,8 +469,11 @@ function addVoucherFamilyCandidates(candidateMap, rankedFamilies) {
   }
 }
 
-function addParserCandidates(candidateMap, parsedReceipt) {
+function addParserCandidates(candidateMap, parsedReceipt, parsedLineItems = []) {
   if (!parsedReceipt) {
+    for (const item of parsedLineItems) {
+      pushLineItemCandidates(candidateMap, item);
+    }
     return;
   }
 
@@ -657,95 +661,8 @@ function addParserCandidates(candidateMap, parsedReceipt) {
     );
   }
 
-  for (const item of parsedReceipt.items ?? []) {
-    pushCandidate(
-      candidateMap,
-      "line_items[].description",
-      createCandidate("line_items[].description", item.description, {
-        itemIndex: item.index,
-        score: 116,
-        source: "receipt_parser",
-        reason: "parsed line item description",
-      }),
-    );
-
-    if (item.hsnSac) {
-      pushCandidate(
-        candidateMap,
-        "line_items[].hsn_sac",
-        createCandidate("line_items[].hsn_sac", item.hsnSac, {
-          itemIndex: item.index,
-          score: 116,
-          source: "receipt_parser",
-          reason: "parsed line item HSN/SAC",
-        }),
-      );
-    }
-
-    pushCandidate(
-      candidateMap,
-      "line_items[].quantity",
-      createCandidate("line_items[].quantity", item.quantity, {
-        itemIndex: item.index,
-        score: 116,
-        source: "receipt_parser",
-        reason: "parsed line item quantity",
-      }),
-    );
-
-    if (item.quantityUnit) {
-      pushCandidate(
-        candidateMap,
-        "line_items[].unit",
-        createCandidate("line_items[].unit", item.quantityUnit, {
-          itemIndex: item.index,
-          score: 116,
-          source: "receipt_parser",
-          reason: "parsed line item unit",
-        }),
-      );
-    }
-
-    if (item.unitPriceCents != null) {
-      pushCandidate(
-        candidateMap,
-        "line_items[].unit_price_cents",
-        createCandidate("line_items[].unit_price_cents", item.unitPriceCents, {
-          itemIndex: item.index,
-          normalizedValue: item.unitPriceCents,
-          displayValue: String(item.unitPriceCents),
-          score: 116,
-          source: "receipt_parser",
-          reason: "parsed line item unit price",
-        }),
-      );
-    }
-
-    if (item.taxRate != null) {
-      pushCandidate(
-        candidateMap,
-        "line_items[].tax_rate_percent",
-        createCandidate("line_items[].tax_rate_percent", item.taxRate * 100, {
-          itemIndex: item.index,
-          score: 116,
-          source: "receipt_parser",
-          reason: "parsed line item tax rate",
-        }),
-      );
-    }
-
-    pushCandidate(
-      candidateMap,
-      "line_items[].amount_cents",
-      createCandidate("line_items[].amount_cents", item.lineAmountCents, {
-        itemIndex: item.index,
-        normalizedValue: item.lineAmountCents,
-        displayValue: String(item.lineAmountCents),
-        score: 116,
-        source: "receipt_parser",
-        reason: "parsed line item amount",
-      }),
-    );
+  for (const item of parsedLineItems) {
+    pushLineItemCandidates(candidateMap, item);
   }
 }
 
@@ -1172,7 +1089,210 @@ function mapParsedReceiptLineItem(item) {
     unitPriceCents: item.unitPriceCents,
     taxRatePercent: item.taxRate != null ? item.taxRate * 100 : null,
     amountCents: item.lineAmountCents,
+    batchNumber: null,
+    expiryDate: null,
+    mrpCents: null,
+    serialNumber: null,
+    freeQuantity: null,
+    schemeDiscountCents: null,
+    rowStartIndex: null,
+    rowEndIndex: null,
+    pageIndex: 0,
+    source: "receipt_parser",
   };
+}
+
+function pushLineItemCandidates(candidateMap, item) {
+  const itemIndex = Number.isInteger(item.index) ? item.index : 0;
+  const baseOptions = {
+    itemIndex,
+    lineIndex: Number.isInteger(item.rowStartIndex) ? item.rowStartIndex : null,
+    score: item.source?.includes("table_parser") ? 124 : 116,
+    source: item.source ?? "receipt_parser",
+  };
+
+  pushCandidate(
+    candidateMap,
+    "line_items[].description",
+    createCandidate("line_items[].description", item.description, {
+      ...baseOptions,
+      reason: "parsed line item description",
+    }),
+  );
+
+  if (item.hsnSac) {
+    pushCandidate(
+      candidateMap,
+      "line_items[].hsn_sac",
+      createCandidate("line_items[].hsn_sac", item.hsnSac, {
+        ...baseOptions,
+        reason: "parsed line item HSN/SAC",
+      }),
+    );
+  }
+
+  if (item.quantity != null) {
+    pushCandidate(
+      candidateMap,
+      "line_items[].quantity",
+      createCandidate("line_items[].quantity", item.quantity, {
+        ...baseOptions,
+        reason: "parsed line item quantity",
+      }),
+    );
+  }
+
+  if (item.unit) {
+    pushCandidate(
+      candidateMap,
+      "line_items[].unit",
+      createCandidate("line_items[].unit", item.unit, {
+        ...baseOptions,
+        reason: "parsed line item unit",
+      }),
+    );
+  }
+
+  if (item.unitPriceCents != null) {
+    pushCandidate(
+      candidateMap,
+      "line_items[].unit_price_cents",
+      createCandidate("line_items[].unit_price_cents", item.unitPriceCents, {
+        ...baseOptions,
+        normalizedValue: item.unitPriceCents,
+        displayValue: String(item.unitPriceCents),
+        reason: "parsed line item unit price",
+      }),
+    );
+  }
+
+  if (item.taxRatePercent != null) {
+    pushCandidate(
+      candidateMap,
+      "line_items[].tax_rate_percent",
+      createCandidate("line_items[].tax_rate_percent", item.taxRatePercent, {
+        ...baseOptions,
+        reason: "parsed line item tax rate",
+      }),
+    );
+  }
+
+  if (item.amountCents != null) {
+    pushCandidate(
+      candidateMap,
+      "line_items[].amount_cents",
+      createCandidate("line_items[].amount_cents", item.amountCents, {
+        ...baseOptions,
+        normalizedValue: item.amountCents,
+        displayValue: String(item.amountCents),
+        reason: "parsed line item amount",
+      }),
+    );
+  }
+
+  if (item.batchNumber) {
+    pushCandidate(
+      candidateMap,
+      "line_items[].batch_number",
+      createCandidate("line_items[].batch_number", item.batchNumber, {
+        ...baseOptions,
+        reason: "parsed line item batch number",
+      }),
+    );
+  }
+
+  if (item.expiryDate) {
+    pushCandidate(
+      candidateMap,
+      "line_items[].expiry_date",
+      createCandidate("line_items[].expiry_date", item.expiryDate, {
+        ...baseOptions,
+        reason: "parsed line item expiry date",
+      }),
+    );
+  }
+
+  if (item.mrpCents != null) {
+    pushCandidate(
+      candidateMap,
+      "line_items[].mrp_cents",
+      createCandidate("line_items[].mrp_cents", item.mrpCents, {
+        ...baseOptions,
+        normalizedValue: item.mrpCents,
+        displayValue: String(item.mrpCents),
+        reason: "parsed line item MRP",
+      }),
+    );
+  }
+
+  if (item.serialNumber) {
+    pushCandidate(
+      candidateMap,
+      "line_items[].serial_number",
+      createCandidate("line_items[].serial_number", item.serialNumber, {
+        ...baseOptions,
+        reason: "parsed line item serial number",
+      }),
+    );
+  }
+
+  if (item.freeQuantity != null) {
+    pushCandidate(
+      candidateMap,
+      "line_items[].free_quantity",
+      createCandidate("line_items[].free_quantity", item.freeQuantity, {
+        ...baseOptions,
+        reason: "parsed line item free quantity",
+      }),
+    );
+  }
+
+  if (item.schemeDiscountCents != null) {
+    pushCandidate(
+      candidateMap,
+      "line_items[].scheme_discount_cents",
+      createCandidate("line_items[].scheme_discount_cents", item.schemeDiscountCents, {
+        ...baseOptions,
+        normalizedValue: item.schemeDiscountCents,
+        displayValue: String(item.schemeDiscountCents),
+        reason: "parsed line item scheme discount",
+      }),
+    );
+  }
+}
+
+function mapLineItemForRecord(item) {
+  const record = {
+    index: item.index,
+    description: item.description,
+    hsnSac: item.hsnSac,
+    quantity: item.quantity,
+    unit: item.unit,
+    unitPriceCents: item.unitPriceCents,
+    taxRatePercent: item.taxRatePercent,
+    amountCents: item.amountCents,
+  };
+
+  if (item.batchNumber) {
+    record.batchNumber = item.batchNumber;
+  }
+  if (item.expiryDate) {
+    record.expiryDate = item.expiryDate;
+  }
+  if (item.mrpCents != null) {
+    record.mrpCents = item.mrpCents;
+  }
+  if (item.serialNumber) {
+    record.serialNumber = item.serialNumber;
+  }
+  if (item.freeQuantity != null) {
+    record.freeQuantity = item.freeQuantity;
+  }
+  if (item.schemeDiscountCents != null) {
+    record.schemeDiscountCents = item.schemeDiscountCents;
+  }
+
+  return record;
 }
 
 export function buildTallyRecord(state, selectedFields = state.selectedFields) {
@@ -1221,7 +1341,7 @@ export function buildTallyRecord(state, selectedFields = state.selectedFields) {
       sgstCents: selected["taxes.sgst_cents"],
       cessCents: selected["taxes.cess_cents"],
     },
-    lineItems: state.parsedReceipt?.items?.map(mapParsedReceiptLineItem) ?? [],
+    lineItems: state.lineItems.map(mapLineItemForRecord),
   };
 }
 
@@ -1232,12 +1352,15 @@ export function buildTallyExtractionState(source, options = {}) {
   const industry = options.industry ?? detectIndustry(classification.source);
   const schema = buildTallyVoucherSchema(voucherFamily, { industry });
   const parsedReceipt = schema.supported ? tryParseReceipt(classification.source) : null;
+  const tableParse = schema.supported ? extractTallyLineItems(normalizedSource, { industry }) : { header: null, items: [] };
+  const receiptLineItems = parsedReceipt?.items?.map(mapParsedReceiptLineItem) ?? [];
+  const lineItems = mergeTallyLineItems(tableParse.items, receiptLineItems);
 
   const candidateMap = new Map();
   addVoucherFamilyCandidates(candidateMap, classification.rankedFamilies);
 
   if (schema.supported) {
-    addParserCandidates(candidateMap, parsedReceipt);
+    addParserCandidates(candidateMap, parsedReceipt, lineItems);
     addDocumentCandidates(candidateMap, classification.lines, classification.source);
     addPartyCandidates(candidateMap, classification.lines);
     addAmountCandidates(candidateMap, normalizedSource);
@@ -1256,6 +1379,8 @@ export function buildTallyExtractionState(source, options = {}) {
     industry,
     schema,
     parsedReceipt,
+    lineItems,
+    tableParse,
     fieldCandidates,
     selectedFields,
   };

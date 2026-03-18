@@ -183,7 +183,13 @@ In short:
 
 - AI/ML view: constrained information extraction over voucher families and field candidates
 - layman view: detect the document type, look for the likely invoice fields, and fill a Tally-shaped record
-- main limitation: the local model is still small and synthetic-data-trained, the table understanding is partial, and the demo expects pasted OCR/TSV rather than direct PDF conversion
+- main limitation: the local model is still small and synthetic-data-trained, the demo expects pasted OCR/TSV rather than direct PDF conversion, and arbitrary table-heavy layouts still need more parser/constraint coverage
+
+There is now an adversarial harness for that exact gap:
+
+- `node scripts/evaluate_tally_harness.mjs`
+- reports candidate recall, top-1 accuracy, instability, and line-item recall by failure class
+- useful classes today: `candidate_missing`, `layout_drift`, `ocr_corruption`, `numeric_ambiguity`, `ranking_ambiguity`, `structural_inconsistency`
 
 ## Local development
 

@@ -14,6 +14,8 @@ Today this lane is deterministic-first, with an optional tiny local BERT field s
 
 - `schema.mjs` - voucher families, shared core fields, and industry extensions
 - `psvm.mjs` - voucher-family classifier and schema-aligned field extractor
+- `table_parser.mjs` - OCR-row table parser for repeatable line items and industry columns
+- `harness.mjs` - adversarial failure-mode harness for candidate recall, ranking accuracy, and instability
 - `model-common.mjs` - shared field-candidate context builder and selection helpers
 - `model.mjs` - browser-local transformer inference over legal Tally candidates
 - `worker.mjs` - browser worker for the Tally extraction demo
@@ -23,12 +25,27 @@ Today this lane is deterministic-first, with an optional tiny local BERT field s
 - `model.test.mjs` - model-selection logic coverage on the demo presets
 - `schema.test.mjs` - voucher schema coverage
 - `psvm.test.mjs` - extraction PSVM coverage
+- `table_parser.test.mjs` - line-item table parsing coverage for text and structured OCR
+- `harness.test.mjs` - adversarial harness coverage and aggregate metric checks
 - `../tally.html` - browser demo for voucher-family classification and Tally-shaped output
 - `app.mjs` - basic browser UI for OCR/TSV input, summary fields, and emitted JSON
 
 ## How It Works In AI/ML Terms
 
 This is a constrained information-extraction problem, not free-form generation.
+
+The dominant bottleneck is not raw model size. It is candidate coverage under bad structure:
+
+`P(correct) = candidate recall × ranking accuracy × constraint/mapping correctness`
+
+So the ranker matters, but the parser and the legal candidate surface matter more.
+
+The harness in `harness.mjs` tracks that explicitly with:
+
+- candidate recall
+- top-1 field accuracy
+- instability rate
+- line-item candidate recall
 
 Pipeline:
 
@@ -51,7 +68,7 @@ Pipeline:
 4. Generate legal candidates for each field.
    - nearby label/value spans
    - GSTINs, dates, invoice numbers, totals
-   - parser-assisted totals and line items when the layout matches known invoice shapes
+   - row-aware table parsing for line items, including multiline descriptions and common industry columns
 5. Rank and select candidates.
    - `Runtime` mode uses the deterministic heuristic order from the PSVM
    - `Local model` mode uses a tiny BERT text classifier over the same legal candidates
@@ -77,6 +94,7 @@ Think of it as a document clerk with a checklist.
    - GSTIN
    - buyer and seller names
    - subtotal, tax, and total
+   - line items, quantities, rates, amounts, and some industry fields when a table is visible
 4. It picks the strongest candidates and fills a Tally-shaped record.
 5. If the document looks like a statement or the OCR is too weak, it rejects instead of forcing a wrong invoice output.
 
@@ -87,7 +105,7 @@ So it is not trying to magically rewrite garbage OCR into perfect accounting dat
 - This is not a generic parser for every table-heavy business document.
 - Account statements are rejected instead of being squeezed into invoice output.
 - OCR quality still matters. Bad scans can break labels, rows, GSTINs, and dates.
-- Line-item extraction is still partial. Scalar document fields are stronger than arbitrary table reconstruction.
+- Common invoice line-item tables are now parsed directly from OCR rows, but arbitrary or highly irregular tables are still weak.
 - Voucher-type coverage is broad but not complete. New Tally mechanisms should be added as schema and extractor extensions, not guessed.
 - Industry support is extension-based today. Pharma, medical, trading, and stockist fields are modeled, but real customer layouts will still need tuning.
 - The local model is still lightweight. It is a tiny transformer trained on synthetic candidate contexts, not a large document foundation model.
@@ -110,7 +128,33 @@ The page accepts pasted OCR text or pasted `pdftotext -tsv` output. PDF upload i
 
 - run summary
 - selected scalar fields
+- parsed line items inside the emitted record JSON
 - emitted Tally-shaped record JSON
+
+## Adversarial Harness
+
+Run the failure-mode harness locally:
+
+```bash
+node scripts/evaluate_tally_harness.mjs
+```
+
+Optional flags:
+
+- `--json` for machine-readable output
+- `--no-baseline` to remove the clean control cases
+- `--seed <int>` to vary the OCR-corruption mutations deterministically
+
+The harness is organized by failure class instead of document type:
+
+- `candidate_missing`
+- `ranking_ambiguity`
+- `structural_inconsistency`
+- `numeric_ambiguity`
+- `ocr_corruption`
+- `layout_drift`
+
+This is the current intended regression surface for parser work. If candidate recall is low, model changes should not be the first response.
 
 ## Best Current Use
 

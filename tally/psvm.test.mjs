@@ -85,6 +85,8 @@ test("tally PSVM extracts shared document fields from a proforma invoice", () =>
   assert.equal(result.result.amounts.taxableAmountCents, 14800000);
   assert.equal(result.result.amounts.grandTotalCents, 16576000);
   assert.equal(result.result.lineItems[0].description, "SOFAR-5KW G-3");
+  assert.equal(result.result.lineItems[0].unit?.toLowerCase(), "nos");
+  assert.equal(result.result.lineItems[0].unitPriceCents, 2960000);
 });
 
 test("tally PSVM extracts a sales-invoice style core record", () => {
@@ -101,6 +103,11 @@ test("tally PSVM extracts a sales-invoice style core record", () => {
   assert.equal(result.result.buyer.gstin, "27AADCN3773B1ZM");
   assert.equal(result.result.amounts.grandTotalCents, 47200000);
   assert.equal(result.result.lineItems[0].hsnSac, "995442");
+  assert.equal(result.result.lineItems[0].quantity, 250);
+  assert.equal(result.result.lineItems[0].unit, "KW");
+  assert.equal(result.result.lineItems[0].unitPriceCents, 160000);
+  assert.equal(result.result.lineItems[0].taxRatePercent, 18);
+  assert.match(result.result.lineItems[0].description, /Power Project at Sarigam, Gujarat/);
 });
 
 test("statement-like OCR is classified as unsupported instead of guessed as an invoice", () => {

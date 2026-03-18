@@ -40,6 +40,7 @@ If you use the repository as a software artifact, cite:
 - [CITATION.cff](/Users/avirajkhare/hack2/transformers/transformer-in-notion/CITATION.cff)
 - [paper.md](/Users/avirajkhare/hack2/transformers/transformer-in-notion/paper.md)
 - [paper.pdf](/Users/avirajkhare/hack2/transformers/transformer-in-notion/paper.pdf)
+- Zenodo archive DOI: `10.5281/zenodo.19087723`
 
 If you want the broader research-paper framing rather than the software-paper
 framing, use:

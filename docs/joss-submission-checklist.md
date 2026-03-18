@@ -19,12 +19,12 @@
 
 ## Still worth tightening before JOSS submission
 
-- [ ] add explicit versioned release for the submission artifact
-- [ ] archive the release with a DOI provider such as Zenodo or Figshare
+- [x] add explicit versioned release for the submission artifact
+- [x] archive the release with Zenodo DOI `10.5281/zenodo.19087723`
 - [ ] verify installation instructions from a clean machine
 - [ ] make sure at least one minimal automated smoke path is documented end to end
 - [ ] consider a short architecture figure for the JOSS paper README and docs
-- [ ] replace placeholder version/date values if the submission release changes
+- [x] replace placeholder version/date values after the submission release changed
 
 ## Framing guidance
 
@@ -47,8 +47,7 @@ That broader argument belongs in the arXiv paper:
 
 ## Immediate next steps
 
-1. create the tagged release described in [joss-release-plan.md](/Users/avirajkhare/hack2/transformers/transformer-in-notion/docs/joss-release-plan.md)
-2. archive that release and mint a DOI
-3. run a clean-start install check
-4. document a minimal automated smoke path
-5. do one final prose pass after the release metadata is frozen
+1. run a clean-start install check
+2. document a minimal automated smoke path
+3. do one final prose pass after the release metadata is frozen
+4. submit the JOSS paper using the archived release and DOI

@@ -4,11 +4,12 @@
 
 Create a stable, citable software artifact for the JOSS submission.
 
-## Recommended release version
+## Current archival release
 
-- release version: `v0.1.0`
-- release title: `Transformer Runtime Lab v0.1.0`
-- release purpose: first JOSS submission artifact
+- release version: `v0.1.1`
+- release title: `Transformer Runtime Lab v0.1.1`
+- Zenodo DOI: `10.5281/zenodo.19087723`
+- release purpose: first Zenodo-backed archival release for the JOSS submission
 
 ## Why a release is needed
 
@@ -29,8 +30,8 @@ The submission package should therefore point to:
 2. Tag the release:
 
 ```bash
-git tag -a v0.1.0 -m "JOSS submission release"
-git push origin v0.1.0
+git tag -a v0.1.1 -m "Zenodo-ready archival release"
+git push origin v0.1.1
 ```
 
 3. Create the GitHub release from that tag.
@@ -46,7 +47,13 @@ Zenodo-specific setup notes are in
 
 ## Suggested release description
 
-Use wording close to:
+The current archival release is:
+
+> Transformer Runtime Lab v0.1.1
+>
+> Zenodo DOI: 10.5281/zenodo.19087723
+
+Earlier wording for the first software submission release was:
 
 > First software release for JOSS submission. This release freezes the
 > repository state for the `Transformer Runtime Lab` software paper and the

@@ -7,46 +7,36 @@ This repository is now prepared for Zenodo GitHub archiving with:
 - [CITATION.cff](/Users/avirajkhare/hack2/transformers/transformer-in-notion/CITATION.cff)
 - [.zenodo.json](/Users/avirajkhare/hack2/transformers/transformer-in-notion/.zenodo.json)
 
-## What still requires manual action
+## Current status
 
-Zenodo DOI minting cannot be completed from the repository alone. It requires:
+The repository now has a Zenodo-backed archival release:
 
-1. signing in to Zenodo with your own account
-2. connecting GitHub to Zenodo
-3. enabling this repository inside Zenodo's GitHub integration view
+- release: `v0.1.1`
+- DOI: `10.5281/zenodo.19087723`
+- record: `https://zenodo.org/records/19087723`
 
 ## Recommended flow
 
-1. Log in to Zenodo.
-2. Open the GitHub integration page.
-3. Sync repositories and enable `avirajkhare00/transformer-in-notion`.
-4. After the repository is enabled, create the next point release from GitHub.
+1. Keep the GitHub repository enabled in Zenodo for future releases.
+2. For the next software archive, create a new GitHub release tag.
+3. Wait for Zenodo to archive the new release.
+4. Patch the new DOI back into:
+   - `CITATION.cff`
+   - `paper.bib`
+   - `paper.md`
+   - `paper.pdf`
 
-## Important note for this repository
+## Historical note for this repository
 
 `v0.1.0` was created before the Zenodo metadata file existed in the tagged
-state. The cleanest path for DOI minting is therefore:
-
-- enable the repository in Zenodo first
-- then create a new release, for example `v0.1.1`
-
-That next release will include:
-
-- `.zenodo.json`
-- `CITATION.cff`
-- `paper.md`
-- `paper.pdf`
-- the JOSS and arXiv submission docs
+state. That is why the first archival release is `v0.1.1`, not `v0.1.0`.
 
 ## Why both metadata files exist
 
 - `CITATION.cff` is for GitHub and human/software citation flows
 - `.zenodo.json` is the Zenodo-specific metadata override for archival releases
 
-## Suggested next release title
-
-`Transformer Runtime Lab v0.1.1`
-
 ## Suggested next release purpose
 
-First Zenodo-backed archival release for the JOSS software artifact.
+Next Zenodo-backed archival update after JOSS submission or after major artifact
+changes.

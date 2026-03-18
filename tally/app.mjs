@@ -87,6 +87,22 @@ function syncButtons() {
   refs.file.disabled = disabled;
 }
 
+function markResultStale(message = "Inputs changed. Click Extract to rerun.") {
+  if (state.isRunning || !state.lastResult) {
+    return;
+  }
+
+  refs.status.innerHTML = `
+    <div>
+      <strong>Result is stale.</strong><br>
+      ${escapeHtml(message)}
+    </div>
+  `;
+  refs.stats.innerHTML = createStatCard("Status", "Needs rerun");
+  refs.selectedFields.innerHTML = "<li>Previous extraction is stale. Click Extract to rerun.</li>";
+  refs.record.textContent = "";
+}
+
 function renderRunning() {
   refs.status.innerHTML = `
     <div>
@@ -212,6 +228,7 @@ async function loadFile(event) {
   refs.presetDescription.textContent = `Loaded ${file.name}.`;
   refs.input.value = await file.text();
   refs.format.value = file.name.toLowerCase().endsWith(".tsv") ? "tsv" : "auto";
+  runDemoIfReady();
 }
 
 function runDemo() {
@@ -226,6 +243,14 @@ function runDemo() {
     fileName: refs.file.files?.[0]?.name ?? null,
     inputKind: refs.file.files?.[0]?.name?.toLowerCase()?.endsWith(".pdf") ? "pdf" : "text",
   });
+}
+
+function runDemoIfReady() {
+  if (state.isRunning || !refs.input.value.trim()) {
+    return;
+  }
+
+  runDemo();
 }
 
 function clearInput() {
@@ -254,7 +279,17 @@ function buildPresetMenu() {
 }
 
 function bindEvents() {
-  refs.preset.addEventListener("change", () => applyPreset(refs.preset.value));
+  refs.preset.addEventListener("change", () => {
+    applyPreset(refs.preset.value);
+    runDemoIfReady();
+  });
+  refs.format.addEventListener("change", runDemoIfReady);
+  refs.engine.addEventListener("change", runDemoIfReady);
+  refs.input.addEventListener("input", () => {
+    refs.preset.value = "custom";
+    refs.presetDescription.textContent = "Custom OCR text edited locally.";
+    markResultStale();
+  });
   refs.run.addEventListener("click", runDemo);
   refs.clear.addEventListener("click", clearInput);
   refs.file.addEventListener("change", loadFile);

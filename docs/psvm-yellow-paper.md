@@ -3,7 +3,7 @@
 ## Status
 
 This document is a **yellow-paper-style companion spec** to
-[Problem-Shaped Virtual Machines for Exact Local Transformer Execution](/Users/avirajkhare/hack2/transformers/transformer-in-notion/docs/paper-idea-problem-shaped-vms.md).
+[Trim the Machine to the Problem: Exact Runtimes with Model Ranking for Local Tasks](/Users/avirajkhare/hack2/transformers/transformer-in-notion/docs/paper-idea-problem-shaped-vms.md).
 It is not a universal VM standard. It specifies the common execution contract
 used by the PSVM runtimes in this repository.
 

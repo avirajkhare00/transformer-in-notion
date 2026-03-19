@@ -28,7 +28,7 @@ Companion spec:
 ## Recommended arXiv metadata
 
 - Title:
-  `Problem-Shaped Virtual Machines for Exact Local Transformer Execution`
+  `Trim the Machine to the Problem: Exact Runtimes with Model Ranking for Local Tasks`
 - Author:
   `Aviraj Khare`
 - Affiliation:

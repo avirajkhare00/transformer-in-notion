@@ -87,55 +87,55 @@
 
 \begin{document}
 
-\section{Problem-Shaped Virtual Machines for Exact Local Transformer
-Execution}\label{problem-shaped-virtual-machines-for-exact-local-transformer-execution}
+\section{Trim the Machine to the Problem: Exact Runtimes with Model
+Ranking for Local
+Tasks}\label{trim-the-machine-to-the-problem-exact-runtimes-with-model-ranking-for-local-tasks}
 
 \textbf{Aviraj Khare}\\
 Email: \texttt{avirajkhare00@gmail.com}
 
 \subsection{Abstract}\label{abstract}
 
-This paper argues that small local models are most useful on exact tasks
-when they operate inside a task-specific exact machine instead of
-predicting final answers or imitating a broad virtual machine. I call
-that machine a \textbf{problem-shaped virtual machine (PSVM)}. The
-repository demonstrates the pattern across browser-local Sudoku, receipt
-and invoice total extraction, Tally-style voucher extraction, and a
-smaller Weiqi prototype (Khare 2026). In every case, code remains
-authoritative for legality, rollback, arithmetic, schema checks, and
-final emission; the model only ranks legal branches or candidates. The
-contribution is therefore systems-level: a concrete artifact for
-browser-local, verifier-backed AI. The paper does not claim that PSVMs
-already beat strong baselines or scale to arbitrary program execution.
+This paper argues for a narrower target for local AI systems. On many
+exact tasks, arithmetic, legality, and schema validation already belong
+in code. A small local model is most useful when it ranks ambiguity
+inside an exact runtime: which legal branch to try, which OCR candidate
+best fits, or which valid state looks most promising. I call the
+smallest exact runtime that exposes that surface a
+\textbf{problem-shaped virtual machine (PSVM)}. The repository
+demonstrates the pattern across browser-local receipt and invoice
+extraction, Tally-style voucher extraction, Sudoku, and a smaller Weiqi
+prototype (Khare 2026). The claim is not that PSVMs beat specialized
+exact solvers. The claim is that they provide a practical interface for
+browser-local hybrid systems in which code keeps truth and models rank
+ambiguity.
 
 \subsection{Core Claim}\label{core-claim}
 
-For narrow exact tasks, the right learned target is usually not the
-final answer and not a full machine trace. It is the ranking problem
-induced by the smallest exact machine that can still run the task
+For narrow local tasks, the right learned target is usually not the
+final answer and not a broad machine trace. It is the ranking problem
+induced by the smallest exact runtime that can still execute the task
 correctly.
 
-That claim sits between two common extremes. One-shot answer prediction
-hides the exact intermediate decisions, making supervision weak and
-failure analysis vague. Full-machine emulation forces the model to spend
-capacity on generic machine bookkeeping that the task does not need.
+That is a claim about \textbf{placement of learning}, not about
+replacing solved exact methods. One-shot answer prediction hides the
+intermediate structure that must still be checked. Full-machine
+emulation wastes capacity on bookkeeping that the task does not need.
 PSVMs aim at the middle: keep exact semantics in code, but expose a
 small legal frontier on which the model can actually help.
 
-This is a repository-backed systems paper, not a finished benchmark
-study. The point is to make the pattern concrete in working software.
-OR-Tools and PySAT provide exact search and constraint solving (Google
-OR-Tools Team 2026; Ignatiev, Morgado, and Marques-Silva 2018), while
-Transformers.js and ONNX Runtime make browser-local inference practical
-(Boreiko 2026; Microsoft 2026). LayoutParser shows how OCR-centric
-document pipelines can be structured (Shen et al. 2021). The gap this
-repository targets is the combination: exact task runtimes, local
-learned guidance, canonical candidate surfaces or traces, and browser
-deployment in one inspectable artifact.
+This matters most where exact computation is already strong but the
+interface between code and learning is still poor. OR-Tools and PySAT
+already solve many constraint problems well (Google OR-Tools Team 2026;
+Ignatiev, Morgado, and Marques-Silva 2018). OCR pipelines already
+provide partial structure (Shen et al. 2021). The gap this repository
+targets is the combination: exact runtimes, local learned guidance,
+canonical candidate surfaces or traces, and browser deployment in one
+inspectable artifact.
 
 \subsection{What a PSVM Is}\label{what-a-psvm-is}
 
-A PSVM is a small exact machine for one task family. It keeps only the
+A PSVM is a small exact runtime for one task family. It keeps only the
 state and transitions that matter for that task, plus an explicit place
 where a model can help. In practice, a PSVM has five parts:
 
@@ -186,7 +186,8 @@ The separation of responsibility is the point:
 That pattern applies both to search tasks, where actions may include
 branch and rollback, and to extraction tasks, where actions may be
 candidate selections. The design rule is simple: trim the machine to the
-problem.
+problem, and do not ask the model to redo work that the runtime can
+already do exactly.
 
 \subsection{Evidence from the
 Repository}\label{evidence-from-the-repository}
@@ -194,40 +195,36 @@ Repository}\label{evidence-from-the-repository}
 The repository demonstrates the PSVM pattern across several domains
 rather than only one demo.
 
-\subsubsection{Sudoku}\label{sudoku}
-
-Sudoku is the cleanest case because it is explicit exact search. The
-runtime owns candidate generation, contradictions, rollback, and
-backtracking. The model only helps order legal branches. On the current
-hard preset \texttt{Forum\ hardest\ 1106\ ·\ r365}, the shipped
-regret-trained transformer reduced ranked branch decisions from 7,523 to
-5,133, backtracks from 86,376 to 57,057, and wall time from 96.99
-seconds to 64.94 seconds relative to the imitation-trained transformer
-on the same exact runtime. The rules did not change. Only branch
-ordering changed.
-
-That result is suggestive, not sufficient. It is a single-preset
-comparison inside the repository, not a baseline study against stronger
-exact solvers. But it demonstrates the intended role of learning in a
-PSVM: not free-running execution, but value estimation over exact
-states.
-
 \subsubsection{Receipt, Invoice, and Tally
 Extraction}\label{receipt-invoice-and-tally-extraction}
 
-The document lanes show the same separation outside search. For receipt
-and invoice total extraction, the runtime first enumerates legal money
-candidates from OCR or structured text. The model ranks those
-candidates, and a deterministic emitter produces the selected value. The
-model is not asked to invent totals from scratch.
+The document lanes are the strongest motivating examples because the
+exact subproblems are obvious. Arithmetic, schema conformance, GST
+checks, rollback, and canonical emission belong in code.
 
-The Tally lane extends the same idea to a larger structured state. The
-runtime first classifies voucher family, then builds schema-aligned
-field candidates, and finally applies a deterministic resolver with
-arithmetic, schema, and GST consistency checks. The learned selector
-only ranks candidates inside that legal surface. This is the main
-document-extraction lesson of the repository: parser quality, candidate
-recall, and exact resolution matter at least as much as model size.
+For receipt and invoice total extraction, the runtime first enumerates
+legal money candidates from OCR or structured text. The model ranks
+those candidates, and a deterministic emitter produces the selected
+value. For the Tally lane, the runtime first classifies voucher family,
+then builds schema-aligned field candidates, and finally applies a
+deterministic resolver with arithmetic, schema, and GST consistency
+checks. The learned selector only ranks candidates inside that legal
+surface.
+
+The extraction lesson is simple: correctness comes from candidate
+coverage plus exact resolution, not from asking a model to output a
+finished accounting record.
+
+\subsubsection{Sudoku as a
+Micro-Example}\label{sudoku-as-a-micro-example}
+
+Sudoku is included as a didactic micro-example, not as evidence that
+PSVMs beat strong exact solvers. Specialized solvers already exist and
+remain the right answer if the goal is simply to solve Sudoku fast. The
+point here is structural: the runtime owns candidate generation,
+contradictions, rollback, and backtracking, while the model only orders
+legal branches. The repository's in-repo comparison on one hard preset
+is useful only in that limited sense.
 
 \subsubsection{Browser-Local Deployment}\label{browser-local-deployment}
 
@@ -265,6 +262,9 @@ It does \textbf{not} yet justify stronger claims such as:
 \item
   the approach scales from narrow task families to arbitrary program
   execution.
+\item
+  problems that already have excellent exact solvers should now be
+  reformulated around PSVMs.
 \end{itemize}
 
 These are precisely the places where criticism is fair. The current
@@ -278,17 +278,17 @@ Three additions would materially strengthen the paper: compare PSVM
 ranking against one-shot answer prediction and broader trace
 formulations; evaluate exactness rather than only loss, using solve
 rate, illegal action rate, verifier failure rate, search cost, trace
-length, and browser latency; and add stronger baselines, especially for
-Sudoku and document extraction. If those experiments are strong, the
-PSVM claim becomes much easier to defend as more than a design argument.
+length, and browser latency; and add stronger baselines, especially in
+document extraction. If those experiments are strong, the PSVM claim
+becomes much easier to defend as more than a design argument.
 
 \subsection{Conclusion}\label{conclusion}
 
-The paper's main point is narrower than the title makes it sound. It is
-not that local transformers can already execute arbitrary code exactly.
-It is that many narrow exact tasks have a small semantic core, and local
-models are more useful when trained on that core than when asked either
-to guess final answers or imitate broad machine traces.
+The paper's main point is narrow on purpose. It is not that local models
+should compete with every specialized exact solver. It is that many
+narrow local systems already have an exact core, and the right place for
+learning is inside that core's legal ambiguity surface rather than
+outside it.
 
 That is what a PSVM is: the smallest exact machine that still preserves
 the task's truth conditions while exposing the choices that are
@@ -302,10 +302,6 @@ claims, wording, and technical judgments.
 
 \protect\phantomsection\label{refs}
 \begin{CSLReferences}{1}{0}
-\bibitem[\citeproctext]{ref-transformersjs}
-Boreiko, Xenova. 2026. {``Transformers.js.''}
-\url{https://github.com/huggingface/transformers.js}.
-
 \bibitem[\citeproctext]{ref-ortools}
 Google OR-Tools Team. 2026. {``OR-Tools.''}
 \url{https://developers.google.com/optimization}.
@@ -318,9 +314,6 @@ Ignatiev, Alexey, António Morgado, and Joao Marques-Silva. 2018.
 \bibitem[\citeproctext]{ref-khare2026trl}
 Khare, Aviraj. 2026. {``Transformer Runtime Lab.''} Zenodo.
 \url{https://doi.org/10.5281/zenodo.19087723}.
-
-\bibitem[\citeproctext]{ref-onnxruntime}
-Microsoft. 2026. {``ONNX Runtime.''} \url{https://onnxruntime.ai/}.
 
 \bibitem[\citeproctext]{ref-layoutparser}
 Shen, Zejiang, Ruochen Zhang, Melissa Dell, Benjamin Charles Germain

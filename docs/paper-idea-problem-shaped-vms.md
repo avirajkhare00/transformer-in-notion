@@ -16,14 +16,14 @@ This note argues for a narrower target for local AI systems. On many exact
 tasks, arithmetic, legality, and schema validation already belong in code. A
 small local model is most useful when it ranks ambiguity inside an exact
 runtime: which legal branch to try, which OCR candidate best fits, or which
-valid state looks most promising. I call the smallest exact runtime that
-exposes that surface a **problem-shaped virtual machine (PSVM)**. The
+valid state looks most promising. I call that exact runtime a
+**problem-shaped virtual machine (PSVM)**, though the full phrase matters more
+than the acronym here. The
 repository demonstrates the pattern across browser-local receipt and invoice
 extraction, Tally-style voucher extraction, and Sudoku [@khare2026trl]. The
-claim is not that PSVMs beat specialized exact
-solvers. The claim is that they provide a practical interface for
-browser-local hybrid systems in which code keeps truth and models rank
-ambiguity.
+claim is not that this approach beats specialized exact solvers. The claim is
+that it provides a practical interface for browser-local hybrid systems in
+which code keeps truth and models rank ambiguity.
 
 ## Core Claim
 
@@ -32,23 +32,23 @@ answer and not a broad machine trace. It is the ranking problem induced by the
 smallest exact runtime that can still execute the task correctly.
 
 That is a claim about **placement of learning**, not about replacing solved
-exact methods. One-shot answer prediction hides the intermediate structure that
-must still be checked. Full-machine emulation wastes capacity on bookkeeping
-that the task does not need. PSVMs aim at the middle: keep exact semantics in
-code, but expose a small legal frontier on which the model can actually help.
+exact methods. One-shot answer prediction hides structure that still has to be
+checked. Full-machine emulation spends capacity on bookkeeping the task does
+not need. Problem-shaped runtimes aim at the middle: keep exact semantics in
+code, but expose a small legal frontier on which the model can help.
 
 This matters most where exact computation is already strong but the interface
 between code and learning is still poor. OR-Tools and PySAT already solve many
 constraint problems well [@ortools; @pysat]. OCR pipelines already provide
-partial structure [@layoutparser]. The gap this repository targets is the
-combination: exact runtimes, local learned guidance, canonical candidate
-surfaces or traces, and browser deployment in one inspectable artifact.
+partial structure [@layoutparser]. The gap here is the combination: exact
+runtimes, local learned guidance, canonical candidate surfaces or traces, and
+browser deployment in one inspectable artifact.
 
-## What a PSVM Is
+## What a Problem-Shaped Runtime Is
 
-A PSVM is a small exact runtime for one task family. It keeps only the state
-and transitions that matter for that task, plus an explicit place where a
-model can help. In practice, a PSVM has five parts:
+A problem-shaped virtual machine is a small exact runtime for one task family.
+It keeps only the state and transitions that matter for that task, plus an
+explicit place where a model can help. In practice, it has five parts:
 
 - exact state
 - legal next actions or legal candidate set
@@ -87,8 +87,7 @@ do not ask the model to redo work that the runtime can already do exactly.
 
 ## Evidence from the Repository
 
-The repository demonstrates the PSVM pattern across several domains rather
-than only one demo.
+The repository demonstrates this pattern across several domains.
 
 ### Receipt, Invoice, and Tally Extraction
 
@@ -110,12 +109,11 @@ accounting record.
 
 ### Sudoku as a Micro-Example
 
-Sudoku is included as a didactic micro-example, not as evidence that PSVMs
-beat strong exact solvers. Specialized solvers already exist and remain the
-right answer if the goal is simply to solve Sudoku fast. The point here is
+Sudoku is included as a didactic micro-example, not as evidence that this
+approach beats strong exact solvers. Specialized solvers remain the right
+answer if the goal is simply to solve Sudoku fast. The point here is
 structural: the runtime owns candidate generation, contradictions, rollback,
-and backtracking, while the model only orders legal branches. The repository's
-in-repo comparison on one hard preset is useful only in that limited sense.
+and backtracking, while the model only orders legal branches.
 
 ### Browser-Local Deployment
 
@@ -127,6 +125,10 @@ behavior are part of the thesis, not afterthoughts.
 
 ## Positioning
 
+This approach has a real cost: someone has to design the runtime, legal
+frontier, and verifier for each task family. It is worth doing only when
+exactness, auditability, or failure cost justify that engineering.
+
 The repository already supports three defensible claims.
 
 - Browser-local exact runtimes with local learned guidance are practical for
@@ -137,7 +139,8 @@ The repository already supports three defensible claims.
 
 It does **not** yet justify stronger claims such as:
 
-- PSVMs outperform strong classical or hybrid baselines across tasks.
+- problem-shaped runtimes outperform strong classical or hybrid baselines
+  across tasks.
 - the learned model can replace the exact runtime end to end.
 - the approach scales from narrow task families to arbitrary program
   execution.
@@ -150,23 +153,25 @@ paper.
 
 ## What Would Make It Stronger
 
-Three additions would materially strengthen the note: compare PSVM ranking
-against one-shot answer prediction and broader trace formulations; evaluate
-exactness rather than only loss, using solve rate, illegal action rate,
-verifier failure rate, search cost, trace length, and browser latency; and
-add stronger baselines, especially in document extraction. If those
-experiments are strong, the PSVM claim becomes much easier to defend as more
-than a design argument.
+Three additions would materially strengthen the note:
+
+- document extraction baselines: compare ranker-plus-resolver against OCR plus
+  rules and against end-to-end extraction; report candidate recall, exact
+  field accuracy, and line-item accuracy
+- search baselines: compare learned branch ordering against unguided search
+  and against a classical ordering heuristic; report solve rate, search
+  steps, and wall time
+- runtime-model alignment: report illegal proposal rate, verifier rejection
+  rate, trace length, and browser latency
+
+Strong results there would turn the note from a design argument into an
+empirical claim.
 
 ## Conclusion
 
-The note's main point is narrow on purpose. It is not that local models
-should compete with every specialized exact solver. It is that many narrow
-local systems already have an exact core, and the right place for learning is
-inside that core's legal ambiguity surface rather than outside it.
-
-If the exact core already exists, the model should rank the remaining
-ambiguity rather than pretend to replace the system.
+The note's point is narrow on purpose: when a local system already has an
+exact core, keep it in code and use the model to rank the remaining
+ambiguity.
 
 ## AI Assistance Disclosure
 

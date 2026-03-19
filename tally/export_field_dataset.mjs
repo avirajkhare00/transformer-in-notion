@@ -4,6 +4,7 @@ import { fileURLToPath } from "node:url";
 
 import { runInvoicePsvm } from "../invoice/psvm.mjs";
 import { TALLY_DEMO_PRESETS } from "./demo-samples.mjs";
+import { buildTallyAdversarialHarness } from "./harness.mjs";
 import { buildTallyExtractionState } from "./psvm.mjs";
 import {
   TALLY_FIELD_SELECTOR_LABELS,
@@ -83,6 +84,7 @@ const UNITS = [
 ];
 const FAMILY_IDS = ["sales_invoice", "purchase_invoice", "proforma_invoice", "credit_note", "debit_note"];
 const SEED_PRESET_REPEATS = 12;
+const HARD_CASE_REPEATS = 8;
 const SEED_PRESET_EXPECTED = Object.freeze({
   "tax-invoice-core": {
     familyId: "sales_invoice",
@@ -617,6 +619,22 @@ function exportDataset(count, seed) {
         expected.familyId,
         preset.source,
         expected.fields,
+      );
+    }
+  }
+
+  for (const harnessCase of buildTallyAdversarialHarness({ includeBaseline: true, seed })) {
+    if (!harnessCase.shouldSupport) {
+      continue;
+    }
+
+    const repeats = harnessCase.failureClass === "baseline" ? 2 : HARD_CASE_REPEATS;
+    for (let repeat = 0; repeat < repeats; repeat += 1) {
+      addDocumentSamples(
+        `harness-${harnessCase.id}-${repeat + 1}`,
+        harnessCase.voucherFamily,
+        harnessCase.source,
+        harnessCase.fields,
       );
     }
   }

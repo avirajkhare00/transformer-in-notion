@@ -3,6 +3,14 @@ import { parseReceiptText } from "../invoice/receipt.mjs";
 import { buildTallyVoucherSchema, TALLY_VOUCHER_FAMILIES } from "./schema.mjs";
 import { extractReceiptAmountCandidates, rankReceiptTotalCandidates } from "../invoice/total_psvm.mjs";
 import { extractTallyLineItems, mergeTallyLineItems } from "./table_parser.mjs";
+import {
+  canonicalizeDateText,
+  canonicalizeStateName,
+  looksLikeAddressText,
+  looksLikeDocumentTitleText,
+  normalizeAlphaHeavyText,
+  normalizePartyNameText,
+} from "./normalization.mjs";
 import { resolveTallyFieldSelection } from "./resolver.mjs";
 
 const GSTIN_PATTERN = /\b\d{2}[A-Z]{5}\d{4}[A-Z][0-9A-Z]Z[0-9A-Z]\b/g;
@@ -18,6 +26,8 @@ const PARTY_HEADING_PATTERN =
   /\b(?:buyer|bill to|sold to|consignee|ship to|supplier|seller|from|client|customer|vendor)\b/i;
 const PARTY_METADATA_PATTERN =
   /\b(?:gstin|gst no|uin|invoice|date|ack|e-way|amount|total|subtotal|tax|place of supply|state|supply|phone|email|bank|branch|declaration)\b/i;
+const PARTY_TRAILING_METADATA_PATTERN =
+  /\b(?:invoice(?:\s+no\.?)?|voucher(?:\s+no\.?)?|bill(?:\s+no\.?)?|pi\s+no\.?|dated\b|date\s*:|ack date\b|gstin(?:\/uin)?\b|gst no\.?\b|place of supply\b|po no\.?\b|reference\b).*/i;
 const STATEMENT_HEADER_PATTERN =
   /\b(?:account statement|bank statement|statement of account|mini statement|ledger statement)\b/i;
 const STATEMENT_BALANCE_PATTERN =
@@ -62,6 +72,7 @@ const PARTY_ROLE_KEYWORDS = Object.freeze({
   buyer: ["BUYER", "CUSTOMER", "CLIENT", "BILL TO", "SOLD TO", "PARTY"],
   consignee: ["CONSIGNEE", "SHIP TO"],
 });
+const DOCUMENT_NUMBER_STOPWORDS = /^(?:DATE|DATED|INVOICE|VOUCHER|BILL|NO|NUMBER)$/i;
 
 export const TALLY_EXTRACTION_PSVM_OPS = Object.freeze([
   "CLASSIFY_VOUCHER_FAMILY",
@@ -221,6 +232,36 @@ function stripStructuredLabelPrefix(text) {
   return current;
 }
 
+function stripTrailingPartyMetadata(text) {
+  let current = collapseWhitespace(text);
+
+  const companyMatch = current.match(
+    /^(.*?\b(?:LLP|LTD\.?|LIMITED|PRIVATE LIMITED|PVT\.?\s+LTD\.?)\b)/i,
+  );
+  if (companyMatch) {
+    current = companyMatch[1];
+  } else {
+    current = current.replace(PARTY_TRAILING_METADATA_PATTERN, "");
+  }
+
+  return collapseWhitespace(current).replace(/^[:\s,-]+/, "").replace(/[,\s]+$/, "");
+}
+
+function normalizePartyNameCandidate(value) {
+  const stripped = stripTrailingPartyMetadata(value);
+  const normalized = normalizePartyNameText(stripped)
+    .replace(/^"+|"+$/g, "")
+    .replace(/^[:\s,-]+/, "")
+    .replace(/[,\s]+$/, "")
+    .trim();
+
+  if (!normalized || looksLikeAddressText(normalized) || looksLikeDocumentTitleText(normalized)) {
+    return null;
+  }
+
+  return normalized;
+}
+
 function cleanCandidateText(fieldId, value) {
   let text = collapseWhitespace(String(value ?? ""));
   if (!text) {
@@ -240,17 +281,25 @@ function cleanCandidateText(fieldId, value) {
     return null;
   }
 
+  if (fieldId.endsWith(".name")) {
+    return normalizePartyNameCandidate(text);
+  }
+
   if (fieldId.endsWith(".gstin")) {
     const match = text.match(GSTIN_PATTERN);
     return match?.[0] ?? null;
   }
 
   if (fieldId === "document.date") {
-    return extractInlineDate(text) ?? text;
+    return canonicalizeDateText(text) ?? extractInlineDate(text) ?? text;
   }
 
   if (fieldId === "document.number") {
     return normalizeDocumentNumberValue(text);
+  }
+
+  if (fieldId === "document.place_of_supply") {
+    return canonicalizeStateName(text);
   }
 
   if (fieldId.endsWith(".name") || fieldId.startsWith("document.")) {
@@ -263,10 +312,67 @@ function cleanCandidateText(fieldId, value) {
 }
 
 function normalizeFieldRuleKey(value) {
-  return collapseWhitespace(String(value ?? ""))
+  return collapseWhitespace(normalizeAlphaHeavyText(String(value ?? "")))
     .replace(/[_/-]+/g, " ")
     .replace(/[^A-Za-z0-9 ]+/g, " ")
     .toUpperCase();
+}
+
+function compactFieldRuleKey(value) {
+  return normalizeFieldRuleKey(value).replace(/\s+/g, "");
+}
+
+function levenshteinDistance(left, right) {
+  if (left === right) {
+    return 0;
+  }
+
+  if (left.length === 0) {
+    return right.length;
+  }
+  if (right.length === 0) {
+    return left.length;
+  }
+
+  let previous = Array.from({ length: right.length + 1 }, (_, index) => index);
+  let current = new Array(right.length + 1);
+
+  for (let leftIndex = 0; leftIndex < left.length; leftIndex += 1) {
+    current[0] = leftIndex + 1;
+    for (let rightIndex = 0; rightIndex < right.length; rightIndex += 1) {
+      const cost = left[leftIndex] === right[rightIndex] ? 0 : 1;
+      current[rightIndex + 1] = Math.min(
+        current[rightIndex] + 1,
+        previous[rightIndex + 1] + 1,
+        previous[rightIndex] + cost,
+      );
+    }
+    [previous, current] = [current, previous];
+  }
+
+  return previous[right.length];
+}
+
+function fieldRuleKeyMatches(payloadKey, ruleKey) {
+  if (payloadKey === ruleKey) {
+    return true;
+  }
+
+  const compactPayloadKey = compactFieldRuleKey(payloadKey);
+  const compactRuleKey = compactFieldRuleKey(ruleKey);
+  if (!compactPayloadKey || !compactRuleKey) {
+    return false;
+  }
+  if (compactPayloadKey === compactRuleKey) {
+    return true;
+  }
+
+  const maxDistance = compactRuleKey.length <= 6 ? 1 : 2;
+  if (Math.abs(compactPayloadKey.length - compactRuleKey.length) > maxDistance) {
+    return false;
+  }
+
+  return levenshteinDistance(compactPayloadKey, compactRuleKey) <= maxDistance;
 }
 
 function createKeyValueFieldRule(options) {
@@ -326,8 +432,8 @@ const DOCUMENT_KEY_VALUE_FIELD_RULES = Object.freeze([
   createKeyValueFieldRule({
     fieldId: "document.number",
     keys: DOCUMENT_NUMBER_KEY_ALIASES,
-    normalize: (value) => cleanCandidateText("document.number", value),
-    validate: (value) => /^[A-Z0-9][A-Z0-9/-]{0,39}$/i.test(value),
+    normalize: (value) => extractDocumentNumberCandidate(value),
+    validate: (value) => extractDocumentNumberCandidate(value) != null,
     score: 56,
     reason: "matched document number key-value",
   }),
@@ -389,7 +495,7 @@ function resolveKeyValueFieldRuleMatches(line, rules, context = {}) {
 
   const matches = [];
   for (const rule of rules) {
-    if (!rule.keys.includes(payload.key)) {
+    if (!rule.keys.some((ruleKey) => fieldRuleKeyMatches(payload.key, ruleKey))) {
       continue;
     }
     if (rule.contextRoles && (!context.role || !rule.contextRoles.includes(context.role))) {
@@ -464,9 +570,22 @@ function normalizeDocumentNumberValue(value) {
   return cleanFieldCandidate(value).replace(/^#\s*/, "").replace(/[.:]+$/, "");
 }
 
+function extractDocumentNumberCandidate(value) {
+  const normalized = normalizeDocumentNumberValue(value);
+  if (!normalized || DOCUMENT_NUMBER_STOPWORDS.test(normalized)) {
+    return null;
+  }
+  if (/^[A-Z0-9][A-Z0-9/-]{0,39}$/i.test(normalized)) {
+    return normalized;
+  }
+
+  const match = normalized.match(/[A-Z0-9][A-Z0-9/-]{0,39}/i)?.[0] ?? null;
+  return match && !DOCUMENT_NUMBER_STOPWORDS.test(match) ? match : null;
+}
+
 function extractInlineDate(value) {
   const match = String(value ?? "").match(INLINE_DATE_PATTERN);
-  return match?.[0] ?? null;
+  return match ? canonicalizeDateText(match[0]) ?? match[0] : null;
 }
 
 function findHeadingRole(line) {
@@ -528,8 +647,14 @@ function nextNonEmptyLine(lines, startIndex) {
 }
 
 function isLikelyPartyName(line) {
-  const text = cleanCandidateText("seller.name", line) ?? collapseWhitespace(line);
+  const text = normalizePartyNameCandidate(line);
   if (!text || text.length > 90) {
+    return false;
+  }
+  if (looksLikeAddressText(text)) {
+    return false;
+  }
+  if (looksLikeDocumentTitleText(text)) {
     return false;
   }
   if (PARTY_HEADING_PATTERN.test(text) || PARTY_METADATA_PATTERN.test(text)) {
@@ -545,7 +670,7 @@ function isLikelyPartyName(line) {
 }
 
 function findNearbyPartyName(lines, lineIndex) {
-  const offsets = [-1, 1, -2, 2];
+  const offsets = [-1, -2, -3, 1, 2, 3, -4, 4];
 
   for (const offset of offsets) {
     const candidateIndex = lineIndex + offset;
@@ -553,8 +678,8 @@ function findNearbyPartyName(lines, lineIndex) {
       continue;
     }
 
-    const text = collapseWhitespace(lines[candidateIndex]);
-    if (!isLikelyPartyName(text)) {
+    const text = normalizePartyNameCandidate(lines[candidateIndex]);
+    if (!text || !isLikelyPartyName(text)) {
       continue;
     }
 
@@ -569,11 +694,17 @@ function findNearbyPartyName(lines, lineIndex) {
 }
 
 function isCompanyNameCandidate(line) {
-  const text = cleanCandidateText("seller.name", line) ?? collapseWhitespace(line);
+  const text = normalizePartyNameCandidate(line);
   if (!text || text.length > 90) {
     return false;
   }
   if (looksLikeStructuredNoise(text)) {
+    return false;
+  }
+  if (looksLikeAddressText(text)) {
+    return false;
+  }
+  if (looksLikeDocumentTitleText(text)) {
     return false;
   }
   if (!COMPANY_SUFFIX_PATTERN.test(text)) {
@@ -605,6 +736,23 @@ function scoreCompanyNameCandidate(text, lineIndex, lineCount, role) {
   }
 
   return score;
+}
+
+function extractInlinePartyNameFromGstinLine(line) {
+  const text = collapseWhitespace(line);
+  if (!GSTIN_VALUE_PATTERN.test(text)) {
+    return null;
+  }
+
+  const withoutGstin = text
+    .replace(GSTIN_PATTERN, " ")
+    .replace(
+      /\b(?:GSTIN(?:\/UIN)?|GST NO\.?|GSTIN UIN|GST UIN|UIN|SELLER|SUPPLIER|BUYER|CLIENT|CUSTOMER|VENDOR|FROM|SOLD BY|BILL TO|SHIP TO|CONSIGNEE)\b/gi,
+      " ",
+    )
+    .replace(/[:\-]+/g, " ");
+
+  return normalizePartyNameCandidate(withoutGstin);
 }
 
 function collectImplicitDocumentNumberCandidates(lines) {
@@ -700,6 +848,10 @@ function collectLabeledValueCandidates(lines, labelPatterns, validator, options 
       }
 
       for (let cursor = index + 1; cursor <= Math.min(lines.length - 1, index + lookahead); cursor += 1) {
+        if (extractKeyValuePayload(lines[cursor])) {
+          continue;
+        }
+
         const projectedCandidates = [
           cleanFieldCandidate(lines[cursor].slice(labelIndex)),
           cleanFieldCandidate(lines[cursor]),
@@ -957,9 +1109,9 @@ function addParserCandidates(candidateMap, parsedReceipt, parsedLineItems = []) 
       candidateMap,
       "seller.name",
       createCandidate("seller.name", parsedReceipt.seller.name, {
-        score: 120,
+        score: 72,
         source: "receipt_parser",
-        reason: "deterministic receipt parser",
+        reason: "deterministic receipt parser party block",
       }),
     );
   }
@@ -979,9 +1131,9 @@ function addParserCandidates(candidateMap, parsedReceipt, parsedLineItems = []) 
       candidateMap,
       "buyer.name",
       createCandidate("buyer.name", parsedReceipt.buyer.name, {
-        score: 120,
+        score: 72,
         source: "receipt_parser",
-        reason: "deterministic receipt parser",
+        reason: "deterministic receipt parser party block",
       }),
     );
   }
@@ -1001,9 +1153,9 @@ function addParserCandidates(candidateMap, parsedReceipt, parsedLineItems = []) 
       candidateMap,
       "consignee.name",
       createCandidate("consignee.name", parsedReceipt.consignee.name, {
-        score: 120,
+        score: 72,
         source: "receipt_parser",
-        reason: "deterministic receipt parser",
+        reason: "deterministic receipt parser party block",
       }),
     );
   }
@@ -1121,10 +1273,10 @@ function addDocumentCandidates(candidateMap, lines, text) {
     collectLabeledValueCandidates(
       lines,
       [/PI No\.?/i, /Invoice No\.?/i, /Voucher No\.?/i, /Bill No\.?/i, /Credit Note No\.?/i, /Debit Note No\.?/i],
-      (value) => /^[A-Z0-9][A-Z0-9/-]{0,39}$/i.test(value),
+      (value) => extractDocumentNumberCandidate(value) != null,
       { inlineScore: 54, projectedScore: 46 },
     ).map((candidate) =>
-      createCandidate("document.number", candidate.value, {
+      createCandidate("document.number", extractDocumentNumberCandidate(candidate.value), {
         score: candidate.score,
         source: "label_match",
         lineIndex: candidate.lineIndex,
@@ -1282,14 +1434,15 @@ function addPartyCandidates(candidateMap, lines) {
         role,
       }),
     );
-    if (isLikelyPartyName(text) && (isCompanyNameCandidate(text) || role)) {
+    const normalizedPartyName = normalizePartyNameCandidate(text);
+    if (normalizedPartyName && isLikelyPartyName(normalizedPartyName) && (isCompanyNameCandidate(text) || role)) {
       const assignedRole = role ?? (index <= Math.max(6, Math.floor(lines.length * 0.25)) ? "seller" : null);
       if (assignedRole) {
         pushCandidate(
           candidateMap,
           `${assignedRole}.name`,
-          createCandidate(`${assignedRole}.name`, text, {
-            score: scoreCompanyNameCandidate(text, index, lines.length, assignedRole),
+          createCandidate(`${assignedRole}.name`, normalizedPartyName, {
+            score: scoreCompanyNameCandidate(normalizedPartyName, index, lines.length, assignedRole),
             source: "company_heuristic",
             lineIndex: index,
             lineText: lines[index],
@@ -1305,6 +1458,21 @@ function addPartyCandidates(candidateMap, lines) {
         fallbackGstinRoles[Math.min(fallbackGstinRoleIndex, fallbackGstinRoles.length - 1)] ??
         "seller";
       fallbackGstinRoleIndex += 1;
+
+      const inlineName = extractInlinePartyNameFromGstinLine(text);
+      if (inlineName) {
+        pushCandidate(
+          candidateMap,
+          `${assignedRole}.name`,
+          createCandidate(`${assignedRole}.name`, inlineName, {
+            score: role ? 45 : 39,
+            source: "gstin_inline_name",
+            lineIndex: index,
+            lineText: lines[index],
+            reason: `inline name on ${assignedRole} GSTIN line`,
+          }),
+        );
+      }
 
       pushCandidate(
         candidateMap,

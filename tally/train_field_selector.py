@@ -5,8 +5,6 @@ import argparse
 import json
 import random
 import shutil
-import subprocess
-import sys
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -262,7 +260,8 @@ def train_model(
         print(
             f"epoch={epoch:02d} train_loss={train_loss:.4f} "
             f"eval_loss={eval_loss:.4f} sample_accuracy={sample_accuracy:.4f} "
-            f"group_accuracy={group_accuracy:.4f}"
+            f"group_accuracy={group_accuracy:.4f}",
+            flush=True,
         )
 
         combined_score = group_accuracy + sample_accuracy
@@ -287,6 +286,58 @@ def train_model(
 
     model.load_state_dict(best_state)
     return model, best_metrics
+
+
+class SequenceClassificationOnnxWrapper(torch.nn.Module):
+    def __init__(self, model: BertForSequenceClassification) -> None:
+        super().__init__()
+        self.model = model
+
+    def forward(self, input_ids: torch.Tensor, attention_mask: torch.Tensor) -> torch.Tensor:
+        return self.model(input_ids=input_ids, attention_mask=attention_mask).logits
+
+
+def export_raw_checkpoint(raw_dir: Path, export_dir: Path) -> None:
+    if export_dir.exists():
+        shutil.rmtree(export_dir)
+    export_dir.mkdir(parents=True, exist_ok=True)
+    onnx_dir = export_dir / "onnx"
+    onnx_dir.mkdir(parents=True, exist_ok=True)
+
+    model = BertForSequenceClassification.from_pretrained(raw_dir)
+    wrapper = SequenceClassificationOnnxWrapper(model)
+    wrapper.eval()
+    wrapper.cpu()
+
+    model_path = onnx_dir / "model.onnx"
+    example_input_ids = torch.zeros((1, 8), dtype=torch.long)
+    example_attention_mask = torch.ones((1, 8), dtype=torch.long)
+    torch.onnx.export(
+        wrapper,
+        (example_input_ids, example_attention_mask),
+        model_path,
+        input_names=["input_ids", "attention_mask"],
+        output_names=["logits"],
+        dynamic_axes={
+            "input_ids": {0: "batch", 1: "sequence"},
+            "attention_mask": {0: "batch", 1: "sequence"},
+            "logits": {0: "batch"},
+        },
+        opset_version=17,
+        external_data=False,
+    )
+    shutil.copy2(model_path, onnx_dir / "model_quantized.onnx")
+
+    for filename in [
+        "config.json",
+        "special_tokens_map.json",
+        "tokenizer.json",
+        "tokenizer_config.json",
+        "metadata.json",
+    ]:
+        source = raw_dir / filename
+        if source.exists():
+            shutil.copy2(source, export_dir / filename)
 
 
 def save_and_export(
@@ -321,39 +372,7 @@ def save_and_export(
     if skip_export:
         return
 
-    if export_dir.exists():
-        shutil.rmtree(export_dir)
-    export_dir.mkdir(parents=True, exist_ok=True)
-    onnx_dir = export_dir / "onnx"
-
-    optimum_cli = Path(sys.executable).parent / "optimum-cli"
-    command = [
-        str(optimum_cli),
-        "export",
-        "onnx",
-        "--model",
-        str(raw_dir),
-        "--task",
-        "text-classification",
-        str(onnx_dir),
-    ]
-    subprocess.run(command, check=True)
-
-    source_model = onnx_dir / "model.onnx"
-    if not source_model.exists():
-        raise FileNotFoundError(f"Expected ONNX export at {source_model}")
-    shutil.copy2(source_model, onnx_dir / "model_quantized.onnx")
-
-    for filename in [
-        "config.json",
-        "special_tokens_map.json",
-        "tokenizer.json",
-        "tokenizer_config.json",
-        "metadata.json",
-    ]:
-        source = raw_dir / filename
-        if source.exists():
-            shutil.copy2(source, export_dir / filename)
+    export_raw_checkpoint(raw_dir, export_dir)
 
 
 def parse_args() -> argparse.Namespace:
@@ -369,7 +388,32 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--eval-ratio", type=float, default=0.1)
     parser.add_argument("--seed", type=int, default=31)
     parser.add_argument("--skip-export", action="store_true")
+    parser.add_argument("--device", choices=["auto", "cpu", "cuda", "mps"], default="auto")
+    parser.add_argument("--export-only", action="store_true")
     return parser.parse_args()
+
+
+def resolve_device(device_name: str) -> torch.device:
+    if device_name == "auto":
+        if torch.cuda.is_available():
+            return torch.device("cuda")
+        if torch.backends.mps.is_available():
+            return torch.device("mps")
+        return torch.device("cpu")
+
+    if device_name == "cuda":
+        if not torch.cuda.is_available():
+            raise RuntimeError("CUDA was requested but is not available in this Python environment.")
+        return torch.device("cuda")
+
+    if device_name == "mps":
+        if not torch.backends.mps.is_built():
+            raise RuntimeError("MPS was requested but this PyTorch build was not compiled with MPS support.")
+        if not torch.backends.mps.is_available():
+            raise RuntimeError("MPS was requested but is not available to this process.")
+        return torch.device("mps")
+
+    return torch.device("cpu")
 
 
 def main() -> None:
@@ -379,6 +423,13 @@ def main() -> None:
     dataset_path = args.dataset.resolve()
     raw_dir = args.raw_dir.resolve()
     export_dir = args.export_dir.resolve()
+
+    if args.export_only:
+        if not raw_dir.exists():
+            raise FileNotFoundError(f"Raw checkpoint not found: {raw_dir}")
+        export_raw_checkpoint(raw_dir, export_dir)
+        print(f"exported model to {export_dir} from raw checkpoint {raw_dir}", flush=True)
+        return
 
     if not dataset_path.exists():
         raise FileNotFoundError(f"Dataset not found: {dataset_path}")
@@ -410,18 +461,14 @@ def main() -> None:
     train_loader = DataLoader(train_dataset, batch_size=args.batch_size, shuffle=True)
     eval_loader = DataLoader(eval_dataset, batch_size=args.batch_size, shuffle=False)
 
-    if torch.cuda.is_available():
-        device = torch.device("cuda")
-    elif torch.backends.mps.is_available():
-        device = torch.device("mps")
-    else:
-        device = torch.device("cpu")
+    device = resolve_device(args.device)
 
     positive_label = label_names.index("SELECTED")
     print(
         f"training on {device} with train={len(train_samples.texts)} eval={len(eval_samples.texts)} "
         f"train_groups={len(set(train_samples.group_ids))} eval_groups={len(set(eval_samples.group_ids))} "
-        f"max_length={max_length} vocab={len(vocab)}"
+        f"max_length={max_length} vocab={len(vocab)}",
+        flush=True,
     )
 
     model = build_model(vocab_size=len(vocab), label_names=label_names)
@@ -459,7 +506,8 @@ def main() -> None:
     export_message = "raw checkpoint only" if args.skip_export else f"exported model to {export_dir}"
     print(
         f"{export_message} with group_accuracy={metrics['group_accuracy']:.4f} "
-        f"sample_accuracy={metrics['sample_accuracy']:.4f} train_loss={metrics['train_loss']:.4f}"
+        f"sample_accuracy={metrics['sample_accuracy']:.4f} train_loss={metrics['train_loss']:.4f}",
+        flush=True,
     )
 
 

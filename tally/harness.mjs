@@ -1,4 +1,5 @@
 import { TALLY_DEMO_PRESETS } from "./demo-samples.mjs";
+import { TALLY_BROWSER_REGRESSION_CASES } from "./browser-regressions.mjs";
 import { buildTallyExtractionState } from "./psvm.mjs";
 import { tallyFieldValueMatches } from "./model-common.mjs";
 
@@ -128,6 +129,7 @@ const BASE_CASES = Object.freeze([
 ]);
 
 const EXPLICIT_FAILURE_CASES = Object.freeze([
+  ...TALLY_BROWSER_REGRESSION_CASES,
   {
     id: "implicit-field-shorthand-sales",
     presetId: "implicit-sales-core",
@@ -154,6 +156,59 @@ const EXPLICIT_FAILURE_CASES = Object.freeze([
         amountCents: 1000000,
       },
     ],
+  },
+  {
+    id: "ocr-corruption-seller-state-quantity",
+    label: "OCR Corruption / Seller-State-Quantity",
+    failureClass: "ocr_corruption",
+    variant: "seller_state_quantity_noise",
+    voucherFamily: "sales_invoice",
+    shouldSupport: true,
+    fields: {
+      "document.number": "29",
+      "document.date": "23-May-25",
+      "document.place_of_supply": "Maharashtra",
+      "seller.name": "JAYRAJ SOLAR LLP",
+      "seller.gstin": "24AAMFJ7876R1Z8",
+      "buyer.name": "Nimoto Solar Pvt Ltd",
+      "buyer.gstin": "27AADCN3773B1ZM",
+      "taxes.igst_cents": 7200000,
+      "amounts.grand_total_cents": 47200000,
+    },
+    lineItems: [
+      {
+        hsnSac: "995442",
+        quantity: 250,
+        unit: "KW",
+        unitPriceCents: 160000,
+        taxRatePercent: 18,
+        amountCents: 40000000,
+      },
+    ],
+    source: `
+TAX INVOICE
+Ack Date    : 23-May-25
+JAYR4J SOLAR LLP                                       Invoice No.           29               Dated 23-May-25
+Shop No. 225, Rajhans Stadium Plaza,
+Surat-395009, Gujrat, Indla.
+GSTIN/UIN: 24AAMFJ7876R1Z8
+Consignee (Ship to)
+Nimoto Solar Pvt Ltd
+GSTIN/UIN       : 27AADCN3773B1ZM
+Buyer (Bill to)
+Nimoto Solar Pvt Ltd
+GSTIN/UIN         : 27AADCN3773B1ZM
+Place of Supply : Maharastra
+Sl         Description of Goods       HSN/SAC GST                  Quantity        Rate           Rate     per Disc. %        Amount
+No.                                           Rate                             (Incl. of Tax)
+
+ 1 Installatlon, Struucture, suppIy   995442               18 % 25O.OOO KW        1,888.00         1,6OO.00 KW                4,00,000.00
+   Electrical BOS and I&C
+   for 25O KWp Solar Power Project
+
+                                    IGST                                                                                       72,000.00
+                                     Total                       25O.OOO KW                                                ₹ 4,72,000.00
+`.trim(),
   },
 ]);
 
@@ -464,14 +519,14 @@ export function buildTallyAdversarialHarness(options = {}) {
   });
 
   for (const failureCase of EXPLICIT_FAILURE_CASES) {
-    const preset = getPresetById(failureCase.presetId);
+    const source = failureCase.source ?? getPresetById(failureCase.presetId).source;
     cases.push({
       id: failureCase.id,
       label: failureCase.label,
-      baseCaseId: failureCase.presetId,
+      baseCaseId: failureCase.presetId ?? failureCase.id,
       failureClass: failureCase.failureClass,
       variant: failureCase.variant,
-      source: preset.source,
+      source,
       voucherFamily: failureCase.voucherFamily,
       shouldSupport: failureCase.shouldSupport,
       fields: { ...failureCase.fields },

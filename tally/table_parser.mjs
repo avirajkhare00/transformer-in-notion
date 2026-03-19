@@ -1,4 +1,5 @@
 import { buildPlainTextReceiptSource, collapseWhitespace } from "../invoice/ocr_layout.mjs";
+import { normalizeNumericLikeText, normalizeUnitValue } from "./normalization.mjs";
 
 const MONEY_TOKEN_PATTERN = /(?:₹\s*)?(?:Rs\.?\s*)?[0-9][0-9,]*(?:\.\d{1,2})?/i;
 const MONEY_TOKEN_GLOBAL_PATTERN = /(?:₹\s*)?(?:Rs\.?\s*)?[0-9][0-9,]*(?:\.\d{1,2})?/g;
@@ -50,7 +51,7 @@ function parseMoneyToCents(value) {
     return null;
   }
 
-  const matches = [...String(value).matchAll(MONEY_TOKEN_GLOBAL_PATTERN)];
+  const matches = [...normalizeNumericLikeText(String(value)).matchAll(MONEY_TOKEN_GLOBAL_PATTERN)];
   if (matches.length === 0) {
     return null;
   }
@@ -69,6 +70,16 @@ function parseMoneyToCents(value) {
   return Number(whole) * 100 + Number(fraction.padEnd(2, "0"));
 }
 
+function hasTooManyFractionDigits(value) {
+  const normalized = normalizeNumericLikeText(String(value ?? ""))
+    .trim()
+    .replace(/^Rs\.?\s*/i, "")
+    .replace(/₹/g, "")
+    .replace(/,/g, "");
+
+  return /^\d+\.\d{3,}$/.test(normalized);
+}
+
 function looksLikeMoneyToken(value) {
   const text = String(value ?? "").trim();
   if (!text) {
@@ -84,7 +95,7 @@ function extractHsnValue(value) {
 }
 
 function parseDecimalValue(value) {
-  const normalized = String(value ?? "")
+  const normalized = normalizeNumericLikeText(String(value ?? ""))
     .trim()
     .replace(/,/g, "")
     .replace(/%/g, "");
@@ -112,6 +123,9 @@ function extractMoneyTokens(words) {
   return sortWords(words)
     .map((word, index) => {
       if (!looksLikeMoneyToken(word.text)) {
+        return null;
+      }
+      if (hasTooManyFractionDigits(word.text)) {
         return null;
       }
       const amountCents = parseMoneyToCents(word.text);
@@ -497,18 +511,18 @@ function extractDescriptionFromRow(row, columns, cells, fallbackStopX) {
 }
 
 function parseQuantityWithUnit(value, defaultUnit = null) {
-  const compact = collapseWhitespace(value ?? "");
+  const compact = collapseWhitespace(normalizeNumericLikeText(value ?? ""));
   const match = compact.match(/(-?\d+(?:,\d{3})*(?:\.\d+)?)(?:\s+([A-Za-z][A-Za-z./-]{0,10}))?/);
   if (!match) {
     return {
       quantity: null,
-      unit: defaultUnit,
+      unit: normalizeUnitValue(defaultUnit),
     };
   }
 
   return {
     quantity: parseDecimalValue(match[1]),
-    unit: match[2] ?? defaultUnit,
+    unit: normalizeUnitValue(match[2] ?? defaultUnit),
   };
 }
 
@@ -574,7 +588,9 @@ function extractFallbackQuantity(sortedWords, serialIndex, hsnIndex, firstMoneyI
     }
 
     const nextToken = cleanToken(sortedWords[index + 1]?.text ?? "");
-    const unit = /^[A-Za-z][A-Za-z./-]{0,10}$/.test(nextToken) ? nextToken : defaultUnit;
+    const unit = /^[A-Za-z][A-Za-z./-]{0,10}$/.test(nextToken)
+      ? normalizeUnitValue(nextToken)
+      : normalizeUnitValue(defaultUnit);
     return {
       quantity,
       unit,
@@ -642,6 +658,15 @@ function parseItemRow(row, header, currentItem) {
     amountToken?.index ?? null,
     excludedHsnValues,
   );
+  const quantityStopIndex =
+    moneyTokens.find(
+      (token) =>
+        token.index > Math.max(hsnToken?.index ?? -1, ...percentTokens.map((token) => token.index)),
+    )?.index ??
+    unitPriceToken?.index ??
+    amountToken?.index ??
+    moneyTokens[0]?.index ??
+    null;
   const quantityColumn = header.columns.find((column) => column.key === "quantity");
   const quantityFromCell = parseQuantityWithUnit(cells.quantity, header.defaultUnit);
   const quantityCellIndex = findWordIndexInColumn(
@@ -653,13 +678,24 @@ function parseItemRow(row, header, currentItem) {
     sortedWords,
     leadingSerial != null ? 0 : null,
     hsnToken?.index ?? null,
-    moneyTokens[0]?.index ?? null,
+    quantityStopIndex,
     percentTokens.map((token) => token.index),
     header.defaultUnit,
   );
-  const quantity = quantityFromCell.quantity ?? fallbackQuantity.quantity;
-  const unit = quantityFromCell.unit ?? fallbackQuantity.unit;
   const taxRatePercent = parsePercentValue(cells.taxRate) ?? percentTokens[0]?.percent ?? null;
+  const shouldPreferFallbackQuantity =
+    fallbackQuantity.quantity != null &&
+    (
+      quantityFromCell.quantity == null ||
+      (quantityFromCell.unit == null && fallbackQuantity.unit != null) ||
+      (taxRatePercent != null && quantityFromCell.quantity === taxRatePercent)
+    );
+  const quantity = shouldPreferFallbackQuantity
+    ? fallbackQuantity.quantity
+    : quantityFromCell.quantity ?? fallbackQuantity.quantity;
+  const unit = shouldPreferFallbackQuantity
+    ? fallbackQuantity.unit ?? quantityFromCell.unit
+    : quantityFromCell.unit ?? fallbackQuantity.unit;
   const description =
     extractDescriptionFromTokens(sortedWords, {
       hasLeadingSerial: leadingSerial != null,
@@ -742,6 +778,110 @@ function parseItemRow(row, header, currentItem) {
     kind: "item",
     item: lineItem,
   };
+}
+
+function mergeSequentialItemDetails(currentItem, nextItem) {
+  return {
+    ...currentItem,
+    description: currentItem.description || nextItem.description,
+    hsnSac: currentItem.hsnSac ?? nextItem.hsnSac ?? null,
+    quantity: nextItem.quantity ?? currentItem.quantity ?? null,
+    unit: nextItem.unit ?? currentItem.unit ?? null,
+    unitPriceCents: nextItem.unitPriceCents ?? currentItem.unitPriceCents ?? null,
+    taxRatePercent: nextItem.taxRatePercent ?? currentItem.taxRatePercent ?? null,
+    amountCents: nextItem.amountCents ?? currentItem.amountCents ?? null,
+    batchNumber: currentItem.batchNumber ?? nextItem.batchNumber ?? null,
+    expiryDate: currentItem.expiryDate ?? nextItem.expiryDate ?? null,
+    mrpCents: nextItem.mrpCents ?? currentItem.mrpCents ?? null,
+    serialNumber: currentItem.serialNumber ?? nextItem.serialNumber ?? null,
+    freeQuantity: nextItem.freeQuantity ?? currentItem.freeQuantity ?? null,
+    schemeDiscountCents: nextItem.schemeDiscountCents ?? currentItem.schemeDiscountCents ?? null,
+    rowStartIndex: currentItem.rowStartIndex ?? nextItem.rowStartIndex ?? null,
+    rowEndIndex: nextItem.rowEndIndex ?? currentItem.rowEndIndex ?? currentItem.rowStartIndex ?? null,
+    source:
+      currentItem.source === nextItem.source
+        ? currentItem.source
+        : `${currentItem.source}+${nextItem.source}`,
+  };
+}
+
+function roundQuantity(value) {
+  return Math.round(value * 1000) / 1000;
+}
+
+function isFactorOfTenDrift(currentQuantity, inferredQuantity) {
+  if (
+    typeof currentQuantity !== "number" ||
+    typeof inferredQuantity !== "number" ||
+    currentQuantity <= 0 ||
+    inferredQuantity <= 0
+  ) {
+    return false;
+  }
+
+  const ratio = currentQuantity / inferredQuantity;
+  return [0.01, 0.1, 10, 100].some((candidate) => Math.abs(ratio - candidate) <= candidate * 0.05);
+}
+
+function inferUnitPriceCents(amountCents, quantity) {
+  if (typeof amountCents !== "number" || typeof quantity !== "number" || quantity <= 0) {
+    return null;
+  }
+
+  const inferred = Math.round(amountCents / quantity);
+  if (inferred <= 0) {
+    return null;
+  }
+
+  return Math.abs(Math.round(inferred * quantity) - amountCents) <= 200 ? inferred : null;
+}
+
+function reconcileLineItemArithmetic(item) {
+  const normalized = {
+    ...item,
+    unit: normalizeUnitValue(item.unit) ?? null,
+  };
+
+  if (
+    typeof normalized.quantity === "number" &&
+    typeof normalized.unitPriceCents === "number" &&
+    normalized.unitPriceCents > 0
+  ) {
+    const computedAmount = Math.round(normalized.quantity * normalized.unitPriceCents);
+    if (normalized.amountCents == null) {
+      normalized.amountCents = computedAmount;
+    } else if (Math.abs(computedAmount - normalized.amountCents) > 200) {
+      const inferredQuantity = roundQuantity(normalized.amountCents / normalized.unitPriceCents);
+      if (
+        Math.abs(Math.round(inferredQuantity * normalized.unitPriceCents) - normalized.amountCents) <= 200 &&
+        isFactorOfTenDrift(normalized.quantity, inferredQuantity)
+      ) {
+        normalized.quantity = inferredQuantity;
+      } else if (normalized.schemeDiscountCents == null && normalized.freeQuantity == null) {
+        const inferredUnitPriceCents = inferUnitPriceCents(normalized.amountCents, normalized.quantity);
+        if (inferredUnitPriceCents != null) {
+          normalized.unitPriceCents = inferredUnitPriceCents;
+        }
+      }
+    }
+  } else if (
+    normalized.quantity == null &&
+    typeof normalized.amountCents === "number" &&
+    typeof normalized.unitPriceCents === "number" &&
+    normalized.unitPriceCents > 0
+  ) {
+    normalized.quantity = roundQuantity(normalized.amountCents / normalized.unitPriceCents);
+  } else if (
+    typeof normalized.quantity === "number" &&
+    typeof normalized.amountCents === "number" &&
+    normalized.unitPriceCents == null &&
+    normalized.schemeDiscountCents == null &&
+    normalized.freeQuantity == null
+  ) {
+    normalized.unitPriceCents = inferUnitPriceCents(normalized.amountCents, normalized.quantity);
+  }
+
+  return normalized;
 }
 
 function mergeLineItem(primary, fallback, index) {
@@ -829,6 +969,11 @@ export function extractTallyLineItems(source, options = {}) {
       continue;
     }
 
+    if (currentItem && parsedRow.item.index === currentItem.index) {
+      currentItem = mergeSequentialItemDetails(currentItem, parsedRow.item);
+      continue;
+    }
+
     if (currentItem) {
       items.push(currentItem);
     }
@@ -863,7 +1008,8 @@ export function extractTallyLineItems(source, options = {}) {
           : item.quantity != null && item.unitPriceCents != null
             ? Math.round(item.quantity * item.unitPriceCents)
             : null,
-    }));
+    }))
+    .map((item) => reconcileLineItemArithmetic(item));
 
   return {
     header,

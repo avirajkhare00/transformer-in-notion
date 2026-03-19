@@ -1,3 +1,5 @@
+import { TALLY_BROWSER_REGRESSION_PRESETS } from "./browser-regressions.mjs";
+
 export const TALLY_DEMO_PRESETS = [
   {
     id: "tax-invoice-core",
@@ -108,4 +110,5 @@ Date Narration Debit Credit Balance
 04/01/2026 Closing Balance 33,750.00
 `.trim(),
   },
+  ...TALLY_BROWSER_REGRESSION_PRESETS,
 ];

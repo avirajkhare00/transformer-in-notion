@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
+import { TALLY_BROWSER_REGRESSION_CASES } from "./browser-regressions.mjs";
 import { extractTallyLineItems } from "./table_parser.mjs";
 
 const TAX_INVOICE_SAMPLE = `
@@ -32,6 +33,35 @@ NO.                                                                             
                                                                                           Round Off (+/-)              -
 Rs. One Lacs Sixty Five Thousand Seven Hundred and Sixty Only                             TOTAL               165,760.00
 `.trim();
+
+const OCR_SPLIT_ROW_SAMPLE = `
+TAX INVOICE
+Ack Date    : 23-May-25
+JAYR4J SOLAR LLP                                       Invoice No.           29               Dated 23-May-25
+Shop No. 225, Rajhans Stadium Plaza,
+Surat-395009, Gujrat, Indla.
+GSTIN/UIN: 24AAMFJ7876R1Z8
+Consignee (Ship to)
+Nimoto Solar Pvt Ltd
+GSTIN/UIN       : 27AADCN3773B1ZM
+Buyer (Bill to)
+Nimoto Solar Pvt Ltd
+GSTIN/UIN         : 27AADCN3773B1ZM
+Place of Supply : Maharastra
+Sl         Description of Goods       HSN/SAC GST                  Quantity        Rate           Rate     per Disc. %        Amount
+No.                                           Rate                             (Incl. of Tax)
+
+ 1 Installatlon, Struucture, suppIy   995442               18 % 25O.OOO KW        1,888.00         1,6OO.00 KW                4,00,000.00
+   Electrical BOS and I&C
+   for 25O KWp Solar Power Project
+
+                                    IGST                                                                                       72,000.00
+                                     Total                       25O.OOO KW                                                ₹ 4,72,000.00
+`.trim();
+
+const BROWSER_REGRESSION_SAMPLE = TALLY_BROWSER_REGRESSION_CASES.find(
+  (entry) => entry.id === "browser-header-title-bleed",
+)?.source;
 
 function createRow(rowIndex, cells) {
   const words = [];
@@ -89,6 +119,28 @@ test("table parser handles proforma-style compact rows", () => {
   assert.equal(parsed.items[0].amountCents, 14800000);
 });
 
+test("table parser merges split numeric rows and normalizes OCR digit noise", () => {
+  const parsed = extractTallyLineItems(OCR_SPLIT_ROW_SAMPLE);
+  assert.equal(parsed.items.length, 1);
+  assert.equal(parsed.items[0].hsnSac, "995442");
+  assert.equal(parsed.items[0].quantity, 250);
+  assert.equal(parsed.items[0].unit, "KW");
+  assert.equal(parsed.items[0].unitPriceCents, 160000);
+  assert.equal(parsed.items[0].taxRatePercent, 18);
+  assert.equal(parsed.items[0].amountCents, 40000000);
+});
+
+test("table parser infers a consistent unit price when OCR rates disagree with amount math", () => {
+  assert.ok(BROWSER_REGRESSION_SAMPLE);
+
+  const parsed = extractTallyLineItems(BROWSER_REGRESSION_SAMPLE);
+  assert.equal(parsed.items.length, 1);
+  assert.equal(parsed.items[0].quantity, 250);
+  assert.equal(parsed.items[0].unit, "KW");
+  assert.equal(parsed.items[0].unitPriceCents, 163200);
+  assert.equal(parsed.items[0].amountCents, 40800000);
+});
+
 test("table parser reads structured OCR columns for pharma extras", () => {
   const structuredSource = {
     kind: "receipt_ocr_source",
@@ -131,4 +183,3 @@ test("table parser reads structured OCR columns for pharma extras", () => {
   assert.equal(parsed.items[0].unitPriceCents, 2000);
   assert.equal(parsed.items[0].amountCents, 20000);
 });
-

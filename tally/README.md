@@ -17,6 +17,7 @@ Today this lane is deterministic-first, with an optional tiny local BERT field s
 - `resolver.mjs` - constraint-guided field resolver over top-ranked scalar candidates
 - `table_parser.mjs` - OCR-row table parser for repeatable line items and industry columns
 - `harness.mjs` - adversarial failure-mode harness for candidate recall, ranking accuracy, and instability
+- `browser-regressions.mjs` - browser-captured OCR regressions promoted into the harness and demo presets
 - `model-common.mjs` - shared field-candidate context builder and selection helpers
 - `model.mjs` - browser-local transformer inference over legal Tally candidates
 - `worker.mjs` - browser worker for the Tally extraction demo
@@ -69,6 +70,7 @@ Pipeline:
 4. Generate legal candidates for each field.
    - nearby label/value spans
    - weak-label and implicit header spans like `#7782`, `Client`, `Supply:`, and `Final Amount`
+   - browser-captured OCR failures that are now kept as explicit regressions instead of ad hoc one-offs
    - GSTINs, dates, invoice numbers, totals
    - row-aware table parsing for line items, including multiline descriptions and common industry columns
 5. Rank field candidates.
@@ -164,6 +166,8 @@ The harness is organized by failure class instead of document type:
 - `implicit_field`
 
 This is the current intended regression surface for parser work. If candidate recall is low, model changes should not be the first response.
+
+Real browser failures should be added to `browser-regressions.mjs` and then pulled through the harness and dataset export, so we improve failure families with persistent evidence instead of patching screenshots in isolation.
 
 ## Best Current Use
 

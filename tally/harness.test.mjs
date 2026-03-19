@@ -49,10 +49,38 @@ test("implicit-field harness case keeps the weak-label values in the legal candi
   assert.equal(report.lineItemSummary.candidateRecall.rate, 1);
 });
 
+test("harness keeps the OCR-noisy seller/state/quantity case as a supported regression", () => {
+  const cases = buildTallyAdversarialHarness({ seed: 31, includeBaseline: true });
+  const noisyCase = cases.find((entry) => entry.id === "ocr-corruption-seller-state-quantity");
+  assert.ok(noisyCase);
+
+  const report = evaluateTallyHarnessCase(noisyCase);
+  assert.equal(report.familyMatch, true);
+  assert.equal(report.supportMatch, true);
+  assert.equal(report.scalarSummary.candidateRecall.rate, 1);
+  assert.equal(report.scalarSummary.top1Accuracy.rate, 1);
+  assert.equal(report.lineItemSummary.candidateRecall.rate, 1);
+  assert.equal(report.lineItemSummary.recordAccuracy.rate, 1);
+});
+
+test("harness keeps the browser-captured OCR regression as a supported regression", () => {
+  const cases = buildTallyAdversarialHarness({ seed: 31, includeBaseline: true });
+  const browserCase = cases.find((entry) => entry.id === "browser-header-title-bleed");
+  assert.ok(browserCase);
+
+  const report = evaluateTallyHarnessCase(browserCase);
+  assert.equal(report.familyMatch, true);
+  assert.equal(report.supportMatch, true);
+  assert.equal(report.scalarSummary.candidateRecall.rate, 1);
+  assert.equal(report.scalarSummary.top1Accuracy.rate, 1);
+  assert.equal(report.lineItemSummary.candidateRecall.rate, 1);
+  assert.equal(report.lineItemSummary.recordAccuracy.rate, 1);
+});
+
 test("harness evaluation returns aggregate metrics by failure class", () => {
   const evaluation = evaluateTallyAdversarialHarness({ seed: 31, includeBaseline: true });
 
-  assert.ok(evaluation.summary.caseCount >= 14);
+  assert.ok(evaluation.summary.caseCount >= 15);
   assert.ok("candidate_missing" in evaluation.summary.byFailureClass);
   assert.ok("implicit_field" in evaluation.summary.byFailureClass);
   assert.ok("ocr_corruption" in evaluation.summary.byFailureClass);

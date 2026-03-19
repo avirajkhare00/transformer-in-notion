@@ -6,6 +6,7 @@ import {
   classifyTallyVoucherFamily,
   runTallyExtractionPsvm,
 } from "./psvm.mjs";
+import { TALLY_BROWSER_REGRESSION_CASES } from "./browser-regressions.mjs";
 
 const PROFORMA_SAMPLE = `
 PROFORMA INVOICE
@@ -110,6 +111,35 @@ IGST: 72,000.00
 Final Amount: 4,72,000.00
 `;
 
+const OCR_NOISY_TAX_INVOICE_SAMPLE = `
+TAX INVOICE
+Ack Date    : 23-May-25
+JAYR4J SOLAR LLP                                       Invoice No.           29               Dated 23-May-25
+Shop No. 225, Rajhans Stadium Plaza,
+Surat-395009, Gujrat, Indla.
+GSTIN/UIN: 24AAMFJ7876R1Z8
+Consignee (Ship to)
+Nimoto Solar Pvt Ltd
+GSTIN/UIN       : 27AADCN3773B1ZM
+Buyer (Bill to)
+Nimoto Solar Pvt Ltd
+GSTIN/UIN         : 27AADCN3773B1ZM
+Place of Supply : Maharastra
+Sl         Description of Goods       HSN/SAC GST                  Quantity        Rate           Rate     per Disc. %        Amount
+No.                                           Rate                             (Incl. of Tax)
+
+ 1 Installatlon, Struucture, suppIy   995442               18 % 25O.OOO KW        1,888.00         1,6OO.00 KW                4,00,000.00
+   Electrical BOS and I&C
+   for 25O KWp Solar Power Project
+
+                                    IGST                                                                                       72,000.00
+                                     Total                       25O.OOO KW                                                ₹ 4,72,000.00
+`;
+
+const BROWSER_REGRESSION_SAMPLE = TALLY_BROWSER_REGRESSION_CASES.find(
+  (entry) => entry.id === "browser-header-title-bleed",
+)?.source;
+
 test("voucher classifier prefers proforma over generic invoice families", () => {
   const classification = classifyTallyVoucherFamily(PROFORMA_SAMPLE);
   assert.equal(classification.selectedFamily.voucherFamily, "proforma_invoice");
@@ -154,6 +184,48 @@ test("tally PSVM extracts a sales-invoice style core record", () => {
   assert.equal(result.result.lineItems[0].unitPriceCents, 160000);
   assert.equal(result.result.lineItems[0].taxRatePercent, 18);
   assert.match(result.result.lineItems[0].description, /Power Project at Sarigam, Gujarat/);
+});
+
+test("tally PSVM normalizes noisy seller, state, and quantity signals before emitting state", () => {
+  const state = buildTallyExtractionState(OCR_NOISY_TAX_INVOICE_SAMPLE);
+  assert.equal(state.selectedFields["seller.name"], "JAYRAJ SOLAR LLP");
+  assert.equal(state.selectedFields["document.place_of_supply"], "Maharashtra");
+  assert.equal(state.lineItems[0].quantity, 250);
+  assert.equal(state.lineItems[0].unit, "KW");
+
+  const result = runTallyExtractionPsvm(OCR_NOISY_TAX_INVOICE_SAMPLE);
+  assert.equal(result.result.seller.name, "JAYRAJ SOLAR LLP");
+  assert.equal(result.result.document.placeOfSupply, "Maharashtra");
+  assert.equal(result.result.lineItems[0].hsnSac, "995442");
+  assert.equal(result.result.lineItems[0].quantity, 250);
+  assert.equal(result.result.lineItems[0].unit, "KW");
+  assert.equal(result.result.lineItems[0].unitPriceCents, 160000);
+  assert.equal(result.result.lineItems[0].amountCents, 40000000);
+  assert.equal(result.result.taxes.igstCents, 7200000);
+  assert.equal(result.result.amounts.grandTotalCents, 47200000);
+});
+
+test("tally PSVM keeps browser-captured OCR regressions inside legal state", () => {
+  assert.ok(BROWSER_REGRESSION_SAMPLE);
+
+  const state = buildTallyExtractionState(BROWSER_REGRESSION_SAMPLE);
+  assert.equal(state.selectedFields["document.date"], "23-May-25");
+  assert.equal(state.selectedFields["document.place_of_supply"], "Maharashtra");
+  assert.equal(state.selectedFields["seller.name"], "JAYRAJ SOLAR LLP");
+  assert.equal(state.selectedFields["buyer.name"], "Nimoto Solar Pvt Ltd");
+  assert.equal(state.lineItems[0].quantity, 250);
+  assert.equal(state.lineItems[0].unit, "KW");
+  assert.equal(state.lineItems[0].unitPriceCents, 163200);
+
+  const result = runTallyExtractionPsvm(BROWSER_REGRESSION_SAMPLE);
+  assert.equal(result.result.document.date, "23-May-25");
+  assert.equal(result.result.document.placeOfSupply, "Maharashtra");
+  assert.equal(result.result.seller.name, "JAYRAJ SOLAR LLP");
+  assert.equal(result.result.buyer.name, "Nimoto Solar Pvt Ltd");
+  assert.equal(result.result.lineItems[0].quantity, 250);
+  assert.equal(result.result.lineItems[0].unit, "KW");
+  assert.equal(result.result.lineItems[0].unitPriceCents, 163200);
+  assert.equal(result.result.lineItems[0].amountCents, 40800000);
 });
 
 test("statement-like OCR is classified as unsupported instead of guessed as an invoice", () => {

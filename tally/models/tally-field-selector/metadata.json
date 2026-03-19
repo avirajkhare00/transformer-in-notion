@@ -1,8 +1,8 @@
 {
-  "sampleCount": 40636,
-  "trainCount": 36548,
-  "evalCount": 4088,
-  "sample_accuracy": 0.9997553816046967,
-  "group_accuracy": 0.9994453688297282,
-  "train_loss": 0.00816874741191831
+  "sampleCount": 47813,
+  "trainCount": 43083,
+  "evalCount": 4730,
+  "sample_accuracy": 0.7177589852008457,
+  "group_accuracy": 0.9715762273901809,
+  "train_loss": 0.6619676754832852
 }

@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 
 import { TALLY_DEMO_PRESETS } from "./demo-samples.mjs";
+import { TALLY_BROWSER_REGRESSION_CASES } from "./browser-regressions.mjs";
 import {
   applyTallyFieldPredictions,
   buildTallyFieldModelExamples,
@@ -102,4 +103,42 @@ test("model selection logic can align the implicit weak-label sample", () => {
   assert.equal(record.seller.name, "KAPOOR & SONS");
   assert.equal(record.buyer.name, "R K ENTERPRISES");
   assert.equal(record.amounts.grandTotalCents, 1180000);
+});
+
+test("model selection logic rejects document-title seller candidates even when the model over-scores them", () => {
+  const source = TALLY_BROWSER_REGRESSION_CASES.find((entry) => entry.id === "browser-header-title-bleed")?.source;
+  assert.ok(source);
+
+  const state = buildTallyExtractionState(source);
+  state.fieldCandidates["seller.name"] = [
+    {
+      fieldId: "seller.name",
+      value: "TAX",
+      normalizedValue: "TAX",
+      displayValue: "TAX",
+      score: 42,
+      source: "browser_regression_injected",
+      lineIndex: 0,
+      lineText: "TAX INV0ICE",
+      reason: "synthetic model-path regression candidate",
+    },
+    ...(state.fieldCandidates["seller.name"] ?? []),
+  ];
+
+  const examples = buildTallyFieldModelExamples(state);
+  const predictions = examples.map((example) => ({
+    selectedScore:
+      example.fieldId === "seller.name" && example.candidate.value === "TAX"
+        ? 0.99
+        : example.fieldId === "seller.name" && example.candidate.value === "JAYRAJ SOLAR LLP"
+          ? 0.61
+          : 0.01,
+    notSelectedScore: 0.01,
+    scores: [],
+  }));
+  const selection = applyTallyFieldPredictions(state, examples, predictions);
+  const record = buildTallyRecord(state, selection.selectedFields);
+
+  assert.equal(record.seller.name, "JAYRAJ SOLAR LLP");
+  assert.equal(record.document.placeOfSupply, "Maharashtra");
 });

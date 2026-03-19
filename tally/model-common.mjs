@@ -1,6 +1,7 @@
 export const TALLY_FIELD_SELECTOR_MODEL_ID = "tally-field-selector";
 export const TALLY_FIELD_SELECTOR_LABELS = Object.freeze(["NOT_SELECTED", "SELECTED"]);
 
+import { canonicalizeDateText, canonicalizeStateName } from "./normalization.mjs";
 import { resolveTallyFieldSelection } from "./resolver.mjs";
 
 function collapseWhitespace(value) {
@@ -36,7 +37,15 @@ export function normalizeTallyFieldValue(fieldId, value) {
     return null;
   }
 
-  if (fieldId.endsWith("_cents")) {
+  if (fieldId === "document.place_of_supply") {
+    return (canonicalizeStateName(value) ?? collapseWhitespace(String(value))).toUpperCase();
+  }
+
+  if (fieldId === "document.date") {
+    return (canonicalizeDateText(value) ?? collapseWhitespace(String(value))).toUpperCase();
+  }
+
+  if (fieldId.endsWith("_cents") || fieldId.endsWith("_percent") || fieldId.endsWith(".quantity")) {
     const numeric = Number(value);
     return Number.isFinite(numeric) ? Math.round(numeric) : null;
   }

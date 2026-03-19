@@ -1,3 +1,11 @@
+import {
+  canonicalizeDateText,
+  canonicalizeStateName,
+  looksLikeAddressText,
+  looksLikeDocumentTitleText,
+  resolveStateCodeFromPlace,
+} from "./normalization.mjs";
+
 const DEFAULT_TOP_K = 2;
 const MAX_CONFIGS = 128;
 const SCORE_SCALE = 100;
@@ -47,47 +55,6 @@ const GSTIN_BASE36_ALPHABET = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ";
 const GSTIN_VALUE_PATTERN = /^\d{2}[A-Z]{5}\d{4}[A-Z][0-9A-Z]Z[0-9A-Z]$/;
 const MONEY_TOLERANCE_CENTS = 200;
 
-const STATE_CODE_BY_NAME = Object.freeze({
-  "ANDAMAN AND NICOBAR ISLANDS": "35",
-  "ANDHRA PRADESH": "37",
-  "ARUNACHAL PRADESH": "12",
-  ASSAM: "18",
-  BIHAR: "10",
-  CHANDIGARH: "04",
-  CHHATTISGARH: "22",
-  DELHI: "07",
-  GOA: "30",
-  GUJARAT: "24",
-  HARYANA: "06",
-  "HIMACHAL PRADESH": "02",
-  "JAMMU AND KASHMIR": "01",
-  JHARKHAND: "20",
-  KARNATAKA: "29",
-  KERALA: "32",
-  LADAKH: "38",
-  LAKSHADWEEP: "31",
-  "MADHYA PRADESH": "23",
-  MAHARASHTRA: "27",
-  MANIPUR: "14",
-  MEGHALAYA: "17",
-  MIZORAM: "15",
-  NAGALAND: "13",
-  ODISHA: "21",
-  ORISSA: "21",
-  PUDUCHERRY: "34",
-  PONDICHERRY: "34",
-  PUNJAB: "03",
-  RAJASTHAN: "08",
-  SIKKIM: "11",
-  TAMILNADU: "33",
-  "TAMIL NADU": "33",
-  TELANGANA: "36",
-  TRIPURA: "16",
-  "UTTAR PRADESH": "09",
-  UTTARAKHAND: "05",
-  "WEST BENGAL": "19",
-});
-
 function collapseWhitespace(value) {
   return String(value ?? "").replace(/\s+/g, " ").trim();
 }
@@ -99,6 +66,14 @@ function flattenSchemaFields(schema) {
 function normalizeTallyFieldValue(fieldId, value) {
   if (value === null || value === undefined) {
     return null;
+  }
+
+  if (fieldId === "document.place_of_supply") {
+    return (canonicalizeStateName(value) ?? collapseWhitespace(String(value))).toUpperCase();
+  }
+
+  if (fieldId === "document.date") {
+    return (canonicalizeDateText(value) ?? collapseWhitespace(String(value))).toUpperCase();
   }
 
   if (fieldId.endsWith("_cents") || fieldId.endsWith("_percent") || fieldId.endsWith(".quantity")) {
@@ -115,25 +90,6 @@ function tallyFieldValueMatches(fieldId, left, right) {
 
 function buildFieldDefinitionMap(schema) {
   return new Map(flattenSchemaFields(schema).map((field) => [field.id, field]));
-}
-
-function normalizeStateNameKey(value) {
-  return collapseWhitespace(String(value ?? ""))
-    .toUpperCase()
-    .replace(/[.&]/g, " ")
-    .replace(/[^A-Z0-9 ]+/g, " ")
-    .replace(/\bSTATE\b/g, "")
-    .replace(/\bUT\b/g, "")
-    .replace(/\s+/g, " ")
-    .trim();
-}
-
-function resolveStateCodeFromPlace(value) {
-  const key = normalizeStateNameKey(value);
-  if (!key) {
-    return null;
-  }
-  return STATE_CODE_BY_NAME[key] ?? null;
 }
 
 function resolveStateCodeFromGstin(value) {
@@ -377,6 +333,14 @@ function hasCandidateValue(state, fieldId, predicate = null) {
   });
 }
 
+function hasAlternativeCandidateValue(state, fieldId, selectedValue) {
+  const selectedNormalized = normalizeTallyFieldValue(fieldId, selectedValue);
+  return (state.fieldCandidates?.[fieldId] ?? []).some((candidate) => {
+    const candidateNormalized = normalizeTallyFieldValue(fieldId, candidate.value);
+    return candidateNormalized !== null && candidateNormalized !== selectedNormalized;
+  });
+}
+
 function countCoverage(selection) {
   return COVERAGE_FIELDS.reduce(
     (count, fieldId) => count + (selection[fieldId] !== null && selection[fieldId] !== undefined ? 1 : 0),
@@ -482,13 +446,64 @@ function evaluateResolverConstraints(state, selection) {
     collapseWhitespace(sellerName).toUpperCase() === collapseWhitespace(buyerName).toUpperCase() &&
     sellerGstin !== buyerGstin
   ) {
+    const hasAlternativeName =
+      hasAlternativeCandidateValue(state, "seller.name", sellerName) ||
+      hasAlternativeCandidateValue(state, "buyer.name", buyerName);
     collector.add(
       "seller_buyer_same_name",
-      "low",
-      PENALTY_LOW,
+      hasAlternativeName ? "medium" : "low",
+      hasAlternativeName ? PENALTY_MEDIUM + PENALTY_LOW : PENALTY_LOW,
       "Seller and buyer names resolved to the same value.",
       {
         value: sellerName,
+      },
+    );
+  }
+
+  if (sellerName && looksLikeAddressText(sellerName)) {
+    collector.add(
+      "seller_name_looks_like_address",
+      "high",
+      PENALTY_HIGH,
+      "Seller name resolved to an address-like line.",
+      {
+        value: sellerName,
+      },
+    );
+  }
+
+  if (sellerName && looksLikeDocumentTitleText(sellerName)) {
+    collector.add(
+      "seller_name_looks_like_document_title",
+      "high",
+      PENALTY_HIGH,
+      "Seller name resolved to a document-title line.",
+      {
+        value: sellerName,
+      },
+    );
+  }
+
+  if (buyerName && looksLikeAddressText(buyerName)) {
+    collector.add(
+      "buyer_name_looks_like_address",
+      "high",
+      PENALTY_HIGH,
+      "Buyer name resolved to an address-like line.",
+      {
+        value: buyerName,
+      },
+    );
+  }
+
+  if (buyerName && looksLikeDocumentTitleText(buyerName)) {
+    collector.add(
+      "buyer_name_looks_like_document_title",
+      "high",
+      PENALTY_HIGH,
+      "Buyer name resolved to a document-title line.",
+      {
+        value: buyerName,
       },
     );
   }
@@ -541,6 +556,31 @@ function evaluateResolverConstraints(state, selection) {
       "medium",
       PENALTY_MEDIUM,
       "Resolver dropped buyer GSTIN even though a candidate existed.",
+    );
+  }
+
+  if (!placeOfSupply && hasCandidateValue(state, "document.place_of_supply")) {
+    collector.add(
+      "place_of_supply_dropped",
+      "medium",
+      PENALTY_MEDIUM,
+      "Resolver dropped place of supply even though a candidate existed.",
+    );
+  }
+
+  if (
+    placeOfSupply &&
+    !canonicalizeStateName(placeOfSupply) &&
+    hasCandidateValue(state, "document.place_of_supply", (value) => canonicalizeStateName(value) != null)
+  ) {
+    collector.add(
+      "place_of_supply_unrecognized",
+      "medium",
+      PENALTY_MEDIUM,
+      "Resolved place of supply was not a recognized state value.",
+      {
+        value: placeOfSupply,
+      },
     );
   }
 

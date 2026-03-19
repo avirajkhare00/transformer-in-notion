@@ -163,3 +163,56 @@ test("resolver keeps split-tax evidence instead of blanking the entire tax block
   assert.equal(resolution.selectedFields["taxes.sgst_cents"], 3600000);
   assert.ok(["resolver", "top1_fallback"].includes(resolution.resolverDebug.selectionMode));
 });
+
+test("resolver rejects address-like seller names when a legal entity candidate exists", () => {
+  const state = buildState("sales_invoice");
+  state.fieldCandidates = {
+    "seller.name": [
+      createCandidate("seller.name", "Surat-395009, Gujarat, India.", 0.98),
+      createCandidate("seller.name", "JAYRAJ SOLAR LLP", 0.72),
+    ],
+    "buyer.name": [createCandidate("buyer.name", "Nimoto Solar Pvt Ltd", 0.94)],
+    "amounts.grand_total_cents": [createCandidate("amounts.grand_total_cents", 47200000, 0.95)],
+  };
+
+  const resolution = resolveTallyFieldSelection(state, state.fieldCandidates, { topK: 2 });
+
+  assert.equal(resolution.selectedFields["seller.name"], "JAYRAJ SOLAR LLP");
+});
+
+test("resolver rejects document-title seller names when a legal entity candidate exists", () => {
+  const state = buildState("sales_invoice");
+  state.fieldCandidates = {
+    "seller.name": [
+      createCandidate("seller.name", "TAX", 0.99, {
+        lineText: "TAX INV0ICE",
+      }),
+      createCandidate("seller.name", "JAYRAJ SOLAR LLP", 0.72),
+    ],
+    "buyer.name": [createCandidate("buyer.name", "Nimoto Solar Pvt Ltd", 0.94)],
+    "amounts.grand_total_cents": [createCandidate("amounts.grand_total_cents", 48144000, 0.95)],
+  };
+
+  const resolution = resolveTallyFieldSelection(state, state.fieldCandidates, { topK: 2 });
+
+  assert.equal(resolution.selectedFields["seller.name"], "JAYRAJ SOLAR LLP");
+});
+
+test("resolver keeps a recoverable place-of-supply candidate instead of dropping it", () => {
+  const state = buildState("sales_invoice");
+  state.fieldCandidates = {
+    "seller.gstin": [createCandidate("seller.gstin", "24AAMFJ7876R1Z8", 0.99)],
+    "buyer.gstin": [createCandidate("buyer.gstin", "27AADCN3773B1ZM", 0.98)],
+    "document.place_of_supply": [createCandidate("document.place_of_supply", "Maharashtra", 0.0)],
+    "amounts.grand_total_cents": [createCandidate("amounts.grand_total_cents", 47200000, 0.95)],
+  };
+
+  const resolution = resolveTallyFieldSelection(state, state.fieldCandidates, { topK: 2 });
+
+  assert.equal(resolution.selectedFields["document.place_of_supply"], "Maharashtra");
+  assert.ok(
+    resolution.resolverDebug.alternatives.some(
+      (alternative) => alternative.fields["document.place_of_supply"] === null,
+    ),
+  );
+});

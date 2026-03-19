@@ -19,7 +19,7 @@ be treated as a public-history milestone, not as a packaging milestone.
 2. ship additional tagged releases with clear release notes
 3. use public issues for roadmap and bug tracking
 4. keep the JOSS paper synchronized with the software artifact
-5. preserve the Zenodo-backed archival path for the chosen submission release
+5. preserve a clean archival path for the chosen submission release if a DOI is minted later
 
 ## Repository signals worth building
 

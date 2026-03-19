@@ -28,8 +28,8 @@ workers, local model loaders, training and export scripts, and interactive
 demos for narrow exact tasks that benefit from learned guidance but cannot
 tolerate free-form hallucination. The current artifact includes browser-local
 stacks for Sudoku, invoice total extraction, Tally-style voucher extraction,
-and a smaller Weiqi prototype. The archived software release is available
-through Zenodo [@khare2026trl].
+and a smaller Weiqi prototype. The current versioned software release is
+available through GitHub [@khare2026trl].
 
 The software demonstrates one recurring pattern: the exact runtime remains the
 source of truth, while the local model only scores ambiguity. In Sudoku, the

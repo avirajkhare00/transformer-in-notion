@@ -11,7 +11,7 @@ PSVM thesis, architecture, and cross-domain evidence.
 - arXiv path: ready to submit
 - JOSS path: deferred until the repository has a longer public development
   history
-- software artifact DOI: `10.5281/zenodo.19087723`
+- software artifact citation: GitHub release `v0.1.1`
 - software release: `v0.1.1`
 
 Primary manuscript:
@@ -48,7 +48,7 @@ Use the abstract from:
 
 - arXiv should carry the broad research claim and experiments
 - the JOSS paper should stay software-centered and shorter
-- the arXiv paper should cite the repository Zenodo archive DOI
+- the arXiv paper should cite the versioned software artifact that actually exists
 - the companion PSVM spec can be linked as supplementary context, but the main
   arXiv submission should stay centered on the implementation/systems paper
 

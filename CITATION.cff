@@ -7,12 +7,9 @@ authors:
     given-names: Aviraj
     affiliation: Independent Researcher, Satna, Madhya Pradesh, India
 repository-code: "https://github.com/avirajkhare00/transformer-in-notion"
-doi: "10.5281/zenodo.19087723"
 identifiers:
-  - type: doi
-    value: 10.5281/zenodo.19087723
   - type: url
-    value: https://zenodo.org/records/19087723
+    value: https://github.com/avirajkhare00/transformer-in-notion/releases/tag/v0.1.1
 license: Apache-2.0
 version: 0.1.1
 date-released: 2026-03-18
@@ -28,5 +25,4 @@ preferred-citation:
   title: Transformer Runtime Lab
   year: 2026
   version: 0.1.1
-  doi: 10.5281/zenodo.19087723
-  url: "https://zenodo.org/records/19087723"
+  url: "https://github.com/avirajkhare00/transformer-in-notion/releases/tag/v0.1.1"

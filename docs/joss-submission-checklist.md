@@ -30,7 +30,7 @@
 ## Still worth tightening before JOSS resubmission
 
 - [x] add explicit versioned release for the submission artifact
-- [x] archive the release with Zenodo DOI `10.5281/zenodo.19087723`
+- [ ] archive a release with a DOI if or when an archival service accepts it
 - [ ] verify installation instructions from a clean machine
 - [ ] make sure at least one minimal automated smoke path is documented end to end
 - [ ] consider a short architecture figure for the JOSS paper README and docs

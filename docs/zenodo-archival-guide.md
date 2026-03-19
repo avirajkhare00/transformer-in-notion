@@ -9,11 +9,12 @@ This repository is now prepared for Zenodo GitHub archiving with:
 
 ## Current status
 
-The repository now has a Zenodo-backed archival release:
+The repository is prepared for Zenodo archiving, but no accepted Zenodo record
+should be cited from this repository right now:
 
 - release: `v0.1.1`
-- DOI: `10.5281/zenodo.19087723`
-- record: `https://zenodo.org/records/19087723`
+- archival DOI: not assigned
+- record: none yet
 
 ## Recommended flow
 
@@ -38,5 +39,4 @@ state. That is why the first archival release is `v0.1.1`, not `v0.1.0`.
 
 ## Suggested next release purpose
 
-Next Zenodo-backed archival update after JOSS submission or after major artifact
-changes.
+Next archival update after JOSS submission or after major artifact changes.

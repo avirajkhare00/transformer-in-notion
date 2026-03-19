@@ -12,15 +12,15 @@ Email: `avirajkhare00@gmail.com`
 
 ## Abstract
 
-This paper argues for a narrower target for local AI systems. On many exact
+This note argues for a narrower target for local AI systems. On many exact
 tasks, arithmetic, legality, and schema validation already belong in code. A
 small local model is most useful when it ranks ambiguity inside an exact
 runtime: which legal branch to try, which OCR candidate best fits, or which
 valid state looks most promising. I call the smallest exact runtime that
 exposes that surface a **problem-shaped virtual machine (PSVM)**. The
 repository demonstrates the pattern across browser-local receipt and invoice
-extraction, Tally-style voucher extraction, Sudoku, and a smaller Weiqi
-prototype [@khare2026trl]. The claim is not that PSVMs beat specialized exact
+extraction, Tally-style voucher extraction, and Sudoku [@khare2026trl]. The
+claim is not that PSVMs beat specialized exact
 solvers. The claim is that they provide a practical interface for
 browser-local hybrid systems in which code keeps truth and models rank
 ambiguity.
@@ -145,12 +145,12 @@ It does **not** yet justify stronger claims such as:
   around PSVMs.
 
 These are precisely the places where criticism is fair. The current artifact
-is strongest as a systems paper or research note, not as a finished empirical
+is strongest as a systems note or research note, not as a finished empirical
 paper.
 
 ## What Would Make It Stronger
 
-Three additions would materially strengthen the paper: compare PSVM ranking
+Three additions would materially strengthen the note: compare PSVM ranking
 against one-shot answer prediction and broader trace formulations; evaluate
 exactness rather than only loss, using solve rate, illegal action rate,
 verifier failure rate, search cost, trace length, and browser latency; and
@@ -160,17 +160,16 @@ than a design argument.
 
 ## Conclusion
 
-The paper's main point is narrow on purpose. It is not that local models
+The note's main point is narrow on purpose. It is not that local models
 should compete with every specialized exact solver. It is that many narrow
 local systems already have an exact core, and the right place for learning is
 inside that core's legal ambiguity surface rather than outside it.
 
-That is what a PSVM is: the smallest exact machine that still preserves the
-task's truth conditions while exposing the choices that are genuinely
-ambiguous.
+If the exact core already exists, the model should rank the remaining
+ambiguity rather than pretend to replace the system.
 
 ## AI Assistance Disclosure
 
-This paper was drafted and edited with AI assistance. The author reviewed the
+This note was drafted and edited with AI assistance. The author reviewed the
 implementation references and is responsible for the claims, wording, and
 technical judgments.

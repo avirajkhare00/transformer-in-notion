@@ -96,7 +96,7 @@ Email: \texttt{avirajkhare00@gmail.com}
 
 \subsection{Abstract}\label{abstract}
 
-This paper argues for a narrower target for local AI systems. On many
+This note argues for a narrower target for local AI systems. On many
 exact tasks, arithmetic, legality, and schema validation already belong
 in code. A small local model is most useful when it ranks ambiguity
 inside an exact runtime: which legal branch to try, which OCR candidate
@@ -104,11 +104,10 @@ best fits, or which valid state looks most promising. I call the
 smallest exact runtime that exposes that surface a
 \textbf{problem-shaped virtual machine (PSVM)}. The repository
 demonstrates the pattern across browser-local receipt and invoice
-extraction, Tally-style voucher extraction, Sudoku, and a smaller Weiqi
-prototype (Khare 2026). The claim is not that PSVMs beat specialized
-exact solvers. The claim is that they provide a practical interface for
-browser-local hybrid systems in which code keeps truth and models rank
-ambiguity.
+extraction, Tally-style voucher extraction, and Sudoku (Khare 2026). The
+claim is not that PSVMs beat specialized exact solvers. The claim is
+that they provide a practical interface for browser-local hybrid systems
+in which code keeps truth and models rank ambiguity.
 
 \subsection{Core Claim}\label{core-claim}
 
@@ -268,13 +267,13 @@ It does \textbf{not} yet justify stronger claims such as:
 \end{itemize}
 
 These are precisely the places where criticism is fair. The current
-artifact is strongest as a systems paper or research note, not as a
+artifact is strongest as a systems note or research note, not as a
 finished empirical paper.
 
 \subsection{What Would Make It
 Stronger}\label{what-would-make-it-stronger}
 
-Three additions would materially strengthen the paper: compare PSVM
+Three additions would materially strengthen the note: compare PSVM
 ranking against one-shot answer prediction and broader trace
 formulations; evaluate exactness rather than only loss, using solve
 rate, illegal action rate, verifier failure rate, search cost, trace
@@ -284,26 +283,25 @@ becomes much easier to defend as more than a design argument.
 
 \subsection{Conclusion}\label{conclusion}
 
-The paper's main point is narrow on purpose. It is not that local models
+The note's main point is narrow on purpose. It is not that local models
 should compete with every specialized exact solver. It is that many
 narrow local systems already have an exact core, and the right place for
 learning is inside that core's legal ambiguity surface rather than
 outside it.
 
-That is what a PSVM is: the smallest exact machine that still preserves
-the task's truth conditions while exposing the choices that are
-genuinely ambiguous.
+If the exact core already exists, the model should rank the remaining
+ambiguity rather than pretend to replace the system.
 
 \subsection{AI Assistance Disclosure}\label{ai-assistance-disclosure}
 
-This paper was drafted and edited with AI assistance. The author
-reviewed the implementation references and is responsible for the
-claims, wording, and technical judgments.
+This note was drafted and edited with AI assistance. The author reviewed
+the implementation references and is responsible for the claims,
+wording, and technical judgments.
 
 \protect\phantomsection\label{refs}
 \begin{CSLReferences}{1}{0}
 \bibitem[\citeproctext]{ref-ortools}
-Google OR-Tools Team. 2026. {``OR-Tools.''}
+Google OR-Tools Team. 2026. {``OR-Tools Documentation.''}
 \url{https://developers.google.com/optimization}.
 
 \bibitem[\citeproctext]{ref-pysat}
@@ -312,8 +310,8 @@ Ignatiev, Alexey, António Morgado, and Joao Marques-Silva. 2018.
 \emph{SAT 2018}. \url{https://doi.org/10.1007/978-3-319-94144-8_26}.
 
 \bibitem[\citeproctext]{ref-khare2026trl}
-Khare, Aviraj. 2026. {``Transformer Runtime Lab.''} GitHub release
-v0.1.1.
+Khare, Aviraj. 2026. {``Transformer Runtime Lab (Software Release
+V0.1.1).''} GitHub release v0.1.1.
 \url{https://github.com/avirajkhare00/transformer-in-notion/releases/tag/v0.1.1}.
 
 \bibitem[\citeproctext]{ref-layoutparser}
